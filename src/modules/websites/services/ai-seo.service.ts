@@ -4,8 +4,10 @@ import { prisma } from "../../../config/prisma.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 
 import { createOpenAiJsonCompletion } from "./openai-json.client.js";
+import { liveSiteEngineService } from "./live-site-engine.service.js";
 import { websiteService } from "./website.service.js";
 import type { PageView, WebsiteDetail } from "../types/website.types.js";
+
 
 export type GeneratePageSeoInput = {
   pageName?: string;
@@ -213,26 +215,14 @@ Sitemap: ${domain}/sitemap.xml
   }
 
   async getPublicSitemapXml(subdomain: string): Promise<string> {
-    const website = await prisma.website.findUnique({
-      where: { subdomain: subdomain.toLowerCase() },
-      include: { pages: true },
-    });
-    if (!website) {
-      throw new AppError(404, "Website not found", "WEBSITE_NOT_FOUND");
-    }
-    return this.buildSitemapXml(website);
+    const res = await liveSiteEngineService.renderSitemap(subdomain);
+    return res.xml;
   }
 
   async getPublicRobotsTxt(subdomain: string): Promise<string> {
-    const website = await prisma.website.findUnique({
-      where: { subdomain: subdomain.toLowerCase() },
-      select: { subdomain: true },
-    });
-    if (!website) {
-      throw new AppError(404, "Website not found", "WEBSITE_NOT_FOUND");
-    }
-    return this.buildRobotsTxt(website);
+    return liveSiteEngineService.renderRobots(subdomain);
   }
 }
 
 export const aiSeoService = new AiSeoService();
+

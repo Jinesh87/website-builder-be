@@ -38,7 +38,9 @@ import type {
 } from "../types/website.types.js";
 import type { GenerationView } from "../types/website-generation.types.js";
 import { SUBDOMAIN_PATTERN } from "../validators/website.validator.js";
+import { liveSiteEngineService } from "./live-site-engine.service.js";
 import { buildPublishSnapshot } from "./publish-snapshot.js";
+
 
 const summaryInclude = {
   client: { select: { businessName: true } },
@@ -743,7 +745,9 @@ export class WebsiteService {
     }
 
     logger.info({ websiteId: website.id, version: versionNumber, actorId: actor.id }, "Website published");
+    liveSiteEngineService.purgeCache(website.subdomain);
     return this.get(id, actor);
+
   }
 
   async listVersions(id: string, actor: AuthUser): Promise<WebsiteVersionView[]> {
