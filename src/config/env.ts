@@ -74,6 +74,7 @@ export const env = {
 
   OPENAI_API_KEY: process.env.OPENAI_API_KEY?.trim() || "",
   OPENAI_MODEL: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
+  PUBLIC_SITE_DOMAIN: (process.env.PUBLIC_SITE_DOMAIN?.trim() || "bytezora.site").toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, ""),
 };
 
 export const isProduction = isProd;

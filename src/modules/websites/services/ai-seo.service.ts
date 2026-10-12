@@ -1,5 +1,6 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
+import { env } from "../../../config/env.js";
 import { prisma } from "../../../config/prisma.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 
@@ -50,6 +51,16 @@ function extractTextSummary(page: PageView): string {
   return snippets.slice(0, 12).join("\n");
 }
 
+function truncateAtWordBoundary(text: string, maxLen: number): string {
+  if (!text || text.length <= maxLen) return text;
+  const truncated = text.slice(0, maxLen);
+  const lastSpace = truncated.lastIndexOf(" ");
+  if (lastSpace > maxLen * 0.6) {
+    return truncated.slice(0, lastSpace).replace(/[,;:.!?-]+$/, "").trim();
+  }
+  return truncated.trim();
+}
+
 const SEO_SYSTEM_PROMPT = `You are an elite, world-class SEO strategist and conversion copywriter.
 Your goal is to generate accurate, high-CTR, Google-optimized SEO metadata for a specific webpage.
 
@@ -57,15 +68,16 @@ CRITICAL RULES:
 1. "seoTitle":
    - Length: Strictly between 40 and 60 characters (never exceed 60 characters).
    - Format: "[Primary Keyword / Page Purpose] | [Business Name]" or "[High-Intent Benefit] - [Business Name]".
-   - Avoid generic phrases like "Welcome to Home". Use high-intent, clickable language.
+   - Must be unique. Never duplicate the titles of other pages in this website.
+   - If a target location/city is provided, naturally weave it into the title (e.g. "Roofing in Austin, TX").
 
 2. "seoDescription":
    - Length: Strictly between 120 and 155 characters (never exceed 160 characters).
-   - Content: Compelling summary of what the user gets or why they should choose this business, ending with an enticing call to action (e.g., "Explore now", "Get started today", "Contact our team").
+   - Content: Compelling summary of what the user gets or why they should choose this business, ending with an enticing call to action.
    - Truthful to the page content and business services provided.
 
 3. "keywords":
-   - Array of 4 to 6 focused, high-relevance search terms (2-4 words each, e.g. ["video editing services", "short form video agency", "content creation studio"]).
+   - Array of 4 to 6 focused, high-relevance search terms (2-4 words each, e.g. ["emergency plumbing Austin", "residential drain cleaning", "certified local plumber"]).
 
 Respond ONLY with valid JSON in this exact shape:
 {
@@ -109,16 +121,25 @@ export class AiSeoService {
     const businessName = website.info?.businessName || website.name;
     const businessDesc = website.info?.description || "";
     const industry = website.info?.industry || website.info?.websiteType || "";
+    const location = website.info?.address || "";
 
+    const otherPages = website.draft.pages
+      .filter((p) => p.id !== pageId)
+      .map((p) => `"${p.name}" (Slug: ${p.slug}, Title: ${p.seoTitle || "None"})`)
+      .slice(0, 10);
 
     const userPrompt = `Generate optimized Google SEO for this webpage:
 
 BUSINESS:
 - Name: "${businessName}"
 - Industry / Type: "${industry || "Business"}"
+- Target Location / Address: "${location || "Global / Online"}"
 - About: "${businessDesc}"
 
-PAGE DETAILS:
+EXISTING OTHER PAGES (DO NOT DUPLICATE THESE TITLES):
+${otherPages.length > 0 ? otherPages.join("\n") : "None"}
+
+CURRENT PAGE DETAILS:
 - Page Name: "${input.pageName || targetPage.name}"
 - URL Path: "${input.pageSlug || targetPage.slug}"
 - Current SEO Title: "${input.currentTitle || targetPage.seoTitle || "None"}"
@@ -127,7 +148,7 @@ PAGE DETAILS:
 PAGE CONTENT EXTRACT:
 ${pageSummary}
 
-Generate the JSON with optimal "seoTitle", "seoDescription", and "keywords".`;
+Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and "keywords".`;
 
     const raw = (await run({
       messages: [
@@ -147,15 +168,18 @@ Generate the JSON with optimal "seoTitle", "seoDescription", and "keywords".`;
 
     // Fallback if AI response was empty or too long
     if (!seoTitle) {
-      seoTitle = `${targetPage.name} | ${businessName}`.slice(0, 60);
+      seoTitle = truncateAtWordBoundary(`${targetPage.name} | ${businessName}`, 60);
     } else if (seoTitle.length > 60) {
-      seoTitle = seoTitle.slice(0, 60).trim();
+      seoTitle = truncateAtWordBoundary(seoTitle, 60);
     }
 
     if (!seoDescription) {
-      seoDescription = `${businessName} - ${businessDesc || "Professional solutions tailored for your business."}`.slice(0, 155);
+      seoDescription = truncateAtWordBoundary(
+        `${businessName} - ${businessDesc || "Professional solutions tailored for your business."}`,
+        155,
+      );
     } else if (seoDescription.length > 160) {
-      seoDescription = seoDescription.slice(0, 155).trim();
+      seoDescription = truncateAtWordBoundary(seoDescription, 155);
     }
 
     return { seoTitle, seoDescription, keywords };
@@ -164,7 +188,7 @@ Generate the JSON with optimal "seoTitle", "seoDescription", and "keywords".`;
   buildSitemapXml(website: { name: string; subdomain: string; customDomain?: string | null; draft?: { pages: PageView[] }; pages?: Array<{ slug: string; visible: boolean; updatedAt?: Date }> }): string {
     const domain = website.customDomain
       ? `https://${website.customDomain}`
-      : `https://${website.subdomain}.bytezora.site`;
+      : `https://${website.subdomain}.${env.PUBLIC_SITE_DOMAIN}`;
 
     const pages = website.draft?.pages ?? website.pages ?? [];
     const visiblePages = pages.filter((p) => p.visible);
@@ -193,7 +217,7 @@ ${urls.join("\n")}
   buildRobotsTxt(website: { subdomain: string; customDomain?: string | null }): string {
     const domain = website.customDomain
       ? `https://${website.customDomain}`
-      : `https://${website.subdomain}.bytezora.site`;
+      : `https://${website.subdomain}.${env.PUBLIC_SITE_DOMAIN}`;
 
     return `# Robots.txt generated automatically by Bytezora Engine
 User-agent: *

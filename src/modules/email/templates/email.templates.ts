@@ -105,3 +105,35 @@ export function testEmail(params: { brand: string }): RenderedEmail {
     text: "Email is working. This is a test email from your Super Admin email settings.",
   };
 }
+
+export function contactFormLeadEmail(params: {
+  siteName: string;
+  senderName: string;
+  senderEmail: string;
+  senderPhone?: string;
+  message: string;
+}): RenderedEmail {
+  const brand = escapeHtml(params.siteName);
+  const name = escapeHtml(params.senderName);
+  const email = escapeHtml(params.senderEmail);
+  const phone = params.senderPhone ? escapeHtml(params.senderPhone) : "";
+  const msg = escapeHtml(params.message).replace(/\n/g, "<br/>");
+
+  return {
+    subject: `New inquiry from ${params.senderName} (${params.siteName})`,
+    html: layout(
+      params.siteName,
+      `<h1 style="margin:0 0 16px;font-size:20px;color:#0f172a;">New Contact Form Inquiry</h1>
+       <p style="margin:0 0 16px;color:#475569;font-size:14px;">Someone submitted the contact form on <strong>${brand}</strong>.</p>
+       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:20px;">
+         <p style="margin:0 0 8px;font-size:14px;"><strong>Name:</strong> ${name}</p>
+         <p style="margin:0 0 8px;font-size:14px;"><strong>Email:</strong> <a href="mailto:${email}" style="color:#2563eb;">${email}</a></p>
+         ${phone ? `<p style="margin:0 0 8px;font-size:14px;"><strong>Phone:</strong> <a href="tel:${phone}" style="color:#2563eb;">${phone}</a></p>` : ""}
+         <p style="margin:0;font-size:14px;"><strong>Message:</strong></p>
+         <div style="margin-top:6px;padding:12px;background:#ffffff;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;color:#334155;line-height:1.5;">${msg}</div>
+       </div>
+       <p style="margin:0;color:#94a3b8;font-size:12px;">This inquiry was sent automatically via your published website.</p>`,
+    ),
+    text: `New inquiry from ${params.senderName} on ${params.siteName}\nName: ${params.senderName}\nEmail: ${params.senderEmail}\n${params.senderPhone ? `Phone: ${params.senderPhone}\n` : ""}Message:\n${params.message}`,
+  };
+}

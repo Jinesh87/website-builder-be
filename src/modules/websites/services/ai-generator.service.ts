@@ -189,8 +189,10 @@ function enrichImageAlt(
     .find((v) => typeof v === "string" && v.trim().length > 0) as string | undefined;
 
   if (primaryTitle) {
-    const clean = primaryTitle.replace(/[^\w\s-]/g, "").trim().slice(0, 100);
-    return `${clean} - ${defaultKind}`;
+    const clean = primaryTitle.replace(/[^\p{L}\p{N}\s-]/gu, "").trim().slice(0, 100);
+    if (clean) {
+      return `${clean} - ${defaultKind}`;
+    }
   }
 
   return `${defaultKind} illustration`;

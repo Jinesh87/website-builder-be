@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { UserRole } from "../../../common/constants/roles.js";
-import { BuilderType, PageType, PublishStatus, WebsiteStatus } from "../../../common/constants/website.js";
+import { BuilderType, DomainStatus, PageType, PublishStatus, WebsiteStatus } from "../../../common/constants/website.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { logger } from "../../../config/logger.js";
@@ -50,6 +50,7 @@ const summaryInclude = {
 
 const detailInclude = {
   ...summaryInclude,
+  domains: { where: { status: DomainStatus.ACTIVE }, select: { hostname: true } },
   pages: { orderBy: { sortOrder: "asc" } },
 } as const satisfies Prisma.WebsiteInclude;
 
@@ -745,7 +746,8 @@ export class WebsiteService {
     }
 
     logger.info({ websiteId: website.id, version: versionNumber, actorId: actor.id }, "Website published");
-    liveSiteEngineService.purgeCache(website.subdomain);
+    const hostnames = (website.domains || []).map((d) => d.hostname);
+    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     return this.get(id, actor);
 
   }

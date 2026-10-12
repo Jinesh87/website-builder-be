@@ -6,6 +6,7 @@ import { prisma } from "../../../config/prisma.js";
 import type { MessagingConfig } from "../../../generated/prisma/client.js";
 import {
   clientInviteEmail,
+  contactFormLeadEmail,
   passwordResetEmail,
   testEmail,
   verificationCodeEmail,
@@ -106,6 +107,17 @@ export class EmailService {
   /** Sends regardless of the "enabled" flag so the Super Admin can verify settings before enabling. */
   async sendTest(to: string) {
     await this.send(to, (brand) => testEmail({ brand }), { ignoreDisabled: true });
+  }
+
+  async sendContactFormLead(params: {
+    to: string;
+    siteName: string;
+    senderName: string;
+    senderEmail: string;
+    senderPhone?: string;
+    message: string;
+  }) {
+    await this.send(params.to, () => contactFormLeadEmail(params));
   }
 
   private async send(

@@ -1,13 +1,15 @@
+import { env } from "../../../config/env.js";
 import { prisma } from "../../../config/prisma.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 
-type CachedPage = {
+export type CachedPage = {
   html: string;
   statusCode: number;
   contentType: string;
   cachedAt: number;
+  redirectUrl?: string;
 };
 
 // In-memory cache with 10-minute TTL, purged instantly upon publish
@@ -29,17 +31,52 @@ function escapeJsonLd(str: string | null | undefined): string {
   return String(str).replace(/<\/script>/gi, "<\\/script>");
 }
 
+/** Resolves links safely so relative links to non-existent pages fall back to anchors instead of 404 */
+function resolveSafeHref(href: string | undefined, pageSlugs: Set<string>): string {
+  if (!href) return "#";
+  const trimmed = href.trim();
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("tel:") ||
+    trimmed.startsWith("#")
+  ) {
+    return trimmed;
+  }
+  const clean = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  if (pageSlugs.has(clean)) {
+    return clean;
+  }
+  // Contextual anchor fallbacks
+  if (clean.includes("service")) return "#services";
+  if (clean.includes("contact")) return "#contact";
+  if (clean.includes("pric")) return "#pricing";
+  if (clean.includes("about")) return "#about";
+  if (clean.includes("faq")) return "#faq";
+  return "#";
+}
+
 export class LiveSiteEngineService {
-  purgeCache(subdomain?: string | null): void {
-    if (!subdomain) {
+  /** Purges cache entries for a specific subdomain or custom domain */
+  purgeCache(identifier?: string | null): void {
+    if (!identifier) {
       pageCache.clear();
       return;
     }
-    const prefix = subdomain.toLowerCase();
+    const target = identifier.toLowerCase().trim();
     for (const key of pageCache.keys()) {
-      if (key.startsWith(prefix)) {
+      if (key === target || key.startsWith(`${target}:`)) {
         pageCache.delete(key);
       }
+    }
+  }
+
+  /** Clears cache for both subdomain and all configured custom domains upon publish */
+  purgeWebsiteCache(subdomain: string, hostnames: string[] = []): void {
+    this.purgeCache(subdomain);
+    for (const host of hostnames) {
+      this.purgeCache(host);
     }
   }
 
@@ -56,6 +93,7 @@ export class LiveSiteEngineService {
       },
       select: {
         id: true,
+        clientId: true,
         name: true,
         subdomain: true,
         businessName: true,
@@ -64,11 +102,11 @@ export class LiveSiteEngineService {
         contactPhone: true,
         address: true,
         publishedAt: true,
+        logoMediaId: true,
         domains: {
           where: { status: DomainStatus.ACTIVE },
           orderBy: { isPrimary: "desc" },
           select: { hostname: true },
-          take: 1,
         },
         liveVersion: {
           select: {
@@ -85,7 +123,7 @@ export class LiveSiteEngineService {
   getPublicDomain(website: { subdomain: string; domains?: Array<{ hostname: string }> }): string {
     const custom = website.domains?.[0]?.hostname;
     if (custom) return `https://${custom}`;
-    return `https://${website.subdomain}.bytezora.site`;
+    return `https://${website.subdomain}.${env.PUBLIC_SITE_DOMAIN}`;
   }
 
   async renderSitemap(identifier: string): Promise<{ xml: string; statusCode: number }> {
@@ -121,7 +159,7 @@ ${urls.join("\n")}
 
   async renderRobots(identifier: string): Promise<string> {
     const website = await this.resolveWebsite(identifier);
-    const domain = website ? this.getPublicDomain(website) : "https://bytezora.site";
+    const domain = website ? this.getPublicDomain(website) : `https://${env.PUBLIC_SITE_DOMAIN}`;
 
     return `# Robots.txt generated automatically by Bytezora Engine
 User-agent: *
@@ -142,6 +180,29 @@ Sitemap: ${domain}/sitemap.xml
   }
 
   async renderPage(identifier: string, pathSlug: string): Promise<CachedPage> {
+    // 1. Trailing slash canonical redirect (e.g., /about/ -> /about)
+    if (pathSlug.length > 1 && pathSlug.endsWith("/")) {
+      const canonicalSlug = pathSlug.replace(/\/+$/, "");
+      return {
+        html: "",
+        statusCode: 301,
+        contentType: "text/plain",
+        cachedAt: Date.now(),
+        redirectUrl: canonicalSlug,
+      };
+    }
+
+    // 2. Lowercase redirect
+    if (pathSlug !== pathSlug.toLowerCase()) {
+      return {
+        html: "",
+        statusCode: 301,
+        contentType: "text/plain",
+        cachedAt: Date.now(),
+        redirectUrl: pathSlug.toLowerCase(),
+      };
+    }
+
     const cleanSlug = pathSlug === "" || pathSlug === "/" ? "/" : pathSlug.startsWith("/") ? pathSlug : `/${pathSlug}`;
     const cacheKey = `${identifier.toLowerCase()}:${cleanSlug}`;
 
@@ -156,8 +217,23 @@ Sitemap: ${domain}/sitemap.xml
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
 
+    // 3. 301 Canonical redirect: if accessed via subdomain but primary custom domain exists
+    const primaryCustomDomain = website.domains?.[0]?.hostname;
+    const isSubdomainRequest = identifier.toLowerCase() === website.subdomain.toLowerCase();
+    if (primaryCustomDomain && isSubdomainRequest) {
+      return {
+        html: "",
+        statusCode: 301,
+        contentType: "text/plain",
+        cachedAt: Date.now(),
+        redirectUrl: `https://${primaryCustomDomain}${cleanSlug === "/" ? "" : cleanSlug}`,
+      };
+    }
+
     const snapshot = website.liveVersion.snapshot as unknown as PublishSnapshot;
-    const targetPage = snapshot.pages.find((p) => p.slug === cleanSlug) ||
+    const targetPage =
+      snapshot.pages.find((p) => p.slug === cleanSlug) ||
+      snapshot.pages.find((p) => p.slug === cleanSlug.replace(/\/+$/, "")) ||
       (cleanSlug === "/" ? snapshot.pages[0] : null);
 
     if (!targetPage) {
@@ -173,11 +249,13 @@ Sitemap: ${domain}/sitemap.xml
     const contactEmail = website.contactEmail || "";
     const contactPhone = website.contactPhone || "";
     const address = website.address || "";
+    const faviconUrl = website.logoMediaId ? `${env.API_PUBLIC_URL}/api/media/files/${website.logoMediaId}` : "";
 
-
-    const title = targetPage.seoTitle ||
+    const title =
+      targetPage.seoTitle ||
       (targetPage.slug === "/" ? `${businessName} — Official Website` : `${targetPage.name} | ${businessName}`);
-    const description = targetPage.seoDescription || businessDesc || `Welcome to ${businessName}. Discover our services and offers.`;
+    const description =
+      targetPage.seoDescription || businessDesc || `Welcome to ${businessName}. Discover our services, products, and contact details.`;
 
     // Find prominent image for OG tag
     let ogImageUrl = "";
@@ -187,13 +265,34 @@ Sitemap: ${domain}/sitemap.xml
         ogImageUrl = d.image.url;
         break;
       }
-      if (typeof d.imageUrl === "string") {
+      if (typeof d.imageUrl === "string" && d.imageUrl) {
         ogImageUrl = d.imageUrl;
         break;
       }
+      if (Array.isArray(d.images) && d.images[0]) {
+        const first = d.images[0] as Record<string, unknown>;
+        if (typeof first.url === "string") {
+          ogImageUrl = first.url;
+          break;
+        }
+      }
+      if (d.backgroundImage && typeof d.backgroundImage === "object" && "url" in d.backgroundImage && typeof d.backgroundImage.url === "string") {
+        ogImageUrl = d.backgroundImage.url;
+        break;
+      }
+      if (Array.isArray(d.members) && d.members[0]) {
+        const m = d.members[0] as Record<string, unknown>;
+        if (m.photo && typeof m.photo === "object" && "url" in m.photo && typeof m.photo.url === "string") {
+          ogImageUrl = m.photo.url;
+          break;
+        }
+      }
+    }
+    if (!ogImageUrl && faviconUrl) {
+      ogImageUrl = faviconUrl;
     }
 
-    // JSON-LD Schemas
+    // JSON-LD Schemas for Search Engines
     const schemas: Record<string, unknown>[] = [
       {
         "@context": "https://schema.org",
@@ -208,6 +307,7 @@ Sitemap: ${domain}/sitemap.xml
         name: businessName,
         url: domain,
         description: businessDesc,
+        ...(faviconUrl ? { logo: faviconUrl } : {}),
         ...(contactEmail ? { email: contactEmail } : {}),
         ...(contactPhone ? { telephone: contactPhone } : {}),
         ...(address ? { address: { "@type": "PostalAddress", streetAddress: address } } : {}),
@@ -265,11 +365,17 @@ Sitemap: ${domain}/sitemap.xml
       .map((s) => `<script type="application/ld+json">${escapeJsonLd(JSON.stringify(s))}</script>`)
       .join("\n    ");
 
-    // Primary font & colors
-    const primaryColor = snapshot.theme?.colors?.primary || "#3b82f6";
+    const themeColors = snapshot.theme?.colors || {};
+    const primaryColor = themeColors.primary || "#0f7b6c";
+    const secondaryColor = themeColors.secondary || "#b4410f";
+    const bgColor = themeColors.background || "#ffffff";
+    const surfaceColor = themeColors.surface || "#f8fafc";
+    const textColor = themeColors.text || "#0f172a";
+    const mutedColor = themeColors.muted || "#64748b";
 
+    const availableSlugs = new Set(snapshot.pages.map((p) => p.slug));
 
-    // Generate Body Content with Semantic HTML (Single H1 on page!)
+    // Generate Body Content
     const bodyContent = this.renderPageSectionsHtml(
       targetPage.sections,
       snapshot.header,
@@ -277,6 +383,8 @@ Sitemap: ${domain}/sitemap.xml
       businessName,
       targetPage.name,
       targetPage.slug,
+      availableSlugs,
+      identifier,
       {
         contactEmail,
         contactPhone,
@@ -284,8 +392,10 @@ Sitemap: ${domain}/sitemap.xml
       },
     );
 
+    const siteLang = ((snapshot as unknown as Record<string, unknown>)?.site as Record<string, unknown> | undefined)?.language || "en";
+
     const fullHtml = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(String(siteLang))}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -294,7 +404,9 @@ Sitemap: ${domain}/sitemap.xml
     <link rel="canonical" href="${escapeHtml(pageUrl)}" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
-    <!-- Open Graph / Facebook -->
+    ${faviconUrl ? `<link rel="icon" type="image/x-icon" href="${escapeHtml(faviconUrl)}" />` : ""}
+
+    <!-- Open Graph / Social Sharing -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${escapeHtml(pageUrl)}" />
     <meta property="og:title" content="${escapeHtml(title)}" />
@@ -302,99 +414,149 @@ Sitemap: ${domain}/sitemap.xml
     <meta property="og:site_name" content="${escapeHtml(businessName)}" />
     ${ogImageUrl ? `<meta property="og:image" content="${escapeHtml(ogImageUrl)}" />` : ""}
 
-    <!-- Twitter -->
+    <!-- Twitter Cards -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="${escapeHtml(pageUrl)}" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
     ${ogImageUrl ? `<meta name="twitter:image" content="${escapeHtml(ogImageUrl)}" />` : ""}
 
-    <!-- JSON-LD Structured Data for Google Ranking -->
+    <!-- JSON-LD Structured Data for Google Rich Snippets -->
     ${schemaScripts}
 
     <style>
       :root {
         --color-primary: ${primaryColor};
-        --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --color-secondary: ${secondaryColor};
+        --color-background: ${bgColor};
+        --color-surface: ${surfaceColor};
+        --color-text: ${textColor};
+        --color-muted: ${mutedColor};
+        --radius: 8px;
+        --container-max: 1200px;
+        --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: var(--font-body);
-        color: #0f172a;
-        background-color: #ffffff;
+        color: var(--color-text);
+        background-color: var(--color-background);
         line-height: 1.6;
         -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
       }
       a { color: inherit; text-decoration: none; }
       img { max-width: 100%; height: auto; display: block; }
-      .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
-      
-      /* Navigation Header */
+      .container { width: 100%; max-width: var(--container-max); margin: 0 auto; padding: 0 1.5rem; }
+
+      /* Sticky Responsive Header */
       header.site-header {
-        position: sticky; top: 0; z-index: 50;
+        position: sticky; top: 0; z-index: 100;
         background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(8px);
-        border-bottom: 1px solid #f1f5f9;
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
         padding: 1rem 0;
       }
-      .nav-row { display: flex; align-items: center; justify-content: space-between; }
-      .nav-brand { font-size: 1.25rem; font-weight: 700; color: #0f172a; }
+      .nav-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .nav-brand { font-size: 1.25rem; font-weight: 700; color: var(--color-text); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem; }
       .nav-links { display: flex; align-items: center; gap: 1.5rem; list-style: none; }
-      .nav-links a { font-size: 0.875rem; font-weight: 500; color: #475569; transition: color 0.15s; }
+      .nav-links a { font-size: 0.9rem; font-weight: 500; color: var(--color-muted); transition: color 0.15s ease; }
       .nav-links a:hover { color: var(--color-primary); }
+
+      /* Buttons */
       .btn-cta {
         display: inline-flex; align-items: center; justify-content: center;
-        background-color: var(--color-primary); color: #ffffff;
-        font-weight: 600; font-size: 0.875rem;
-        padding: 0.625rem 1.25rem; border-radius: 9999px;
-        transition: opacity 0.15s;
+        background-color: var(--color-primary); color: #ffffff !important;
+        font-weight: 600; font-size: 0.9rem; padding: 0.65rem 1.4rem;
+        border-radius: 9999px; transition: all 0.2s ease; border: none; cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       }
-      .btn-cta:hover { opacity: 0.9; }
+      .btn-cta:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+      .btn-secondary {
+        display: inline-flex; align-items: center; justify-content: center;
+        background: transparent; color: var(--color-text) !important;
+        font-weight: 600; font-size: 0.9rem; padding: 0.65rem 1.4rem;
+        border-radius: 9999px; border: 1px solid rgba(0, 0, 0, 0.15); transition: all 0.2s ease;
+      }
+      .btn-secondary:hover { background: rgba(0, 0, 0, 0.04); }
 
-      /* Section Layouts */
-      section { padding: 4.5rem 0; }
+      /* Section Common */
+      section { padding: 4.5rem 0; position: relative; }
       .section-badge {
         display: inline-block; font-size: 0.75rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.05em;
-        color: var(--color-primary); background: rgba(59, 130, 246, 0.1);
-        padding: 0.25rem 0.75rem; border-radius: 9999px; margin-bottom: 1rem;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--color-primary); background: rgba(15, 123, 108, 0.08);
+        padding: 0.25rem 0.8rem; border-radius: 9999px; margin-bottom: 0.85rem;
       }
-      h1.hero-title {
-        font-size: clamp(2.25rem, 5vw, 3.75rem); font-weight: 800;
-        line-height: 1.15; color: #0f172a; margin-bottom: 1.25rem;
+      .hero-title {
+        font-size: clamp(2.25rem, 5vw, 3.75rem);
+        font-weight: 800; line-height: 1.15;
+        letter-spacing: -0.03em; color: var(--color-text); margin-bottom: 1.25rem;
       }
-      h2.section-title {
-        font-size: clamp(1.75rem, 3.5vw, 2.5rem); font-weight: 700;
-        line-height: 1.2; color: #0f172a; margin-bottom: 1rem;
+      .section-title {
+        font-size: clamp(1.8rem, 3.5vw, 2.5rem);
+        font-weight: 700; line-height: 1.2;
+        letter-spacing: -0.02em; color: var(--color-text); margin-bottom: 1rem;
       }
-      h3.card-title {
-        font-size: 1.125rem; font-weight: 600; color: #0f172a; margin-bottom: 0.5rem;
+      .subtitle {
+        font-size: clamp(1rem, 1.8vw, 1.15rem);
+        color: var(--color-muted); line-height: 1.6; max-width: 680px; margin-bottom: 2rem;
       }
-      p.subtitle { font-size: 1.125rem; color: #64748b; max-width: 650px; margin-bottom: 2rem; }
-      
-      /* Grid Cards */
-      .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+
+      /* Grids and Cards */
+      .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; }
+      .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; }
       .card {
-        background: #f8fafc; border: 1px solid #e2e8f0;
-        border-radius: 1rem; padding: 2rem; transition: transform 0.2s, box-shadow 0.2s;
+        background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.85rem;
+        padding: 1.75rem; transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
-      .card:hover { transform: translateY(-3px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+      .card:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -6px rgba(0,0,0,0.07); }
+      .card-title { font-size: 1.2rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.5rem; }
+
+      /* Pricing Tier */
+      .pricing-card {
+        background: #ffffff; border: 1px solid rgba(0,0,0,0.1); border-radius: 1rem;
+        padding: 2.25rem; display: flex; flex-direction: column; justify-content: space-between;
+        position: relative; transition: all 0.2s ease;
+      }
+      .pricing-card.featured {
+        border-color: var(--color-primary); box-shadow: 0 10px 30px -5px rgba(15, 123, 108, 0.2);
+      }
+      .price-tag { font-size: 2.75rem; font-weight: 800; color: var(--color-text); margin: 1rem 0 0.5rem; }
 
       /* FAQ Accordion */
       details.faq-item {
-        background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem;
-        padding: 1rem 1.25rem; margin-bottom: 0.75rem; cursor: pointer;
+        background: var(--color-surface); border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 0.75rem; padding: 1.1rem 1.35rem; margin-bottom: 0.85rem; cursor: pointer;
       }
-      summary.faq-question { font-weight: 600; color: #0f172a; outline: none; }
-      .faq-answer { margin-top: 0.75rem; color: #475569; font-size: 0.95rem; }
+      summary.faq-question { font-weight: 600; font-size: 1.05rem; color: var(--color-text); outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+      summary.faq-question::-webkit-details-marker { display: none; }
+      summary.faq-question::after { content: "+"; font-size: 1.35rem; font-weight: 400; color: var(--color-muted); transition: transform 0.2s ease; }
+      details[open] summary.faq-question::after { content: "−"; }
+      .faq-answer { margin-top: 0.85rem; color: var(--color-muted); font-size: 0.98rem; line-height: 1.6; }
+
+      /* Contact Form */
+      .contact-input {
+        width: 100%; padding: 0.8rem 1rem; border: 1px solid rgba(0,0,0,0.15);
+        border-radius: 0.5rem; font-family: inherit; font-size: 0.95rem; margin-top: 0.35rem;
+      }
+      .contact-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(15, 123, 108, 0.12); }
 
       /* Footer */
       footer.site-footer {
-        background: #0f172a; color: #94a3b8; padding: 3.5rem 0 2rem;
+        background: #0f172a; color: #94a3b8; padding: 4rem 0 2rem;
         border-top: 1px solid #1e293b;
       }
-      .footer-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2rem; }
-      .footer-copy { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #1e293b; font-size: 0.8125rem; text-align: center; }
+      .footer-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2.5rem; }
+      .footer-copy {
+        margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #1e293b;
+        font-size: 0.85rem; text-align: center; color: #64748b;
+      }
+
+      @media (max-width: 768px) {
+        .nav-links { display: none; }
+        section { padding: 3rem 0; }
+      }
     </style>
   </head>
   <body>
@@ -420,45 +582,60 @@ Sitemap: ${domain}/sitemap.xml
     siteName: string,
     pageName: string,
     pageSlug: string,
+    availableSlugs: Set<string>,
+    identifier: string,
     contactInfo?: {
       contactEmail?: string;
       contactPhone?: string;
       address?: string;
     },
   ): string {
-    const parts: string[] = [];
+    const menuItems = header?.menu || [];
+    const headerCta = header?.cta;
+    const headerCtaHref = headerCta?.href ? resolveSafeHref(headerCta.href, availableSlugs) : "#";
 
-    // Header
-    parts.push(`
+    const headerHtml = `
     <header class="site-header">
       <div class="container nav-row">
         <a href="/" class="nav-brand">${escapeHtml(header?.siteName || siteName)}</a>
-        <nav>
+        <nav aria-label="Main Navigation">
           <ul class="nav-links">
-            ${(header?.menu || [])
-              .map((it) => `<li><a href="${escapeHtml(it.href)}">${escapeHtml(it.label)}</a></li>`)
+            ${menuItems
+              .map((it) => {
+                const safeHref = resolveSafeHref(it.href, availableSlugs);
+                return `<li><a href="${escapeHtml(safeHref)}">${escapeHtml(it.label)}</a></li>`;
+              })
               .join("")}
             ${
-              header?.cta?.label
-                ? `<li><a href="${escapeHtml(header.cta.href)}" class="btn-cta">${escapeHtml(header.cta.label)}</a></li>`
+              headerCta?.label
+                ? `<li><a href="${escapeHtml(headerCtaHref)}" class="btn-cta">${escapeHtml(headerCta.label)}</a></li>`
                 : ""
             }
           </ul>
         </nav>
       </div>
     </header>
-    <main>`);
+    <main>`;
 
+    const sectionParts: string[] = [];
     let hasRenderedH1 = false;
 
-    // For inner pages (e.g. /about, /services, /contact): if first section is not hero, render semantic page header with H1
+    function getHeadingMarkup(effectiveHeading: string): { tag: string; cls: string } {
+      if (!hasRenderedH1) {
+        hasRenderedH1 = true;
+        return { tag: "h1", cls: "hero-title" };
+      }
+      return { tag: "h2", cls: "section-title" };
+    }
+
+    // Inner page header fallback if first section is not hero
     const firstSection = sections.find((s) => !s.hidden);
     if (pageSlug !== "/" && (!firstSection || firstSection.type !== "hero")) {
-      parts.push(`
-      <section class="section-page-intro" style="padding: 3rem 0 1.5rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+      sectionParts.push(`
+      <section class="section-page-intro" style="padding: 3rem 0 1.5rem; background: var(--color-surface); border-bottom: 1px solid rgba(0,0,0,0.06);">
         <div class="container">
-          <h1 class="hero-title" style="font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 0.5rem;">${escapeHtml(pageName)}</h1>
-          <nav aria-label="Breadcrumb" style="font-size: 0.875rem; color: #64748b;">
+          <h1 class="hero-title" style="font-size: clamp(2rem, 4vw, 2.75rem); margin-bottom: 0.5rem;">${escapeHtml(pageName)}</h1>
+          <nav aria-label="Breadcrumb" style="font-size: 0.875rem; color: var(--color-muted);">
             <a href="/" style="color: var(--color-primary);">Home</a> <span style="margin: 0 0.5rem;">/</span> <span>${escapeHtml(pageName)}</span>
           </nav>
         </div>
@@ -469,39 +646,71 @@ Sitemap: ${domain}/sitemap.xml
     // Render Each Section
     for (const section of sections) {
       if (section.hidden) continue;
-      const d = section.data as Record<string, unknown>;
-      const heading = ([d.heading, d.title].find((v) => typeof v === "string") as string) || "";
-      const subheading = ([d.subheading, d.subtitle, d.tagline].find((v) => typeof v === "string") as string) || "";
-      const text = ([d.text, d.description, d.body].find((v) => typeof v === "string") as string) || "";
-
-      const headingTag = !hasRenderedH1 ? "h1" : "h2";
-      const headingClass = !hasRenderedH1 ? "hero-title" : "section-title";
-      if (!hasRenderedH1 && heading) hasRenderedH1 = true;
+      const d = (section.data as Record<string, unknown>) || {};
+      const badgeText = ([d.eyebrow, d.badge].find((v) => typeof v === "string" && v.trim()) as string) || "";
+      const heading = ([d.heading, d.title].find((v) => typeof v === "string" && v.trim()) as string) || "";
+      const subheading = ([d.subheading, d.subtitle].find((v) => typeof v === "string" && v.trim()) as string) || "";
+      const text = ([d.intro, d.text, d.description, d.body].find((v) => typeof v === "string" && v.trim()) as string) || "";
 
       switch (section.type) {
         case "hero": {
           const heroImg =
-            typeof d.imageUrl === "string"
+            typeof d.imageUrl === "string" && d.imageUrl
               ? d.imageUrl
               : d.image && typeof d.image === "object" && "url" in d.image && typeof d.image.url === "string"
                 ? d.image.url
                 : "";
-          parts.push(`
-          <section class="section-hero">
-            <div class="container" style="text-align: center; max-width: 900px;">
-              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-              <${headingTag} class="${headingClass}">${escapeHtml(heading || `Welcome to ${siteName}`)}</${headingTag}>
-              ${text ? `<p class="subtitle" style="margin: 0 auto 2rem;">${escapeHtml(text)}</p>` : ""}
-              ${
-                d.button && typeof d.button === "object" && "label" in d.button
-                  ? `<a href="${escapeHtml(String((d.button as Record<string, unknown>).href || "#"))}" class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2rem;">${escapeHtml(String((d.button as Record<string, unknown>).label))}</a>`
-                  : ""
-              }
+          const heroAlt =
+            d.image && typeof d.image === "object" && "alt" in d.image && typeof d.image.alt === "string" && d.image.alt.trim()
+              ? d.image.alt.trim()
+              : heading || siteName;
+
+          const btnPrimary =
+            d.primaryCta && typeof d.primaryCta === "object"
+              ? (d.primaryCta as Record<string, unknown>)
+              : d.button && typeof d.button === "object"
+                ? (d.button as Record<string, unknown>)
+                : d.cta && typeof d.cta === "object"
+                  ? (d.cta as Record<string, unknown>)
+                  : null;
+
+          const btnSecondary =
+            d.secondaryCta && typeof d.secondaryCta === "object"
+              ? (d.secondaryCta as Record<string, unknown>)
+              : d.secondaryButton && typeof d.secondaryButton === "object"
+                ? (d.secondaryButton as Record<string, unknown>)
+                : null;
+
+          const primaryHref = btnPrimary?.href ? resolveSafeHref(String(btnPrimary.href), availableSlugs) : "#";
+          const secondaryHref = btnSecondary?.href ? resolveSafeHref(String(btnSecondary.href), availableSlugs) : "#";
+
+          const effectiveHeading = heading || `Welcome to ${siteName}`;
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const heroParagraph = subheading || text;
+
+          sectionParts.push(`
+          <section class="section-hero" id="hero" style="padding: 5rem 0 4rem; text-align: center;">
+            <div class="container" style="max-width: 960px;">
+              ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+              <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+              ${heroParagraph ? `<p class="subtitle" style="margin: 0 auto 2.25rem;">${escapeHtml(heroParagraph)}</p>` : ""}
+              <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                ${
+                  btnPrimary?.label
+                    ? `<a href="${escapeHtml(primaryHref)}" class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnPrimary.label))}</a>`
+                    : ""
+                }
+                ${
+                  btnSecondary?.label
+                    ? `<a href="${escapeHtml(secondaryHref)}" class="btn-secondary" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnSecondary.label))}</a>`
+                    : ""
+                }
+              </div>
               ${
                 heroImg
                   ? `
-              <div style="margin-top: 2.5rem; border-radius: 1rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
-                <img src="${escapeHtml(heroImg)}" alt="${escapeHtml(heading || siteName)}" fetchpriority="high" decoding="async" style="width: 100%; height: auto; display: block;" />
+              <div style="margin-top: 3.5rem; border-radius: 1.25rem; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);">
+                <img src="${escapeHtml(heroImg)}" alt="${escapeHtml(heroAlt)}" fetchpriority="high" decoding="async" style="width: 100%; height: auto; display: block;" />
               </div>`
                   : ""
               }
@@ -512,22 +721,126 @@ Sitemap: ${domain}/sitemap.xml
 
         case "features":
         case "services": {
+          const isServices = section.type === "services";
           const items = Array.isArray(d.items) ? d.items : [];
-          parts.push(`
-          <section class="section-${section.type}">
+          const effectiveHeading = heading || (isServices ? "Our Services" : "Key Features");
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-${section.type}" id="${isServices ? "services" : "features"}">
             <div class="container">
-              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-              <${headingTag} class="${headingClass}">${escapeHtml(heading || (section.type === "services" ? "Our Services" : "Key Features"))}</${headingTag}>
-              ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+              <div style="text-align: center; margin-bottom: 3rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+              </div>
               <div class="grid-3">
                 ${items
                   .map(
                     (it: Record<string, unknown>) => `
                   <div class="card">
                     <h3 class="card-title">${escapeHtml(String(it.title || ""))}</h3>
-                    <p style="color: #64748b; font-size: 0.95rem;">${escapeHtml(String(it.description || it.text || ""))}</p>
+                    <p style="color: var(--color-muted); font-size: 0.95rem; line-height: 1.6;">${escapeHtml(String(it.description || it.text || it.intro || ""))}</p>
                   </div>`,
                   )
+                  .join("")}
+              </div>
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "pricing": {
+          const plans = Array.isArray(d.plans) ? d.plans : Array.isArray(d.items) ? d.items : [];
+          const effectiveHeading = heading || "Pricing & Plans";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-pricing" id="pricing" style="background: var(--color-surface);">
+            <div class="container">
+              <div style="text-align: center; margin-bottom: 3.5rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+              </div>
+              <div class="grid-3">
+                ${plans
+                  .map((plan: Record<string, unknown>) => {
+                    const planTitle = String(plan.name || plan.title || "Plan");
+                    const price = String(plan.price || "");
+                    const period = String(plan.period || plan.interval || "/ month");
+                    const isPopular = Boolean(plan.featured || plan.popular || plan.highlight);
+                    const features = Array.isArray(plan.features) ? plan.features : [];
+                    const ctaObj =
+                      plan.cta && typeof plan.cta === "object"
+                        ? (plan.cta as Record<string, unknown>)
+                        : plan.buttonHref
+                          ? { href: plan.buttonHref, label: plan.buttonText || "Get Started" }
+                          : null;
+                    const planBtnHref = ctaObj?.href ? resolveSafeHref(String(ctaObj.href), availableSlugs) : "#contact";
+                    const planBtnLabel = String(ctaObj?.label || plan.ctaText || "Get Started");
+
+                    return `
+                  <div class="pricing-card ${isPopular ? "featured" : ""}">
+                    <div>
+                      ${isPopular ? `<span style="position: absolute; top: -12px; right: 24px; background: var(--color-primary); color: #fff; font-size: 0.75rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px;">MOST POPULAR</span>` : ""}
+                      <h3 style="font-size: 1.35rem; font-weight: 700;">${escapeHtml(planTitle)}</h3>
+                      ${plan.description ? `<p style="color: var(--color-muted); font-size: 0.9rem; margin-top: 0.25rem;">${escapeHtml(String(plan.description))}</p>` : ""}
+                      <div class="price-tag">${escapeHtml(price)} <span style="font-size: 1rem; font-weight: 400; color: var(--color-muted);">${escapeHtml(period)}</span></div>
+                      <ul style="list-style: none; margin: 1.5rem 0; display: flex; flex-direction: column; gap: 0.75rem;">
+                        ${features.map((f) => `<li style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.92rem; color: var(--color-text);"><span style="color: var(--color-primary); font-weight: bold;">✓</span> ${escapeHtml(String(f))}</li>`).join("")}
+                      </ul>
+                    </div>
+                    <a href="${escapeHtml(planBtnHref)}" class="${isPopular ? "btn-cta" : "btn-secondary"}" style="width: 100%; text-align: center; margin-top: 1.5rem;">${escapeHtml(planBtnLabel)}</a>
+                  </div>`;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "team": {
+          const members = Array.isArray(d.members) ? d.members : Array.isArray(d.items) ? d.items : [];
+          const effectiveHeading = heading || "Meet Our Team";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-team" id="team">
+            <div class="container">
+              <div style="text-align: center; margin-bottom: 3.5rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+              </div>
+              <div class="grid-4">
+                ${members
+                  .map((m: Record<string, unknown>) => {
+                    const photo =
+                      m.photo && typeof m.photo === "object" && "url" in m.photo && typeof m.photo.url === "string"
+                        ? m.photo.url
+                        : typeof m.photo === "string"
+                          ? m.photo
+                          : typeof m.imageUrl === "string"
+                            ? m.imageUrl
+                            : m.image && typeof m.image === "object" && "url" in m.image
+                              ? (m.image as { url: string }).url
+                              : "";
+                    const name = String(m.name || "Team Member");
+                    const role = String(m.role || m.department || m.title || "");
+                    const bio = String(m.bio || m.description || "");
+                    return `
+                  <div class="card" style="text-align: center;">
+                    ${photo ? `<div style="width: 96px; height: 96px; border-radius: 9999px; overflow: hidden; margin: 0 auto 1rem;"><img src="${escapeHtml(photo)}" alt="${escapeHtml(name)}" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover;" /></div>` : ""}
+                    <h3 style="font-size: 1.15rem; font-weight: 700;">${escapeHtml(name)}</h3>
+                    ${role ? `<p style="color: var(--color-primary); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">${escapeHtml(role)}</p>` : ""}
+                    ${bio ? `<p style="color: var(--color-muted); font-size: 0.88rem; line-height: 1.5;">${escapeHtml(bio)}</p>` : ""}
+                  </div>`;
+                  })
                   .join("")}
               </div>
             </div>
@@ -537,25 +850,56 @@ Sitemap: ${domain}/sitemap.xml
 
         case "text":
         case "split": {
-          const aboutImg =
-            typeof d.imageUrl === "string"
-              ? d.imageUrl
-              : d.image && typeof d.image === "object" && "url" in d.image && typeof d.image.url === "string"
-                ? d.image.url
+          const splitImg =
+            d.image && typeof d.image === "object" && "url" in d.image && typeof d.image.url === "string"
+              ? d.image.url
+              : typeof d.imageUrl === "string"
+                ? d.imageUrl
                 : "";
-          parts.push(`
-          <section class="section-about">
-            <div class="container" style="display: grid; grid-template-columns: ${aboutImg ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr"}; gap: 3rem; align-items: center;">
-              <div>
-                ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-                <${headingTag} class="${headingClass}">${escapeHtml(heading || `About ${siteName}`)}</${headingTag}>
-                ${text ? `<p style="color: #475569; font-size: 1.05rem; line-height: 1.7; margin-bottom: 1.5rem;">${escapeHtml(text)}</p>` : ""}
+          const splitAlt =
+            d.image && typeof d.image === "object" && "alt" in d.image && typeof d.image.alt === "string"
+              ? d.image.alt
+              : heading || `About ${siteName}`;
+
+          const bullets = Array.isArray(d.bullets) ? d.bullets : [];
+          const ctaBtn =
+            d.cta && typeof d.cta === "object"
+              ? (d.cta as Record<string, unknown>)
+              : d.button && typeof d.button === "object"
+                ? (d.button as Record<string, unknown>)
+                : null;
+          const ctaHref = ctaBtn?.href ? resolveSafeHref(String(ctaBtn.href), availableSlugs) : "#";
+          const imgPos = d.imagePosition === "left" ? "left" : "right";
+
+          const effectiveHeading = heading || `About ${siteName}`;
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const bodyContent = d.body || text || subheading;
+
+          sectionParts.push(`
+          <section class="section-about" id="about">
+            <div class="container" style="display: grid; grid-template-columns: ${splitImg ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr"}; gap: 3.5rem; align-items: center;">
+              <div style="${imgPos === "left" && splitImg ? "order: 2;" : ""}">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${bodyContent ? `<p style="color: var(--color-muted); font-size: 1.05rem; line-height: 1.7; margin-bottom: 1.5rem;">${escapeHtml(String(bodyContent))}</p>` : ""}
+                ${
+                  bullets.length > 0
+                    ? `<ul style="list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.75rem;">
+                        ${bullets.map((b) => `<li style="display: flex; gap: 0.6rem; align-items: baseline; font-size: 0.98rem; color: var(--color-text);"><span style="color: var(--color-primary); font-weight: bold;">✓</span> ${escapeHtml(String(b))}</li>`).join("")}
+                      </ul>`
+                    : ""
+                }
+                ${
+                  ctaBtn?.label
+                    ? `<a href="${escapeHtml(ctaHref)}" class="btn-cta" style="margin-top: 0.5rem;">${escapeHtml(String(ctaBtn.label))}</a>`
+                    : ""
+                }
               </div>
               ${
-                aboutImg
+                splitImg
                   ? `
-              <div style="border-radius: 1rem; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
-                <img src="${escapeHtml(aboutImg)}" alt="${escapeHtml(heading || `About ${siteName}`)}" loading="lazy" decoding="async" style="width: 100%; height: auto;" />
+              <div style="${imgPos === "left" ? "order: 1;" : ""}; border-radius: 1rem; overflow: hidden; box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.1);">
+                <img src="${escapeHtml(splitImg)}" alt="${escapeHtml(splitAlt)}" loading="lazy" decoding="async" style="width: 100%; height: auto;" />
               </div>`
                   : ""
               }
@@ -564,28 +908,133 @@ Sitemap: ${domain}/sitemap.xml
           break;
         }
 
-        case "contact": {
-          parts.push(`
-          <section class="section-contact" style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
-            <div class="container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 3rem;">
-              <div>
-                ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-                <${headingTag} class="${headingClass}">${escapeHtml(heading || "Get In Touch")}</${headingTag}>
-                ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
-                <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-                  ${contactInfo?.contactEmail ? `<div><strong style="color: #0f172a; display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(contactInfo.contactEmail)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactEmail)}</a></div>` : ""}
-                  ${contactInfo?.contactPhone ? `<div><strong style="color: #0f172a; display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(contactInfo.contactPhone)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactPhone)}</a></div>` : ""}
-                  ${contactInfo?.address ? `<div><strong style="color: #0f172a; display: block; font-size: 0.875rem;">Address</strong><p style="color: #64748b; font-size: 0.95rem;">${escapeHtml(contactInfo.address)}</p></div>` : ""}
+        case "logos": {
+          const logos = Array.isArray(d.logos) ? d.logos : [];
+          if (logos.length > 0 || heading) {
+            const effectiveHeading = heading || "Our Partners";
+            const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+
+            sectionParts.push(`
+            <section class="section-logos" id="partners" style="padding: 3rem 0; border-top: 1px solid rgba(0,0,0,0.05); border-bottom: 1px solid rgba(0,0,0,0.05);">
+              <div class="container" style="text-align: center;">
+                ${heading ? `<${headingTag} class="${headingClass}" style="font-size: 1.15rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-muted); margin-bottom: 2rem;">${escapeHtml(heading)}</${headingTag}>` : ""}
+                <div style="display: flex; justify-content: center; align-items: center; gap: 3rem; flex-wrap: wrap;">
+                  ${logos
+                    .map((logo: Record<string, unknown> | string) => {
+                      const logoUrl = typeof logo === "string" ? logo : typeof logo === "object" && logo ? String((logo as Record<string, unknown>).url || (logo as Record<string, unknown>).imageUrl || "") : "";
+                      const logoAlt = typeof logo === "object" && logo ? String((logo as Record<string, unknown>).alt || "Partner logo") : "Partner logo";
+                      return logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(logoAlt)}" loading="lazy" decoding="async" style="max-height: 40px; width: auto; object-fit: contain; opacity: 0.75; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.75'" />` : "";
+                    })
+                    .join("")}
                 </div>
               </div>
-              <div class="card" style="background: #ffffff;">
-                <h3 class="card-title">Send a message</h3>
-                <form onsubmit="event.preventDefault(); alert('Message sent successfully!');" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
-                  <input type="text" placeholder="Your Name" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-family: inherit;" />
-                  <input type="email" placeholder="Your Email" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-family: inherit;" />
-                  <textarea placeholder="Your Message" rows="4" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-family: inherit; resize: vertical;"></textarea>
-                  <button type="submit" class="btn-cta" style="border: none; cursor: pointer; width: 100%;">Send Message</button>
+            </section>`);
+          }
+          break;
+        }
+
+        case "contact": {
+          const effectiveHeading = heading || "Get In Touch";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-contact" id="contact" style="background: var(--color-surface); border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06);">
+            <div class="container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 3.5rem;">
+              <div>
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle">${escapeHtml(introParagraph)}</p>` : ""}
+                <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 1.25rem;">
+                  ${contactInfo?.contactEmail ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(contactInfo.contactEmail)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactEmail)}</a></div>` : ""}
+                  ${contactInfo?.contactPhone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(contactInfo.contactPhone)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactPhone)}</a></div>` : ""}
+                  ${contactInfo?.address ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Address</strong><p style="color: var(--color-muted); font-size: 0.95rem;">${escapeHtml(contactInfo.address)}</p></div>` : ""}
+                </div>
+              </div>
+              <div class="card" style="background: #ffffff; border-radius: 1rem; padding: 2rem;">
+                <h3 class="card-title" style="margin-bottom: 0.25rem;">Send a message</h3>
+                <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">We usually reply within 24 hours.</p>
+                
+                <div id="wb-form-feedback" style="display:none; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-bottom: 1.25rem; font-size: 0.9rem;"></div>
+                
+                <form id="wb-contact-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                  <div>
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Your Name *</label>
+                    <input type="text" name="name" required class="contact-input" placeholder="e.g. John Doe" />
+                  </div>
+                  <div>
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Email Address *</label>
+                    <input type="email" name="email" required class="contact-input" placeholder="john@example.com" />
+                  </div>
+                  <div>
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Phone Number</label>
+                    <input type="tel" name="phone" class="contact-input" placeholder="+1 (555) 000-0000" />
+                  </div>
+                  <div>
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Message *</label>
+                    <textarea name="message" rows="4" required class="contact-input" placeholder="How can we help you?" style="resize: vertical;"></textarea>
+                  </div>
+                  <button type="submit" id="wb-form-submit-btn" class="btn-cta" style="width: 100%; padding: 0.85rem; font-size: 0.95rem; margin-top: 0.5rem;">
+                    Send Message
+                  </button>
                 </form>
+
+                <script>
+                  document.addEventListener('DOMContentLoaded', function() {
+                    var form = document.getElementById('wb-contact-form');
+                    if (!form) return;
+                    form.addEventListener('submit', async function(e) {
+                      e.preventDefault();
+                      var btn = document.getElementById('wb-form-submit-btn');
+                      var feedback = document.getElementById('wb-form-feedback');
+                      var name = form.elements['name'] ? form.elements['name'].value : '';
+                      var email = form.elements['email'] ? form.elements['email'].value : '';
+                      var phone = form.elements['phone'] ? form.elements['phone'].value : '';
+                      var message = form.elements['message'] ? form.elements['message'].value : '';
+
+                      if (btn) {
+                        btn.disabled = true;
+                        btn.innerText = 'Sending message...';
+                      }
+                      if (feedback) feedback.style.display = 'none';
+
+                      try {
+                        var targetUrl = '/api/public/site/' + encodeURIComponent(${JSON.stringify(identifier)}) + '/contact';
+                        var res = await fetch(targetUrl, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ name: name, email: email, phone: phone, message: message })
+                        });
+                        var data = await res.json();
+                        if (res.ok) {
+                          if (feedback) {
+                            feedback.style.display = 'block';
+                            feedback.style.background = '#ecfdf5';
+                            feedback.style.color = '#065f46';
+                            feedback.style.border = '1px solid #a7f3d0';
+                            feedback.innerText = data.message || "Thank you! Your message has been sent successfully.";
+                          }
+                          form.reset();
+                        } else {
+                          throw new Error(data.error || 'Failed to send message. Please try again.');
+                        }
+                      } catch (err) {
+                        if (feedback) {
+                          feedback.style.display = 'block';
+                          feedback.style.background = '#fef2f2';
+                          feedback.style.color = '#991b1b';
+                          feedback.style.border = '1px solid #fecaca';
+                          feedback.innerText = err.message || 'Network error. Please try again.';
+                        }
+                      } finally {
+                        if (btn) {
+                          btn.disabled = false;
+                          btn.innerText = 'Send Message';
+                        }
+                      }
+                    });
+                  });
+                </script>
               </div>
             </div>
           </section>`);
@@ -594,21 +1043,35 @@ Sitemap: ${domain}/sitemap.xml
 
         case "testimonials": {
           const items = Array.isArray(d.items) ? d.items : [];
-          parts.push(`
-          <section class="section-testimonials">
+          const effectiveHeading = heading || "What Our Clients Say";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-testimonials" id="testimonials">
             <div class="container">
-              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-              <${headingTag} class="${headingClass}">${escapeHtml(heading || "What Our Clients Say")}</${headingTag}>
-              ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+              <div style="text-align: center; margin-bottom: 3.5rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+              </div>
               <div class="grid-3">
                 ${items
                   .map(
-                    (it: Record<string, unknown>) => `
+                    (it: Record<string, unknown>) => {
+                      const rating = typeof it.rating === "number" && it.rating >= 1 && it.rating <= 5 ? Math.round(it.rating) : null;
+                      const quote = String(it.quote || it.content || it.text || "");
+                      const author = String(it.author || it.name || "").trim();
+                      const role = String(it.role || it.title || "").trim();
+
+                      return `
                   <div class="card">
-                    <p style="color: #334155; font-style: italic; margin-bottom: 1.25rem;">“${escapeHtml(String(it.quote || it.content || it.text || ""))}”</p>
-                    <strong style="color: #0f172a; display: block; font-size: 0.95rem;">${escapeHtml(String(it.author || it.name || "Customer"))}</strong>
-                    ${it.role || it.title ? `<span style="color: #64748b; font-size: 0.8125rem;">${escapeHtml(String(it.role || it.title))}</span>` : ""}
-                  </div>`,
+                    ${rating ? `<div style="color: #f59e0b; font-size: 1.1rem; margin-bottom: 0.75rem;">${"★".repeat(rating)}${"☆".repeat(5 - rating)}</div>` : ""}
+                    ${quote ? `<p style="color: var(--color-text); font-style: italic; margin-bottom: 1.25rem; line-height: 1.6;">“${escapeHtml(quote)}”</p>` : ""}
+                    ${author ? `<strong style="color: var(--color-text); display: block; font-size: 0.95rem;">${escapeHtml(author)}</strong>` : ""}
+                    ${role ? `<span style="color: var(--color-muted); font-size: 0.82rem;">${escapeHtml(role)}</span>` : ""}
+                  </div>`;
+                    },
                   )
                   .join("")}
               </div>
@@ -618,28 +1081,28 @@ Sitemap: ${domain}/sitemap.xml
         }
 
         case "gallery": {
-          const items = Array.isArray(d.items) ? d.items : [];
-          parts.push(`
-          <section class="section-gallery">
+          const rawImages = Array.isArray(d.images) ? d.images : Array.isArray(d.items) ? d.items : Array.isArray(d.photos) ? d.photos : [];
+          const effectiveHeading = heading || "Gallery";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-gallery" id="gallery">
             <div class="container">
-              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-              <${headingTag} class="${headingClass}">${escapeHtml(heading || "Gallery")}</${headingTag}>
-              ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
-              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem;">
-                ${items
-                  .map((it: Record<string, unknown>) => {
-                    const imgUrl =
-                      typeof it.url === "string" ? it.url : typeof it.imageUrl === "string" ? it.imageUrl : "";
-                    const altText =
-                      typeof it.caption === "string"
-                        ? it.caption
-                        : typeof it.alt === "string"
-                          ? it.alt
-                          : `${siteName} gallery photo`;
+              <div style="text-align: center; margin-bottom: 3rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+                ${rawImages
+                  .map((it: Record<string, unknown> | string) => {
+                    const imgUrl = typeof it === "string" ? it : typeof it === "object" && it ? String((it as Record<string, unknown>).url || (it as Record<string, unknown>).imageUrl || "") : "";
+                    const altText = typeof it === "object" && it ? String((it as Record<string, unknown>).alt || (it as Record<string, unknown>).caption || (it as Record<string, unknown>).title || `${effectiveHeading} image`) : `${effectiveHeading} image`;
                     return imgUrl
                       ? `
-                    <div style="border-radius: 0.75rem; overflow: hidden; height: 220px;">
-                      <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover;" />
+                    <div style="border-radius: 0.85rem; overflow: hidden; height: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+                      <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'" />
                     </div>`
                       : "";
                   })
@@ -652,12 +1115,18 @@ Sitemap: ${domain}/sitemap.xml
 
         case "faq": {
           const items = Array.isArray(d.items) ? d.items : [];
-          parts.push(`
-          <section class="section-faq">
-            <div class="container" style="max-width: 800px;">
-              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
-              <${headingTag} class="${headingClass}">${escapeHtml(heading || "Frequently Asked Questions")}</${headingTag}>
-              ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+          const effectiveHeading = heading || "Frequently Asked Questions";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-faq" id="faq">
+            <div class="container" style="max-width: 840px;">
+              <div style="text-align: center; margin-bottom: 3rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+              </div>
               <div class="faq-list">
                 ${items
                   .map(
@@ -674,28 +1143,94 @@ Sitemap: ${domain}/sitemap.xml
           break;
         }
 
-        case "cta":
-          parts.push(`
-          <section class="section-cta" style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; text-align: center;">
-            <div class="container" style="max-width: 750px;">
-              <${headingTag} class="${headingClass}">${escapeHtml(heading || "Ready to get started?")}</${headingTag}>
-              ${text ? `<p class="subtitle" style="margin: 0 auto 2rem;">${escapeHtml(text)}</p>` : ""}
+        case "cta": {
+          const ctaBtn =
+            d.button && typeof d.button === "object"
+              ? (d.button as Record<string, unknown>)
+              : d.cta && typeof d.cta === "object"
+                ? (d.cta as Record<string, unknown>)
+                : null;
+          const ctaBtnHref = ctaBtn?.href ? resolveSafeHref(String(ctaBtn.href), availableSlugs) : "#contact";
+          const effectiveHeading = heading || "Ready to get started?";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const introParagraph = text || subheading;
+
+          sectionParts.push(`
+          <section class="section-cta" id="cta" style="background: var(--color-surface); border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06); text-align: center; padding: 5rem 0;">
+            <div class="container" style="max-width: 800px;">
+              ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+              <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+              ${introParagraph ? `<p class="subtitle" style="margin: 0 auto 2.25rem;">${escapeHtml(introParagraph)}</p>` : ""}
               ${
-                d.button && typeof d.button === "object" && "label" in d.button
-                  ? `<a href="${escapeHtml(String((d.button as Record<string, unknown>).href || "#"))}" class="btn-cta">${escapeHtml(String((d.button as Record<string, unknown>).label))}</a>`
+                ctaBtn?.label
+                  ? `<a href="${escapeHtml(ctaBtnHref)}" class="btn-cta" style="font-size: 1rem; padding: 0.85rem 2.4rem;">${escapeHtml(String(ctaBtn.label))}</a>`
                   : ""
               }
             </div>
           </section>`);
           break;
+        }
+
+        case "stats": {
+          const stats = Array.isArray(d.items) ? d.items : Array.isArray(d.stats) ? d.stats : [];
+          const validStats = stats.filter((st: Record<string, unknown>) => st && (st.value || st.number));
+          if (validStats.length > 0) {
+            const effectiveHeading = heading || "";
+            if (effectiveHeading) {
+              const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+              sectionParts.push(`
+              <section class="section-stats" id="stats" style="background: var(--color-surface);">
+                <div class="container">
+                  <div style="text-align: center; margin-bottom: 2.5rem;">
+                    ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                    <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                  </div>
+                  <div class="grid-4" style="text-align: center;">
+                    ${validStats
+                      .map(
+                        (st: Record<string, unknown>) => `
+                      <div class="card" style="padding: 2rem 1.5rem;">
+                        <div style="font-size: 2.75rem; font-weight: 800; color: var(--color-primary); line-height: 1;">${escapeHtml(String(st.value || st.number))}</div>
+                        <div style="font-size: 0.95rem; font-weight: 600; color: var(--color-text); margin-top: 0.5rem;">${escapeHtml(String(st.label || st.title || ""))}</div>
+                      </div>`,
+                      )
+                      .join("")}
+                  </div>
+                </div>
+              </section>`);
+            } else {
+              sectionParts.push(`
+              <section class="section-stats" id="stats" style="background: var(--color-surface);">
+                <div class="container">
+                  <div class="grid-4" style="text-align: center;">
+                    ${validStats
+                      .map(
+                        (st: Record<string, unknown>) => `
+                      <div class="card" style="padding: 2rem 1.5rem;">
+                        <div style="font-size: 2.75rem; font-weight: 800; color: var(--color-primary); line-height: 1;">${escapeHtml(String(st.value || st.number))}</div>
+                        <div style="font-size: 0.95rem; font-weight: 600; color: var(--color-text); margin-top: 0.5rem;">${escapeHtml(String(st.label || st.title || ""))}</div>
+                      </div>`,
+                      )
+                      .join("")}
+                  </div>
+                </div>
+              </section>`);
+            }
+          }
+          break;
+        }
 
         default:
           if (heading || text) {
-            parts.push(`
+            const effectiveHeading = heading || "";
+            const { tag: headingTag, cls: headingClass } = effectiveHeading ? getHeadingMarkup(effectiveHeading) : { tag: "h2", cls: "section-title" };
+
+            sectionParts.push(`
             <section class="section-generic">
-              <div class="container">
-                ${heading ? `<${headingTag} class="${headingClass}">${escapeHtml(heading)}</${headingTag}>` : ""}
-                ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+              <div class="container" style="max-width: 860px; text-align: center;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                ${effectiveHeading ? `<${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>` : ""}
+                ${text ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(text)}</p>` : ""}
               </div>
             </section>`);
           }
@@ -703,33 +1238,52 @@ Sitemap: ${domain}/sitemap.xml
       }
     }
 
-    // Fallback: If no section produced an H1 on the home page, guarantee one
+    // Fallback: If no section produced an H1 on the page, guarantee a single semantic H1 inside <main>
     if (!hasRenderedH1) {
-      parts.unshift(`
-      <div class="container" style="padding-top: 2rem;">
-        <h1 class="hero-title">${escapeHtml(siteName)}</h1>
-      </div>`);
+      sectionParts.unshift(`
+      <section class="section-page-title" style="padding: 2.5rem 0 1rem;">
+        <div class="container">
+          <h1 class="hero-title">${escapeHtml(pageSlug === "/" ? siteName : pageName)}</h1>
+        </div>
+      </section>`);
+      hasRenderedH1 = true;
     }
 
-    parts.push(`</main>`);
-
-    // Footer
-    parts.push(`
+    const footerHtml = `
     <footer class="site-footer">
       <div class="container">
         <div class="footer-row">
           <div>
-            <h3 style="color: #ffffff; font-size: 1.125rem; font-weight: 700; margin-bottom: 0.5rem;">${escapeHtml(footer?.siteName || siteName)}</h3>
-            <p style="max-width: 350px; font-size: 0.875rem;">${escapeHtml(footer?.copyright || `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`)}</p>
+            <h3 style="color: #ffffff; font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">${escapeHtml(footer?.siteName || siteName)}</h3>
+            <p style="max-width: 400px; font-size: 0.88rem; line-height: 1.6;">${escapeHtml(footer?.copyright || `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`)}</p>
           </div>
+          ${
+            footer?.columns && Array.isArray(footer.columns)
+              ? `<div style="display: flex; gap: 3rem; flex-wrap: wrap;">
+                  ${footer.columns
+                    .map(
+                      (col) => `
+                    <div>
+                      <h4 style="color: #ffffff; font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem;">${escapeHtml(col.title)}</h4>
+                      <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.875rem;">
+                        ${(col.links || [])
+                          .map((l) => `<li><a href="${escapeHtml(resolveSafeHref(l.href, availableSlugs))}" style="transition: color 0.15s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#94a3b8'">${escapeHtml(l.label)}</a></li>`)
+                          .join("")}
+                      </ul>
+                    </div>`,
+                    )
+                    .join("")}
+                </div>`
+              : ""
+          }
         </div>
         <div class="footer-copy">
-          Powered by Bytezora Engine
+          Published with Bytezora Site Engine
         </div>
       </div>
-    </footer>`);
+    </footer>`;
 
-    return parts.join("\n");
+    return [headerHtml, ...sectionParts, `</main>`, footerHtml].join("\n");
   }
 
   private renderNotFoundHtml(subdomain: string, siteName?: string): string {
@@ -739,7 +1293,7 @@ Sitemap: ${domain}/sitemap.xml
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>404 - Page Not Found</title>
-    <meta name="robots" content="noindex, follow" />
+    <meta name="robots" content="noindex, nofollow" />
     <style>
       body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
       .box { max-width: 480px; padding: 2rem; }
