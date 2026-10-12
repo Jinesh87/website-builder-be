@@ -8,6 +8,7 @@ import { aiChatService } from "../services/ai-chat.service.js";
 import { aiSeoService } from "../services/ai-seo.service.js";
 import { aiSiteCopilotService } from "../services/ai-site-copilot.service.js";
 import { isEditableSectionType } from "../services/site-generator.js";
+import { liveSiteEngineService } from "../services/live-site-engine.service.js";
 import { websiteGenerationService } from "../services/website-generation.service.js";
 import { websiteService } from "../services/website.service.js";
 import type { TemplateListQuery, WebsiteListQuery } from "../types/website.types.js";
@@ -363,9 +364,10 @@ export class WebsiteController {
 
   getPublicSitemapXml = async (req: Request<{ subdomain: string }>, res: Response, next: NextFunction) => {
     try {
-      const xml = await aiSeoService.getPublicSitemapXml(req.params.subdomain);
+      const result = await liveSiteEngineService.renderSitemap(req.params.subdomain);
+      res.status(result.statusCode);
       res.setHeader("Content-Type", "application/xml; charset=utf-8");
-      res.send(xml);
+      res.send(result.xml);
     } catch (error) {
       next(error);
     }

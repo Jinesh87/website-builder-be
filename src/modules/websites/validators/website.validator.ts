@@ -141,6 +141,7 @@ const pageSchema = Joi.object({
   showInNav: Joi.boolean().required(),
   seoTitle: optionalText(160),
   seoDescription: optionalText(320),
+  seoKeywords: Joi.array().items(Joi.string().trim().lowercase().min(1).max(60)).max(10).unique().optional(),
   sections: sectionsSchema.required(),
 });
 

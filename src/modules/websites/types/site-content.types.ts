@@ -220,6 +220,7 @@ export type SectionType = (typeof SECTION_TYPES)[number];
 export type GridColumns = 1 | 2 | 3 | 4;
 
 export type ThemeSettings = {
+  language?: string;
   colors: {
     primary: string;
     secondary: string;

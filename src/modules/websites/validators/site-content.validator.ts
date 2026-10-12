@@ -350,6 +350,10 @@ function flexibleVariant<T extends string>(
 }
 
 export const themeSchema = Joi.object({
+  language: Joi.string()
+    .trim()
+    .pattern(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/)
+    .optional(),
   colors: Joi.object({
     primary: color,
     secondary: color,

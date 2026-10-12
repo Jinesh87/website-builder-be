@@ -18,6 +18,7 @@ import type {
   CreateWebsiteInput,
   PageView,
   PublishInput,
+  PublishSnapshot,
   SaveDraftInput,
   SavedSectionView,
   SavePageContentInput,
@@ -50,7 +51,7 @@ const summaryInclude = {
 
 const detailInclude = {
   ...summaryInclude,
-  domains: { where: { status: DomainStatus.ACTIVE }, select: { hostname: true } },
+  domains: { where: { status: DomainStatus.ACTIVE }, orderBy: { isPrimary: "desc" }, select: { hostname: true } },
   pages: { orderBy: { sortOrder: "asc" } },
 } as const satisfies Prisma.WebsiteInclude;
 
@@ -161,6 +162,7 @@ function toPage(page: WebsiteWithPages["pages"][number]): PageView {
     showInNav: page.showInNav,
     seoTitle: page.seoTitle,
     seoDescription: page.seoDescription,
+    seoKeywords: page.seoKeywords ?? [],
     sections: page.sections as unknown as Section[],
   };
 }
@@ -168,6 +170,7 @@ function toPage(page: WebsiteWithPages["pages"][number]): PageView {
 function toDetail(website: WebsiteWithPages): WebsiteDetail {
   return {
     ...toSummary(website),
+    customDomain: website.domains[0]?.hostname ?? null,
     info: toInfo(website),
     generation: website.generation ? toGenerationView(website.generation) : null,
     draft: {
@@ -588,11 +591,18 @@ export class WebsiteService {
     }
 
     const website = await prisma.website.update({ where: { id }, data, include: detailInclude });
+    const hostnames = (website.domains || []).map((d) => d.hostname);
+    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     return toDetail(website);
   }
 
   async delete(id: string, actor: AuthUser): Promise<void> {
-    const website = await this.findAccessibleOrThrow(id, actor);
+    const website = await prisma.website.findFirst({
+      where: { id, ...scopeFor(actor) },
+      select: { id: true, clientId: true, subdomain: true, domains: { select: { hostname: true } } },
+    });
+    if (!website) throw NOT_FOUND();
+
     await prisma.$transaction(async (tx) => {
       await tx.website.update({
         where: { id: website.id },
@@ -602,6 +612,9 @@ export class WebsiteService {
         where: { id: website.id },
       });
     });
+
+    const hostnames = (website.domains || []).map((d) => d.hostname);
+    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     logger.info({ websiteId: website.id, clientId: website.clientId, actorId: actor.id }, "Website deleted");
   }
 
@@ -652,6 +665,7 @@ export class WebsiteService {
               showInNav: page.showInNav,
               seoTitle: emptyToNull(page.seoTitle),
               seoDescription: emptyToNull(page.seoDescription),
+              seoKeywords: page.seoKeywords ?? [],
               sortOrder: index,
               sections: page.sections as unknown as Prisma.InputJsonValue,
               ...(createdAt ? { createdAt } : {}),
@@ -715,8 +729,21 @@ export class WebsiteService {
       throw DRAFT_CONFLICT();
     }
 
-    const snapshot = buildPublishSnapshot(toDetail(website).draft);
     const now = new Date();
+    const previousVersion = website.liveVersionId
+      ? await prisma.websiteVersion.findUnique({
+          where: { id: website.liveVersionId },
+          select: { snapshot: true, createdAt: true },
+        })
+      : null;
+    const snapshot = buildPublishSnapshot(
+      toDetail(website).draft,
+      now,
+      previousVersion && {
+        snapshot: previousVersion.snapshot as unknown as PublishSnapshot,
+        publishedAt: previousVersion.createdAt,
+      },
+    );
     let versionNumber = 0;
     try {
       await prisma.$transaction(async (tx) => {
