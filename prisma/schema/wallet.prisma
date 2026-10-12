@@ -1,0 +1,89 @@
+/// One prepaid balance per client, shared by its users. Amounts are in paise (1 INR = 100 paise).
+model Wallet {
+  id           String   @id @default(uuid()) @db.Uuid
+  clientId     String   @unique @db.Uuid
+  balancePaise Int      @default(0)
+  currency     String   @default("INR") @db.VarChar(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+/// Append-only ledger; every balance change has exactly one row.
+model WalletTransaction {
+  id                String                  @id @default(uuid()) @db.Uuid
+  walletId          String                  @db.Uuid
+  type              WalletTransactionType
+  source            WalletTransactionSource
+  /// Always positive; `type` says which way it moved.
+  amountPaise       Int
+  balanceAfterPaise Int
+  description       String                  @db.VarChar(300)
+  paymentOrderId    String?                 @unique @db.Uuid
+  userId            String?                 @db.Uuid
+  createdAt         DateTime                @default(now()) @db.Timestamptz(6)
+
+  wallet       Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  user         User?         @relation("WalletTransactionUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, createdAt])
+  @@map("wallet_transactions")
+}
+
+/// A Razorpay order created for a wallet top-up.
+model PaymentOrder {
+  id                String             @id @default(uuid()) @db.Uuid
+  clientId          String             @db.Uuid
+  userId            String?            @db.Uuid
+  razorpayOrderId   String             @unique @db.VarChar(64)
+  razorpayPaymentId String?            @unique @db.VarChar(64)
+  amountPaise       Int
+  currency          String             @default("INR") @db.VarChar(3)
+  status            PaymentOrderStatus @default(CREATED)
+  failureReason     String?            @db.VarChar(500)
+  paidAt            DateTime?          @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+
+  client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user        User?              @relation("PaymentOrderUser", fields: [userId], references: [id], onDelete: SetNull)
+  transaction WalletTransaction?
+
+  @@index([clientId, createdAt])
+  @@map("payment_orders")
+}
+
+/// Singleton (id = "default"), managed by the Super Admin.
+model PaymentConfig {
+  id                          String   @id @default("default") @db.VarChar(50)
+  razorpayKeyId               String?  @db.VarChar(100)
+  /// AES-256-GCM encrypted with APP_ENCRYPTION_KEY.
+  razorpayKeySecretCipher     String?  @db.Text
+  razorpayWebhookSecretCipher String?  @db.Text
+  createdAt                   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("payment_config")
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTransactionSource {
+  TOPUP
+  AI_USAGE
+  ADJUSTMENT
+}
+
+enum PaymentOrderStatus {
+  CREATED
+  PAID
+  FAILED
+}

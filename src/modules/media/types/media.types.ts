@@ -66,6 +66,19 @@ export type UploadMediaInput = {
   altText?: string;
 };
 
+export type GenerateVariationsInput = {
+  clientId?: string;
+  websiteId?: string;
+  count: number;
+  instructions?: string;
+};
+
+/** A generated image that has not been saved; `data` is base64. */
+export type ImageSample = {
+  mimeType: string;
+  data: string;
+};
+
 export type UploadedFile = {
   buffer: Buffer;
   originalName: string;

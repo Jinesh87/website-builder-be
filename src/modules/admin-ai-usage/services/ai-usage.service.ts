@@ -1,10 +1,13 @@
 import { prisma } from "../../../config/prisma.js";
 import { AI_MODEL_PRICING, DEFAULT_AI_MODEL } from "../../../common/constants/ai-models.js";
 import { Prisma } from "../../../generated/prisma/client.js";
+import { AppError } from "../../../common/errors/AppError.js";
 import type {
   AiUsageListQuery,
   AiUsageListResult,
   AiUsageTotals,
+  ClientAiCallsQuery,
+  ClientAiCallsResult,
   ClientAiUsageSummary,
 } from "../types/ai-usage.types.js";
 
@@ -33,38 +36,44 @@ export async function ensureAiUsageTable(): Promise<void> {
 
 const PER_TOKEN = 1 / 1_000_000;
 
-function tokenCostSql(price: { inputPerMillion: number; outputPerMillion: number }): Prisma.Sql {
-  return Prisma.sql`(l."promptTokens" * ${price.inputPerMillion * PER_TOKEN}::float8 + l."completionTokens" * ${price.outputPerMillion * PER_TOKEN}::float8)`;
-}
-
-/** Per-row USD cost. Logs store the dated model OpenAI returns, e.g. "gpt-4o-mini-2024-07-18". */
-function usageCostSql(): Prisma.Sql {
+/**
+ * Per-row USD cost of one side of a call. Logs store the dated model OpenAI returns,
+ * e.g. "gpt-4o-mini-2024-07-18"; unknown models are priced like the default model.
+ */
+function sideCostSql(side: "input" | "output"): Prisma.Sql {
+  const column = side === "input" ? Prisma.sql`l."promptTokens"` : Prisma.sql`l."completionTokens"`;
+  const rate = (model: { inputPerMillion: number; outputPerMillion: number }) =>
+    (side === "input" ? model.inputPerMillion : model.outputPerMillion) * PER_TOKEN;
   const fallback = AI_MODEL_PRICING.find((model) => model.id === DEFAULT_AI_MODEL)!;
   const branches = AI_MODEL_PRICING.map(
-    (model) => Prisma.sql`WHEN l.model = ${model.id} OR l.model LIKE ${`${model.id}-20%`} THEN ${tokenCostSql(model)}`,
+    (model) => Prisma.sql`WHEN l.model = ${model.id} OR l.model LIKE ${`${model.id}-20%`} THEN ${column} * ${rate(model)}::float8`,
   );
-  return Prisma.sql`CASE ${Prisma.join(branches, " ")} ELSE ${tokenCostSql(fallback)} END`;
+  return Prisma.sql`CASE ${Prisma.join(branches, " ")} ELSE ${column} * ${rate(fallback)}::float8 END`;
+}
+
+function usageCostSql(): Prisma.Sql {
+  return Prisma.sql`(${sideCostSql("input")} + ${sideCostSql("output")})`;
+}
+
+/** UTC bounds for a whole year, or one month of it. */
+function periodBounds(year: number | undefined, month: number | null): { startDate: Date; endDate: Date; year: number } {
+  const selectedYear = year ?? new Date().getFullYear();
+  return month !== null
+    ? {
+        year: selectedYear,
+        startDate: new Date(Date.UTC(selectedYear, month - 1, 1)),
+        endDate: new Date(Date.UTC(selectedYear, month, 1)),
+      }
+    : { year: selectedYear, startDate: new Date(Date.UTC(selectedYear, 0, 1)), endDate: new Date(Date.UTC(selectedYear + 1, 0, 1)) };
 }
 
 export class AiUsageService {
   async list(query: AiUsageListQuery): Promise<AiUsageListResult> {
-    const now = new Date();
-    const selectedYear = query.year ? Number(query.year) : now.getFullYear();
     const selectedMonth =
       query.month !== undefined && query.month !== null && String(query.month) !== ""
         ? Number(query.month)
         : null;
-
-    let startDate: Date;
-    let endDate: Date;
-
-    if (selectedMonth !== null) {
-      startDate = new Date(Date.UTC(selectedYear, selectedMonth - 1, 1, 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(selectedYear, selectedMonth, 1, 0, 0, 0, 0));
-    } else {
-      startDate = new Date(Date.UTC(selectedYear, 0, 1, 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(selectedYear + 1, 0, 1, 0, 0, 0, 0));
-    }
+    const { startDate, endDate, year: selectedYear } = periodBounds(query.year ? Number(query.year) : undefined, selectedMonth);
 
     const search = query.search?.trim();
     const searchCondition = search
@@ -242,6 +251,70 @@ export class AiUsageService {
       pageSize: query.pageSize,
       selectedMonth,
       selectedYear,
+    };
+  }
+
+  /** Every logged AI call for one client in the period, newest first, with its cost split into input and output. */
+  async listClientCalls(clientId: string, query: ClientAiCallsQuery): Promise<ClientAiCallsResult> {
+    const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, businessName: true } });
+    if (!client) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
+
+    const { startDate, endDate } = periodBounds(query.year, query.month ?? null);
+    const inputCost = sideCostSql("input");
+    const outputCost = sideCostSql("output");
+    const where = Prisma.sql`l."clientId" = ${clientId}::uuid AND l."createdAt" >= ${startDate} AND l."createdAt" < ${endDate}`;
+
+    const [calls, byFeature] = await Promise.all([
+      prisma.$queryRaw<
+        Array<{
+          id: string;
+          createdAt: Date;
+          scope: string;
+          model: string;
+          websiteId: string | null;
+          websiteName: string | null;
+          userName: string | null;
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+          durationMs: number | null;
+          inputCost: number;
+          outputCost: number;
+        }>
+      >(Prisma.sql`
+        SELECT l.id, l."createdAt", l.scope, l.model, l."websiteId", w.name AS "websiteName", u."fullName" AS "userName",
+          l."promptTokens", l."completionTokens", l."totalTokens", l."durationMs",
+          (${inputCost})::float AS "inputCost", (${outputCost})::float AS "outputCost"
+        FROM ai_usage_logs l
+        LEFT JOIN websites w ON w.id = l."websiteId"
+        LEFT JOIN users u ON u.id = l."userId"
+        WHERE ${where}
+        ORDER BY l."createdAt" DESC
+        LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}
+      `),
+      prisma.$queryRaw<Array<{ scope: string; calls: number; totalTokens: number; cost: number }>>(Prisma.sql`
+        SELECT l.scope, COUNT(*)::int AS calls, COALESCE(SUM(l."totalTokens"), 0)::int AS "totalTokens",
+          COALESCE(SUM(${inputCost} + ${outputCost}), 0)::float AS cost
+        FROM ai_usage_logs l
+        WHERE ${where}
+        GROUP BY l.scope
+        ORDER BY cost DESC
+      `),
+    ]);
+
+    return {
+      client,
+      calls: calls.map((call) => ({
+        ...call,
+        createdAt: new Date(call.createdAt).toISOString(),
+        durationMs: call.durationMs ?? 0,
+        cost: call.inputCost + call.outputCost,
+      })),
+      byFeature,
+      total: byFeature.reduce((sum, feature) => sum + feature.calls, 0),
+      totalCost: byFeature.reduce((sum, feature) => sum + feature.cost, 0),
+      page: query.page,
+      pageSize: query.pageSize,
     };
   }
 }

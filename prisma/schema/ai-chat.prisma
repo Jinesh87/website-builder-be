@@ -7,7 +7,7 @@ model AiChatSession {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  website   Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([websiteId, updatedAt])
   @@map("ai_chat_sessions")

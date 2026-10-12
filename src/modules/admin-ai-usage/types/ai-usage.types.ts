@@ -37,6 +37,41 @@ export type AiUsageTotals = {
   activeClientsCount: number;
 };
 
+export type ClientAiCallsQuery = {
+  month?: number | null;
+  year?: number;
+  page: number;
+  pageSize: number;
+};
+
+export type AiCallDetail = {
+  id: string;
+  createdAt: string;
+  /** Which feature made the call, e.g. "site_copilot". */
+  scope: string;
+  model: string;
+  websiteId: string | null;
+  websiteName: string | null;
+  userName: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  durationMs: number;
+  inputCost: number;
+  outputCost: number;
+  cost: number;
+};
+
+export type ClientAiCallsResult = {
+  client: { id: string; businessName: string };
+  calls: AiCallDetail[];
+  byFeature: Array<{ scope: string; calls: number; totalTokens: number; cost: number }>;
+  total: number;
+  totalCost: number;
+  page: number;
+  pageSize: number;
+};
+
 export type AiUsageListResult = {
   items: ClientAiUsageSummary[];
   summary: AiUsageTotals;

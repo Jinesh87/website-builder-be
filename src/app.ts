@@ -15,6 +15,7 @@ import healthRouter from "./modules/health/health.routes.js";
 import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
+import { adminWalletRouter, paymentSettingsRouter, razorpayWebhookRouter, walletRouter } from "./modules/wallet/wallet.routes.js";
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use(
     credentials: true,
   }),
 );
+app.use("/api/payments/razorpay/webhook", razorpayWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
@@ -51,6 +53,9 @@ app.use("/api/auth", authRouter);
 app.use("/api/admin/settings/email", emailSettingsRouter);
 app.use("/api/admin/settings/ai", aiSettingsRouter);
 app.use("/api/account/ai-settings", clientAiSettingsRouter);
+app.use("/api/account/wallet", walletRouter);
+app.use("/api/admin/settings/payments", paymentSettingsRouter);
+app.use("/api/admin/wallet", adminWalletRouter);
 app.use("/api/admin/clients", clientsRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);
 app.use("/api/templates", publicTemplatesRouter);

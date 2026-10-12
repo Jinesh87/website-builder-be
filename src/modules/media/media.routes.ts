@@ -11,6 +11,7 @@ import { MAX_UPLOAD_BYTES } from "./services/media.service.js";
 import {
   createFolderSchema,
   folderIdParamsSchema,
+  generateVariationsSchema,
   listFoldersQuerySchema,
   listMediaQuerySchema,
   mediaIdParamsSchema,
@@ -61,6 +62,13 @@ mediaRouter.post(
   receiveFile,
   validate(uploadMediaSchema),
   mediaController.upload,
+);
+mediaRouter.post(
+  "/variations",
+  rateLimit({ name: "media-variations", max: 30, windowSeconds: 60 * 60 }),
+  receiveFile,
+  validate(generateVariationsSchema),
+  mediaController.generateVariations,
 );
 mediaRouter.patch("/:id", byId, validate(updateMediaSchema), mediaController.update);
 mediaRouter.get("/:id/usage", byId, mediaController.usage);

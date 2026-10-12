@@ -8,13 +8,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # PostgreSQL runs on the host machine (local and production), not in Docker.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # PostgreSQL and Redis run on the host. Host networking lets the container reach them
+    # with the same localhost URLs as `npm run dev`, and the API listens on the host's PORT.
+    network_mode: host
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      PORT: 3000
-      DATABASE_URL: ${DOCKER_DATABASE_URL:?Set DOCKER_DATABASE_URL in .env}
-      REDIS_URL: ${DOCKER_REDIS_URL:-redis://host.docker.internal:6379}
-    ports:
-      - "${BACKEND_PORT:-3000}:3000"

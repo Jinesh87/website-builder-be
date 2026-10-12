@@ -4,7 +4,7 @@ import { MediaKind } from "../../../common/constants/media.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import { openObjectStream, type ByteRange } from "../../../common/storage/object-storage.js";
 import { mediaService } from "../services/media.service.js";
-import type { FolderListQuery, MediaListQuery } from "../types/media.types.js";
+import type { FolderListQuery, GenerateVariationsInput, MediaListQuery } from "../types/media.types.js";
 
 type IdParams = { id: string };
 type FolderParams = { folderId: string };
@@ -34,6 +34,16 @@ export class MediaController {
       if (!req.file) throw new AppError(400, "Choose a file to upload", "NO_FILE");
       const file = { buffer: req.file.buffer, originalName: req.file.originalname, size: req.file.size };
       res.status(201).json({ file: await mediaService.upload(file, req.body, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  generateVariations = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.file) throw new AppError(400, "Choose an image", "NO_FILE");
+      const file = { buffer: req.file.buffer, originalName: req.file.originalname, size: req.file.size };
+      res.json({ samples: await mediaService.generateVariations(file, req.body as GenerateVariationsInput, req.user!) });
     } catch (error) {
       next(error);
     }

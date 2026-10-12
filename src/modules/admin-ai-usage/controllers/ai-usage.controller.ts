@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { aiUsageService } from "../services/ai-usage.service.js";
-import type { AiUsageSortBy, SortOrder } from "../types/ai-usage.types.js";
+import type { AiUsageSortBy, ClientAiCallsQuery, SortOrder } from "../types/ai-usage.types.js";
 
 export class AiUsageController {
   list = async (req: Request, res: Response, next: NextFunction) => {
@@ -24,6 +24,14 @@ export class AiUsageController {
       });
 
       res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listClientCalls = async (req: Request<{ clientId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await aiUsageService.listClientCalls(req.params.clientId, req.query as unknown as ClientAiCallsQuery));
     } catch (error) {
       next(error);
     }

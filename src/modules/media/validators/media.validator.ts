@@ -31,6 +31,16 @@ export const uploadMediaSchema = Joi.object({
   altText: Joi.string().trim().max(300).allow("").optional(),
 });
 
+export const MAX_VARIATIONS = 4;
+
+/** Multipart text fields that accompany the source image. */
+export const generateVariationsSchema = Joi.object({
+  clientId: Joi.string().guid().optional(),
+  websiteId: Joi.string().guid().optional(),
+  count: Joi.number().integer().min(1).max(MAX_VARIATIONS).required(),
+  instructions: Joi.string().trim().max(1000).allow("").optional(),
+});
+
 export const updateMediaSchema = Joi.object({
   fileName: Joi.string().trim().min(1).max(255).optional(),
   altText: Joi.string().trim().max(300).allow("", null).optional(),

@@ -30,15 +30,15 @@ model Website {
   createdAt      DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
 
-  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy    User?            @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  logo         MediaFile?       @relation("WebsiteLogo", fields: [logoMediaId], references: [id], onDelete: SetNull)
-  liveVersion  WebsiteVersion?  @relation("WebsiteLiveVersion", fields: [liveVersionId], references: [id], onDelete: SetNull)
-  versions     WebsiteVersion[] @relation("WebsiteVersions")
-  pages        Page[]
-  domains      Domain[]
-  media        MediaFile[]      @relation("WebsiteMedia")
-  mediaFolders MediaFolder[]
+  client         Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy      User?              @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  logo           MediaFile?         @relation("WebsiteLogo", fields: [logoMediaId], references: [id], onDelete: SetNull)
+  liveVersion    WebsiteVersion?    @relation("WebsiteLiveVersion", fields: [liveVersionId], references: [id], onDelete: SetNull)
+  versions       WebsiteVersion[]   @relation("WebsiteVersions")
+  pages          Page[]
+  domains        Domain[]
+  media          MediaFile[]        @relation("WebsiteMedia")
+  mediaFolders   MediaFolder[]
   aiUsageLogs    AiUsageLog[]
   aiChatSessions AiChatSession[]
   generation     WebsiteGeneration?

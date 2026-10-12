@@ -11,6 +11,8 @@ import type { MediaFile, Prisma } from "../../../generated/prisma/client.js";
 import type {
   CreateFolderInput,
   FolderListQuery,
+  GenerateVariationsInput,
+  ImageSample,
   MediaFileView,
   MediaFolderView,
   MediaListQuery,
@@ -22,9 +24,12 @@ import type {
   UploadedFile,
   UploadMediaInput,
 } from "../types/media.types.js";
+import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { detectFile, type DetectedFile } from "./file-signature.js";
+import { generateImageVariations } from "./openai-image-variations.client.js";
 
 const MB = 1024 * 1024;
+const VARIATION_SOURCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 /** Largest accepted upload per kind; the multipart parser enforces the overall maximum. */
 export const MAX_BYTES_BY_KIND: Record<MediaKind, number> = {
@@ -202,6 +207,38 @@ export class MediaService {
       altText: input.altText ?? null,
       uploadedById: actor.id,
     });
+  }
+
+  /** Generates samples from an image without storing anything; the user saves the ones they want as uploads. */
+  async generateVariations(file: UploadedFile, input: GenerateVariationsInput, actor: AuthUser): Promise<ImageSample[]> {
+    const clientId = await targetClientId(actor, input.clientId);
+
+    const detected = detectFile(file.buffer);
+    if (!detected || !VARIATION_SOURCE_TYPES.has(detected.mimeType)) {
+      throw new AppError(415, "Variations can only be made from JPG, PNG or WebP images.", "UNSUPPORTED_FILE_TYPE");
+    }
+    if (file.size > MAX_BYTES_BY_KIND[MediaKind.IMAGE]) {
+      throw new AppError(413, `This file is too large. The limit is ${MAX_BYTES_BY_KIND[MediaKind.IMAGE] / MB} MB.`, "FILE_TOO_LARGE");
+    }
+    if (input.websiteId) {
+      const website = await prisma.website.count({ where: { id: input.websiteId, clientId } });
+      if (!website) throw new AppError(404, "Website not found", "WEBSITE_NOT_FOUND");
+    }
+
+    const { apiKey } = await aiSettingsService.getCredentials(clientId);
+    if (!apiKey) {
+      throw new AppError(503, "AI image generation isn't available yet. Ask the administrator to set it up.", "AI_NOT_CONFIGURED");
+    }
+
+    const images = await generateImageVariations(
+      { apiKey, clientId, websiteId: input.websiteId ?? null, userId: actor.id },
+      {
+        source: { buffer: file.buffer, mimeType: detected.mimeType, fileName: `source.${detected.extension}` },
+        count: input.count,
+        instructions: input.instructions,
+      },
+    );
+    return images.map((buffer) => ({ mimeType: "image/jpeg", data: buffer.toString("base64") }));
   }
 
   /** Saves an AI-generated image to the client's library, with the same checks as an upload. */

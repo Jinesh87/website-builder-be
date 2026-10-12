@@ -11,3 +11,14 @@ export const listAiUsageQuerySchema = Joi.object({
     .default("totalTokens"),
   sortOrder: Joi.string().valid("asc", "desc").default("desc"),
 });
+
+export const clientIdParamsSchema = Joi.object({
+  clientId: Joi.string().guid().required(),
+});
+
+export const listClientCallsQuerySchema = Joi.object({
+  month: Joi.number().integer().min(1).max(12).empty("").allow(null).optional(),
+  year: Joi.number().integer().min(2020).max(2100).empty("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+  pageSize: Joi.number().integer().min(1).max(100).default(25),
+});

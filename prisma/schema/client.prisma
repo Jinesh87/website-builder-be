@@ -18,6 +18,8 @@ model Client {
   savedSections SavedSection[]
   templates     WebsiteTemplate[]
   aiUsageLogs   AiUsageLog[]
+  wallet        Wallet?
+  paymentOrders PaymentOrder[]
 
   @@map("clients")
 }

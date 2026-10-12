@@ -81,14 +81,18 @@ const LEGACY_PRICING: readonly Pick<AiModelInfo, "id" | "inputPerMillion" | "out
   { id: "o1-mini", inputPerMillion: 1.1, outputPerMillion: 4.4 },
 ];
 
-/** Used by the editor copilot to create images; output tokens are image tokens. */
-export const IMAGE_GENERATION_MODEL = "gpt-image-1";
+/**
+ * Every image feature uses this fixed model, whatever chat model the client picked; output tokens are image tokens.
+ * Input is priced at the image-token rate because the requests are mostly image input.
+ */
+export const IMAGE_GENERATION_MODEL = "gpt-image-2.5-sunburst";
 
 /** Every priced model, for estimating the cost of logged usage. */
 export const AI_MODEL_PRICING: readonly Pick<AiModelInfo, "id" | "inputPerMillion" | "outputPerMillion">[] = [
   ...AI_MODELS,
   ...LEGACY_PRICING,
-  { id: IMAGE_GENERATION_MODEL, inputPerMillion: 5, outputPerMillion: 40 },
+  { id: "gpt-image-1", inputPerMillion: 5, outputPerMillion: 40 },
+  { id: IMAGE_GENERATION_MODEL, inputPerMillion: 8, outputPerMillion: 30 },
 ];
 
 export function findAiModel(id: string | null | undefined): AiModelInfo | undefined {
