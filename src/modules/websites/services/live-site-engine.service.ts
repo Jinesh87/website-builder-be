@@ -10,9 +10,11 @@ export type CachedPage = {
   contentType: string;
   cachedAt: number;
   redirectUrl?: string;
+  /** Set on cached pages; see renderFingerprint. */
+  fingerprint?: string;
 };
 
-// In-memory cache with 10-minute TTL, purged instantly upon publish
+// In-memory cache with 10-minute TTL; entries are revalidated against the database on every hit
 const pageCache = new Map<string, CachedPage>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -28,7 +30,7 @@ function escapeHtml(str: string | null | undefined): string {
 
 function escapeJsonLd(str: string | null | undefined): string {
   if (!str) return "";
-  return String(str).replace(/<\/script>/gi, "<\\/script>");
+  return String(str).replace(/</g, "\\u003c");
 }
 
 /** Resolves links safely so relative links to non-existent pages fall back to anchors instead of 404 */
@@ -57,6 +59,65 @@ function resolveSafeHref(href: string | undefined, pageSlugs: Set<string>): stri
   return "#";
 }
 
+function publishedWebsiteWhere(identifier: string) {
+  const clean = identifier.toLowerCase().trim();
+  return {
+    OR: [{ subdomain: clean }, { domains: { some: { hostname: clean, status: DomainStatus.ACTIVE } } }],
+    status: WebsiteStatus.PUBLISHED,
+    liveVersionId: { not: null },
+  };
+}
+
+/** Every website field a rendered page depends on besides the snapshot itself. */
+const renderStateSelect = {
+  liveVersionId: true,
+  name: true,
+  subdomain: true,
+  businessName: true,
+  description: true,
+  contactEmail: true,
+  contactPhone: true,
+  address: true,
+  logoMediaId: true,
+  domains: {
+    where: { status: DomainStatus.ACTIVE },
+    orderBy: { isPrimary: "desc" as const },
+    select: { hostname: true },
+  },
+};
+
+type RenderState = {
+  liveVersionId: string | null;
+  name: string;
+  subdomain: string;
+  businessName: string | null;
+  description: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  logoMediaId: string | null;
+  domains: Array<{ hostname: string }>;
+};
+
+/**
+ * Cached pages are checked against this on every hit, so changes made by another
+ * process or outside this service (domains, business details) are never served stale.
+ */
+function renderFingerprint(state: RenderState): string {
+  return JSON.stringify([
+    state.liveVersionId,
+    state.name,
+    state.subdomain,
+    state.businessName,
+    state.description,
+    state.contactEmail,
+    state.contactPhone,
+    state.address,
+    state.logoMediaId,
+    state.domains.map((d) => d.hostname),
+  ]);
+}
+
 export class LiveSiteEngineService {
   /** Purges cache entries for a specific subdomain or custom domain */
   purgeCache(identifier?: string | null): void {
@@ -81,33 +142,13 @@ export class LiveSiteEngineService {
   }
 
   async resolveWebsite(identifier: string) {
-    const clean = identifier.toLowerCase().trim();
     return prisma.website.findFirst({
-      where: {
-        OR: [
-          { subdomain: clean },
-          { domains: { some: { hostname: clean, status: DomainStatus.ACTIVE } } },
-        ],
-        status: WebsiteStatus.PUBLISHED,
-        liveVersionId: { not: null },
-      },
+      where: publishedWebsiteWhere(identifier),
       select: {
+        ...renderStateSelect,
         id: true,
         clientId: true,
-        name: true,
-        subdomain: true,
-        businessName: true,
-        description: true,
-        contactEmail: true,
-        contactPhone: true,
-        address: true,
         publishedAt: true,
-        logoMediaId: true,
-        domains: {
-          where: { status: DomainStatus.ACTIVE },
-          orderBy: { isPrimary: "desc" },
-          select: { hostname: true },
-        },
         liveVersion: {
           select: {
             id: true,
@@ -141,9 +182,10 @@ export class LiveSiteEngineService {
       const slug = p.slug === "/" ? "" : p.slug.startsWith("/") ? p.slug : `/${p.slug}`;
       const priority = p.slug === "/" ? "1.0" : "0.8";
       const changefreq = p.slug === "/" ? "daily" : "weekly";
+      const pageLastMod = p.lastModified ? p.lastModified.split("T")[0] : lastMod;
       return `  <url>
     <loc>${domain}${slug}</loc>
-    <lastmod>${lastMod}</lastmod>
+    <lastmod>${pageLastMod}</lastmod>
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
@@ -159,7 +201,13 @@ ${urls.join("\n")}
 
   async renderRobots(identifier: string): Promise<string> {
     const website = await this.resolveWebsite(identifier);
-    const domain = website ? this.getPublicDomain(website) : `https://${env.PUBLIC_SITE_DOMAIN}`;
+    if (!website) {
+      return `# This site is not published
+User-agent: *
+Disallow: /
+`;
+    }
+    const domain = this.getPublicDomain(website);
 
     return `# Robots.txt generated automatically by Bytezora Engine
 User-agent: *
@@ -208,8 +256,15 @@ Sitemap: ${domain}/sitemap.xml
 
     const cached = pageCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-      return cached;
+      const state = await prisma.website.findFirst({
+        where: publishedWebsiteWhere(identifier),
+        select: renderStateSelect,
+      });
+      if (state && renderFingerprint(state) === cached.fingerprint) {
+        return cached;
+      }
     }
+    pageCache.delete(cacheKey);
 
     const website = await this.resolveWebsite(identifier);
     if (!website || !website.liveVersion) {
@@ -306,7 +361,7 @@ Sitemap: ${domain}/sitemap.xml
         "@type": "Organization",
         name: businessName,
         url: domain,
-        description: businessDesc,
+        ...(businessDesc ? { description: businessDesc } : {}),
         ...(faviconUrl ? { logo: faviconUrl } : {}),
         ...(contactEmail ? { email: contactEmail } : {}),
         ...(contactPhone ? { telephone: contactPhone } : {}),
@@ -392,7 +447,10 @@ Sitemap: ${domain}/sitemap.xml
       },
     );
 
-    const siteLang = ((snapshot as unknown as Record<string, unknown>)?.site as Record<string, unknown> | undefined)?.language || "en";
+    const siteLang =
+      ((snapshot as unknown as Record<string, unknown>)?.site as Record<string, unknown> | undefined)?.language ||
+      ((snapshot.theme as unknown as Record<string, unknown>)?.language as string | undefined) ||
+      "en";
 
     const fullHtml = `<!DOCTYPE html>
 <html lang="${escapeHtml(String(siteLang))}">
@@ -569,6 +627,7 @@ Sitemap: ${domain}/sitemap.xml
       statusCode: 200,
       contentType: "text/html; charset=utf-8",
       cachedAt: Date.now(),
+      fingerprint: renderFingerprint(website),
     };
 
     pageCache.set(cacheKey, result);

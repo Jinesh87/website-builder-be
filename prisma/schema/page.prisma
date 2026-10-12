@@ -14,6 +14,8 @@ model Page {
   sortOrder      Int      @default(0)
   seoTitle       String?  @db.VarChar(160)
   seoDescription String?  @db.VarChar(320)
+  /// Target search phrases for the page; editor/AI context, not rendered as a meta tag.
+  seoKeywords    String[] @default([])
   sections       Json     @default("[]")
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)

@@ -39,6 +39,7 @@ export type PageView = {
   showInNav: boolean;
   seoTitle: string | null;
   seoDescription: string | null;
+  seoKeywords: string[];
   sections: Section[];
 };
 
@@ -52,6 +53,8 @@ export type WebsiteDraft = {
 };
 
 export type WebsiteDetail = WebsiteSummary & {
+  /** Primary active custom domain; the live site canonicalises to it when set. */
+  customDomain: string | null;
   info: WebsiteInfo;
   draft: WebsiteDraft;
   generation: GenerationView | null;
@@ -100,6 +103,7 @@ export type PageInput = {
   showInNav: boolean;
   seoTitle?: string | null;
   seoDescription?: string | null;
+  seoKeywords?: string[];
   sections: Section[];
 };
 
@@ -122,10 +126,16 @@ export type PublishInput = { expectedDraftUpdatedAt: string };
 /** Immutable content of a published version: everything visitors see, nothing editor-only. */
 export type PublishSnapshot = {
   schemaVersion: number;
+  site?: { language?: string };
   theme: ThemeSettings;
   header: HeaderData;
   footer: FooterData;
-  pages: Pick<PageView, "id" | "name" | "slug" | "pageType" | "showInNav" | "seoTitle" | "seoDescription" | "sections">[];
+  pages: (Pick<PageView, "id" | "name" | "slug" | "pageType" | "showInNav" | "seoTitle" | "seoDescription" | "sections"> & {
+    /** ISO time this page's content last changed in a publish; absent in older snapshots. */
+    lastModified?: string;
+    /** Absent in older snapshots. */
+    seoKeywords?: string[];
+  })[];
 };
 
 export type WebsiteVersionView = {

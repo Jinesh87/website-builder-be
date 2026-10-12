@@ -1,7 +1,6 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { env } from "../../../config/env.js";
-import { prisma } from "../../../config/prisma.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 
 import { createOpenAiJsonCompletion } from "./openai-json.client.js";
@@ -144,6 +143,7 @@ CURRENT PAGE DETAILS:
 - URL Path: "${input.pageSlug || targetPage.slug}"
 - Current SEO Title: "${input.currentTitle || targetPage.seoTitle || "None"}"
 - Current SEO Description: "${input.currentDescription || targetPage.seoDescription || "None"}"
+- Owner's target keywords: ${targetPage.seoKeywords.length > 0 ? targetPage.seoKeywords.map((k) => `"${k}"`).join(", ") : "None"}
 
 PAGE CONTENT EXTRACT:
 ${pageSummary}
@@ -185,14 +185,13 @@ Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and 
     return { seoTitle, seoDescription, keywords };
   }
 
-  buildSitemapXml(website: { name: string; subdomain: string; customDomain?: string | null; draft?: { pages: PageView[] }; pages?: Array<{ slug: string; visible: boolean; updatedAt?: Date }> }): string {
+  buildSitemapXml(website: Pick<WebsiteDetail, "subdomain" | "customDomain" | "publishedAt" | "draft">): string {
     const domain = website.customDomain
       ? `https://${website.customDomain}`
       : `https://${website.subdomain}.${env.PUBLIC_SITE_DOMAIN}`;
 
-    const pages = website.draft?.pages ?? website.pages ?? [];
-    const visiblePages = pages.filter((p) => p.visible);
-    const today = new Date().toISOString().split("T")[0];
+    const visiblePages = website.draft.pages.filter((p) => p.visible);
+    const lastMod = (website.publishedAt ?? website.draft.draftUpdatedAt).split("T")[0];
 
     const urls = visiblePages.map((page) => {
       const cleanSlug = page.slug === "/" ? "" : page.slug.startsWith("/") ? page.slug : `/${page.slug}`;
@@ -202,7 +201,7 @@ Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and 
 
       return `  <url>
     <loc>${domain}${cleanSlug}</loc>
-    <lastmod>${today}</lastmod>
+    <lastmod>${lastMod}</lastmod>
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
@@ -223,6 +222,16 @@ ${urls.join("\n")}
 User-agent: *
 Allow: /
 
+# Directives for AI Search Agents
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
 # Sitemap
 Sitemap: ${domain}/sitemap.xml
 `.trim();
@@ -236,11 +245,6 @@ Sitemap: ${domain}/sitemap.xml
   async getRobotsTxt(websiteId: string, actor: AuthUser): Promise<string> {
     const website = await websiteService.get(websiteId, actor);
     return this.buildRobotsTxt(website);
-  }
-
-  async getPublicSitemapXml(subdomain: string): Promise<string> {
-    const res = await liveSiteEngineService.renderSitemap(subdomain);
-    return res.xml;
   }
 
   async getPublicRobotsTxt(subdomain: string): Promise<string> {
