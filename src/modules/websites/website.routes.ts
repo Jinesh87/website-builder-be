@@ -8,6 +8,7 @@ import {
   createAiWebsiteSchema,
   createWebsiteSchema,
   generateAiSuggestionSchema,
+  generatePageSeoSchema,
   listTemplatesQuerySchema,
   listWebsitesQuerySchema,
   pageContentParamsSchema,
@@ -28,7 +29,12 @@ const websitesRouter = Router();
 const byId = validate(websiteIdParamsSchema, "params");
 const byTemplateId = validate(templateIdParamsSchema, "params");
 
+// Public crawler endpoints for search engines (no auth required)
+websitesRouter.get("/public/:subdomain/sitemap.xml", websiteController.getPublicSitemapXml);
+websitesRouter.get("/public/:subdomain/robots.txt", websiteController.getPublicRobotsTxt);
+
 websitesRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT));
+
 
 websitesRouter.get("/templates", validate(listTemplatesQuerySchema, "query"), websiteController.listTemplates);
 websitesRouter.patch("/templates/:templateId", byTemplateId, validate(updateTemplateSchema), websiteController.updateTemplate);
@@ -101,9 +107,21 @@ websitesRouter.post(
   websiteController.generateAiSuggestion,
 );
 
+websitesRouter.post(
+  "/:id/pages/:pageId/seo/generate",
+  validate(pageContentParamsSchema, "params"),
+  rateLimit({ name: "website-ai-generate", max: 60, windowSeconds: 60 }),
+  validate(generatePageSeoSchema),
+  websiteController.generatePageSeo,
+);
+
+websitesRouter.get("/:id/seo/sitemap.xml", byId, websiteController.getSitemapXml);
+websitesRouter.get("/:id/seo/robots.txt", byId, websiteController.getRobotsTxt);
+
 websitesRouter.get("/:id/ai/sessions", byId, websiteController.listAiSessions);
 websitesRouter.post("/:id/ai/sessions", byId, websiteController.saveAiSession);
 websitesRouter.delete("/:id/ai/sessions/:sessionId", byId, websiteController.deleteAiSession);
 websitesRouter.delete("/:id/ai/sessions", byId, websiteController.clearAiSessions);
 
 export default websitesRouter;
+
