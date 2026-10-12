@@ -201,3 +201,12 @@ export const generateAiSuggestionSchema = Joi.object({
     .optional(),
 });
 
+export const generatePageSeoSchema = Joi.object({
+  pageName: Joi.string().trim().max(120).optional(),
+  pageSlug: Joi.string().trim().max(160).optional(),
+  currentTitle: optionalText(160),
+  currentDescription: optionalText(320),
+  contentSummary: optionalText(4000),
+});
+
+

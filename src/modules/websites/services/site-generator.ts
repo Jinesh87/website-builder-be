@@ -400,13 +400,28 @@ export type CleanContext = {
 function resolveImage(value: unknown, context: CleanContext): { url: string; alt: string } | typeof REMOVE {
   const ref = (typeof value === "string" ? value : isRecord(value) && typeof value.url === "string" ? value.url : "").trim();
   // The sanitizer's placeholders for bare strings; the library's alt text is better.
-  const placeholder = (alt: string) => alt === "Image" || alt === "Hero Background";
-  const altOf = (fallback: string) =>
-    (isRecord(value) && typeof value.alt === "string" && value.alt.trim() && !placeholder(value.alt) ? value.alt : fallback).slice(0, 300);
+  const genericTerms = new Set(["image", "hero background", "team member", "product preview", "photo", "background", "thumbnail", "preview"]);
+  const isGeneric = (alt: string) => genericTerms.has(alt.trim().toLowerCase());
+  const altOf = (fallback: string) => {
+    if (isRecord(value) && typeof value.alt === "string" && value.alt.trim() && !isGeneric(value.alt)) {
+      return value.alt.slice(0, 300);
+    }
+    if (fallback && !isGeneric(fallback)) {
+      return fallback.slice(0, 300);
+    }
+    return "Website feature";
+  };
   const token = /^IMAGE_(\d{1,2})$/i.exec(ref);
   const image = token ? context.images[Number(token[1]) - 1] : context.images.find((candidate) => candidate.url === ref);
-  if (image) return { url: image.url, alt: altOf(image.alt) };
-  if (ref && context.keepUrls?.has(ref)) return { url: ref, alt: altOf("") };
+  if (image) {
+    const fallbackTitle = image.alt && !isGeneric(image.alt)
+      ? image.alt
+      : image.fileName
+        ? image.fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ")
+        : "Website showcase";
+    return { url: image.url, alt: altOf(fallbackTitle) };
+  }
+  if (ref && context.keepUrls?.has(ref)) return { url: ref, alt: altOf("Site graphic") };
   return REMOVE;
 }
 

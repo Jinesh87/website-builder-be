@@ -5,11 +5,13 @@ import { logger } from "../../../config/logger.js";
 import type { LayoutSlot } from "../ai/ai-ops.js";
 import { aiGeneratorService, type AiSuggestionPayload, type GenerateAiOptions } from "../services/ai-generator.service.js";
 import { aiChatService } from "../services/ai-chat.service.js";
+import { aiSeoService } from "../services/ai-seo.service.js";
 import { aiSiteCopilotService } from "../services/ai-site-copilot.service.js";
 import { isEditableSectionType } from "../services/site-generator.js";
 import { websiteGenerationService } from "../services/website-generation.service.js";
 import { websiteService } from "../services/website.service.js";
 import type { TemplateListQuery, WebsiteListQuery } from "../types/website.types.js";
+
 
 type IdParams = { id: string };
 type TemplateParams = { templateId: string };
@@ -329,6 +331,56 @@ export class WebsiteController {
       next(error);
     }
   };
+
+  generatePageSeo = async (req: Request<PageParams>, res: Response, next: NextFunction) => {
+    try {
+      const result = await aiSeoService.generatePageSeo(req.params.id, req.params.pageId, req.body, req.user!);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSitemapXml = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      const xml = await aiSeoService.getSitemapXml(req.params.id, req.user!);
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      res.send(xml);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getRobotsTxt = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      const txt = await aiSeoService.getRobotsTxt(req.params.id, req.user!);
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.send(txt);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPublicSitemapXml = async (req: Request<{ subdomain: string }>, res: Response, next: NextFunction) => {
+    try {
+      const xml = await aiSeoService.getPublicSitemapXml(req.params.subdomain);
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      res.send(xml);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPublicRobotsTxt = async (req: Request<{ subdomain: string }>, res: Response, next: NextFunction) => {
+    try {
+      const txt = await aiSeoService.getPublicRobotsTxt(req.params.subdomain);
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.send(txt);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const websiteController = new WebsiteController();
+
