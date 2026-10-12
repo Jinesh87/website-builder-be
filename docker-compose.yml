@@ -12,4 +12,5 @@ services:
     # with the same localhost URLs as `npm run dev`, and the API listens on the host's PORT.
     network_mode: host
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      # The image has no dev dependencies (e.g. pino-pretty), so it always runs in production mode.
+      NODE_ENV: production
