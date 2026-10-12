@@ -153,6 +153,49 @@ export function sanitizeSectionSettings(
   return result;
 }
 
+function enrichImageAlt(
+  altValue: unknown,
+  context: {
+    heading?: unknown;
+    title?: unknown;
+    name?: unknown;
+    subheading?: unknown;
+  },
+  defaultKind = "Visual",
+): string {
+  const genericAltTerms = new Set([
+    "image",
+    "hero background",
+    "team member",
+    "product preview",
+    "photo",
+    "background",
+    "thumbnail",
+    "preview",
+    "avatar",
+    "icon",
+    "placeholder",
+    "",
+  ]);
+
+  if (typeof altValue === "string" && altValue.trim()) {
+    const trimmed = altValue.trim();
+    if (!genericAltTerms.has(trimmed.toLowerCase())) {
+      return trimmed.slice(0, 200);
+    }
+  }
+
+  const primaryTitle = [context.heading, context.title, context.name, context.subheading]
+    .find((v) => typeof v === "string" && v.trim().length > 0) as string | undefined;
+
+  if (primaryTitle) {
+    const clean = primaryTitle.replace(/[^\w\s-]/g, "").trim().slice(0, 100);
+    return `${clean} - ${defaultKind}`;
+  }
+
+  return `${defaultKind} illustration`;
+}
+
 export function sanitizeSectionData(
   type: string,
   rawData: Record<string, unknown> = {},
@@ -174,10 +217,17 @@ export function sanitizeSectionData(
     data.intro = data.description;
   }
 
-  // Normalize string image URLs to { url, alt } objects, and strip empty images
+  const altContext = {
+    heading: data.heading,
+    title: data.title,
+    name: data.name,
+    subheading: data.subheading || data.intro,
+  };
+
+  // Normalize string image URLs to { url, alt } objects with SEO-rich alt text
   if (typeof data.backgroundImage === "string") {
     data.backgroundImage = data.backgroundImage.trim()
-      ? { url: data.backgroundImage.trim(), alt: "Hero Background" }
+      ? { url: data.backgroundImage.trim(), alt: enrichImageAlt(undefined, altContext, "Hero background") }
       : undefined;
   }
   if (data.backgroundImage && typeof data.backgroundImage === "object") {
@@ -186,13 +236,13 @@ export function sanitizeSectionData(
       delete data.backgroundImage;
     } else {
       bg.url = (bg.url as string).trim();
-      bg.alt = typeof bg.alt === "string" ? bg.alt : "Hero Background";
+      bg.alt = enrichImageAlt(bg.alt, altContext, "Hero background");
     }
   }
 
   if (typeof data.image === "string") {
     data.image = data.image.trim()
-      ? { url: data.image.trim(), alt: "Image" }
+      ? { url: data.image.trim(), alt: enrichImageAlt(undefined, altContext, "Showcase feature") }
       : undefined;
   }
   if (data.image && typeof data.image === "object") {
@@ -201,7 +251,7 @@ export function sanitizeSectionData(
       delete data.image;
     } else {
       img.url = (img.url as string).trim();
-      img.alt = typeof img.alt === "string" ? img.alt : "Image";
+      img.alt = enrichImageAlt(img.alt, altContext, "Showcase feature");
     }
   }
 
@@ -209,17 +259,59 @@ export function sanitizeSectionData(
     const img = data.secondaryImage as Record<string, unknown>;
     if (!img.url || typeof img.url !== "string" || !img.url.trim()) {
       delete data.secondaryImage;
+    } else {
+      img.url = (img.url as string).trim();
+      img.alt = enrichImageAlt(img.alt, altContext, "Supplementary detail");
     }
   }
 
-  // Sanitize links and cta
+  // Nested members (team)
+  if (Array.isArray(data.members)) {
+    for (const member of data.members) {
+      if (member && typeof member === "object") {
+        const m = member as Record<string, unknown>;
+        if (m.avatar && typeof m.avatar === "object") {
+          const av = m.avatar as Record<string, unknown>;
+          av.alt = enrichImageAlt(av.alt, { name: m.name, title: m.role }, "Team member");
+        }
+      }
+    }
+  }
+
+  // Nested gallery/service/feature items
+  if (Array.isArray(data.items)) {
+    for (const item of data.items) {
+      if (item && typeof item === "object") {
+        const it = item as Record<string, unknown>;
+        if (it.image && typeof it.image === "object") {
+          const img = it.image as Record<string, unknown>;
+          img.alt = enrichImageAlt(img.alt, { title: it.title || it.name, subheading: it.description }, "Preview");
+        }
+      }
+    }
+  }
+
+  // Nested slides (carousel)
+  if (Array.isArray(data.slides)) {
+    for (const slide of data.slides) {
+      if (slide && typeof slide === "object") {
+        const sl = slide as Record<string, unknown>;
+        if (sl.image && typeof sl.image === "object") {
+          const img = sl.image as Record<string, unknown>;
+          img.alt = enrichImageAlt(img.alt, { title: sl.title || sl.heading, subheading: sl.subtitle }, "Slide visual");
+        }
+      }
+    }
+  }
+
+  // Sanitize links and cta - ensure high-value internal links
   if (data.primaryCta && typeof data.primaryCta === "object") {
     const cta = data.primaryCta as Record<string, unknown>;
-    if (!cta.href || typeof cta.href !== "string" || !cta.href.trim()) {
-      cta.href = "/contact";
+    if (!cta.href || typeof cta.href !== "string" || !cta.href.trim() || cta.href === "#") {
+      cta.href = type === "hero" ? "/services" : "/contact";
     }
     if (!cta.label || typeof cta.label !== "string" || !cta.label.trim()) {
-      cta.label = "Get Started";
+      cta.label = type === "hero" ? "Explore Services" : "Get Started";
     }
   }
   if (data.secondaryCta && typeof data.secondaryCta === "object") {
@@ -233,6 +325,8 @@ export function sanitizeSectionData(
       !cta.label.trim()
     ) {
       delete data.secondaryCta;
+    } else if (cta.href === "#") {
+      cta.href = "#features";
     }
   }
 
@@ -928,6 +1022,10 @@ export function sanitizeSectionData(
 }
 
 const SECTION_SCHEMAS_GUIDE = `
+SEO, ACCESSIBILITY & LINKING RULES:
+- IMAGE ALT TEXT: Every image object MUST include a descriptive, keyword-rich "alt" property explaining what the image depicts with relevance to the brand (e.g. "Warm artisan sourdough loaves on wooden bakery counter at Dolce Bakehouse"). NEVER use generic words like "Image", "Hero Background", "Photo", "Preview", or "Team Member".
+- INTERNAL LINKING: All CTA buttons and links must use meaningful internal routes (e.g. href: "/services", "/contact", or anchor links like "#features", "#faq", "#pricing"). Avoid dead ends or unlinked buttons.
+
 VALID SECTION SCHEMAS & EXACT FIELD KEYS:
 1. "hero":
    data: {
