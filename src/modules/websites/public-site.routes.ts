@@ -3,11 +3,16 @@ import { publicSiteController } from "./controllers/public-site.controller.js";
 
 export const publicSiteRouter = Router();
 
-// 1. Explicit path routes for previews & local testing
-publicSiteRouter.get("/live/:subdomain/sitemap.xml", publicSiteController.serveSitemap);
-publicSiteRouter.get("/live/:subdomain/robots.txt", publicSiteController.serveRobots);
-publicSiteRouter.get("/live/:subdomain", publicSiteController.servePage);
-publicSiteRouter.get("/live/:subdomain/*", publicSiteController.servePage);
+// 1. Explicit path routes for previews & local testing (/live/:subdomain and inner slugs)
+publicSiteRouter.use("/live/:subdomain", (req, res, next) => {
+  if (req.path === "/sitemap.xml") {
+    return publicSiteController.serveSitemap(req, res, next);
+  }
+  if (req.path === "/robots.txt") {
+    return publicSiteController.serveRobots(req, res, next);
+  }
+  return publicSiteController.servePage(req, res, next);
+});
 
 // 2. Production Host-based routing (e.g. https://<subdomain>.bytezora.site or custom domain)
 publicSiteRouter.use((req, res, next) => {

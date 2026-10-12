@@ -33,7 +33,7 @@ export class PublicSiteController {
         return next();
       }
 
-      const slug = req.params[0] !== undefined ? `/${req.params[0]}` : "/";
+      const slug = req.path || "/";
       const result = await liveSiteEngineService.renderPage(identifier, slug);
 
       res.status(result.statusCode);

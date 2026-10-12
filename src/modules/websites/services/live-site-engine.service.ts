@@ -270,7 +270,19 @@ Sitemap: ${domain}/sitemap.xml
 
 
     // Generate Body Content with Semantic HTML (Single H1 on page!)
-    const bodyContent = this.renderPageSectionsHtml(targetPage.sections, snapshot.header, snapshot.footer, businessName);
+    const bodyContent = this.renderPageSectionsHtml(
+      targetPage.sections,
+      snapshot.header,
+      snapshot.footer,
+      businessName,
+      targetPage.name,
+      targetPage.slug,
+      {
+        contactEmail,
+        contactPhone,
+        address,
+      },
+    );
 
     const fullHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -406,6 +418,13 @@ Sitemap: ${domain}/sitemap.xml
     header: PublishSnapshot["header"],
     footer: PublishSnapshot["footer"],
     siteName: string,
+    pageName: string,
+    pageSlug: string,
+    contactInfo?: {
+      contactEmail?: string;
+      contactPhone?: string;
+      address?: string;
+    },
   ): string {
     const parts: string[] = [];
 
@@ -432,20 +451,41 @@ Sitemap: ${domain}/sitemap.xml
 
     let hasRenderedH1 = false;
 
+    // For inner pages (e.g. /about, /services, /contact): if first section is not hero, render semantic page header with H1
+    const firstSection = sections.find((s) => !s.hidden);
+    if (pageSlug !== "/" && (!firstSection || firstSection.type !== "hero")) {
+      parts.push(`
+      <section class="section-page-intro" style="padding: 3rem 0 1.5rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+        <div class="container">
+          <h1 class="hero-title" style="font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 0.5rem;">${escapeHtml(pageName)}</h1>
+          <nav aria-label="Breadcrumb" style="font-size: 0.875rem; color: #64748b;">
+            <a href="/" style="color: var(--color-primary);">Home</a> <span style="margin: 0 0.5rem;">/</span> <span>${escapeHtml(pageName)}</span>
+          </nav>
+        </div>
+      </section>`);
+      hasRenderedH1 = true;
+    }
+
     // Render Each Section
     for (const section of sections) {
       if (section.hidden) continue;
       const d = section.data as Record<string, unknown>;
-      const heading = [d.heading, d.title].find((v) => typeof v === "string") as string || "";
-      const subheading = [d.subheading, d.subtitle, d.tagline].find((v) => typeof v === "string") as string || "";
-      const text = [d.text, d.description, d.body].find((v) => typeof v === "string") as string || "";
+      const heading = ([d.heading, d.title].find((v) => typeof v === "string") as string) || "";
+      const subheading = ([d.subheading, d.subtitle, d.tagline].find((v) => typeof v === "string") as string) || "";
+      const text = ([d.text, d.description, d.body].find((v) => typeof v === "string") as string) || "";
 
       const headingTag = !hasRenderedH1 ? "h1" : "h2";
       const headingClass = !hasRenderedH1 ? "hero-title" : "section-title";
       if (!hasRenderedH1 && heading) hasRenderedH1 = true;
 
       switch (section.type) {
-        case "hero":
+        case "hero": {
+          const heroImg =
+            typeof d.imageUrl === "string"
+              ? d.imageUrl
+              : d.image && typeof d.image === "object" && "url" in d.image && typeof d.image.url === "string"
+                ? d.image.url
+                : "";
           parts.push(`
           <section class="section-hero">
             <div class="container" style="text-align: center; max-width: 900px;">
@@ -457,9 +497,18 @@ Sitemap: ${domain}/sitemap.xml
                   ? `<a href="${escapeHtml(String((d.button as Record<string, unknown>).href || "#"))}" class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2rem;">${escapeHtml(String((d.button as Record<string, unknown>).label))}</a>`
                   : ""
               }
+              ${
+                heroImg
+                  ? `
+              <div style="margin-top: 2.5rem; border-radius: 1rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+                <img src="${escapeHtml(heroImg)}" alt="${escapeHtml(heading || siteName)}" fetchpriority="high" decoding="async" style="width: 100%; height: auto; display: block;" />
+              </div>`
+                  : ""
+              }
             </div>
           </section>`);
           break;
+        }
 
         case "features":
         case "services": {
@@ -472,11 +521,128 @@ Sitemap: ${domain}/sitemap.xml
               ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
               <div class="grid-3">
                 ${items
-                  .map((it: Record<string, unknown>) => `
+                  .map(
+                    (it: Record<string, unknown>) => `
                   <div class="card">
                     <h3 class="card-title">${escapeHtml(String(it.title || ""))}</h3>
                     <p style="color: #64748b; font-size: 0.95rem;">${escapeHtml(String(it.description || it.text || ""))}</p>
-                  </div>`)
+                  </div>`,
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "text":
+        case "split": {
+          const aboutImg =
+            typeof d.imageUrl === "string"
+              ? d.imageUrl
+              : d.image && typeof d.image === "object" && "url" in d.image && typeof d.image.url === "string"
+                ? d.image.url
+                : "";
+          parts.push(`
+          <section class="section-about">
+            <div class="container" style="display: grid; grid-template-columns: ${aboutImg ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr"}; gap: 3rem; align-items: center;">
+              <div>
+                ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(heading || `About ${siteName}`)}</${headingTag}>
+                ${text ? `<p style="color: #475569; font-size: 1.05rem; line-height: 1.7; margin-bottom: 1.5rem;">${escapeHtml(text)}</p>` : ""}
+              </div>
+              ${
+                aboutImg
+                  ? `
+              <div style="border-radius: 1rem; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+                <img src="${escapeHtml(aboutImg)}" alt="${escapeHtml(heading || `About ${siteName}`)}" loading="lazy" decoding="async" style="width: 100%; height: auto;" />
+              </div>`
+                  : ""
+              }
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "contact": {
+          parts.push(`
+          <section class="section-contact" style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+            <div class="container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 3rem;">
+              <div>
+                ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(heading || "Get In Touch")}</${headingTag}>
+                ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+                <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+                  ${contactInfo?.contactEmail ? `<div><strong style="color: #0f172a; display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(contactInfo.contactEmail)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactEmail)}</a></div>` : ""}
+                  ${contactInfo?.contactPhone ? `<div><strong style="color: #0f172a; display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(contactInfo.contactPhone)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactPhone)}</a></div>` : ""}
+                  ${contactInfo?.address ? `<div><strong style="color: #0f172a; display: block; font-size: 0.875rem;">Address</strong><p style="color: #64748b; font-size: 0.95rem;">${escapeHtml(contactInfo.address)}</p></div>` : ""}
+                </div>
+              </div>
+              <div class="card" style="background: #ffffff;">
+                <h3 class="card-title">Send a message</h3>
+                <form onsubmit="event.preventDefault(); alert('Message sent successfully!');" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                  <input type="text" placeholder="Your Name" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-family: inherit;" />
+                  <input type="email" placeholder="Your Email" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-family: inherit;" />
+                  <textarea placeholder="Your Message" rows="4" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-family: inherit; resize: vertical;"></textarea>
+                  <button type="submit" class="btn-cta" style="border: none; cursor: pointer; width: 100%;">Send Message</button>
+                </form>
+              </div>
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "testimonials": {
+          const items = Array.isArray(d.items) ? d.items : [];
+          parts.push(`
+          <section class="section-testimonials">
+            <div class="container">
+              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
+              <${headingTag} class="${headingClass}">${escapeHtml(heading || "What Our Clients Say")}</${headingTag}>
+              ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+              <div class="grid-3">
+                ${items
+                  .map(
+                    (it: Record<string, unknown>) => `
+                  <div class="card">
+                    <p style="color: #334155; font-style: italic; margin-bottom: 1.25rem;">“${escapeHtml(String(it.quote || it.content || it.text || ""))}”</p>
+                    <strong style="color: #0f172a; display: block; font-size: 0.95rem;">${escapeHtml(String(it.author || it.name || "Customer"))}</strong>
+                    ${it.role || it.title ? `<span style="color: #64748b; font-size: 0.8125rem;">${escapeHtml(String(it.role || it.title))}</span>` : ""}
+                  </div>`,
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "gallery": {
+          const items = Array.isArray(d.items) ? d.items : [];
+          parts.push(`
+          <section class="section-gallery">
+            <div class="container">
+              ${subheading ? `<span class="section-badge">${escapeHtml(subheading)}</span>` : ""}
+              <${headingTag} class="${headingClass}">${escapeHtml(heading || "Gallery")}</${headingTag}>
+              ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem;">
+                ${items
+                  .map((it: Record<string, unknown>) => {
+                    const imgUrl =
+                      typeof it.url === "string" ? it.url : typeof it.imageUrl === "string" ? it.imageUrl : "";
+                    const altText =
+                      typeof it.caption === "string"
+                        ? it.caption
+                        : typeof it.alt === "string"
+                          ? it.alt
+                          : `${siteName} gallery photo`;
+                    return imgUrl
+                      ? `
+                    <div style="border-radius: 0.75rem; overflow: hidden; height: 220px;">
+                      <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover;" />
+                    </div>`
+                      : "";
+                  })
                   .join("")}
               </div>
             </div>
@@ -494,11 +660,13 @@ Sitemap: ${domain}/sitemap.xml
               ${text ? `<p class="subtitle">${escapeHtml(text)}</p>` : ""}
               <div class="faq-list">
                 ${items
-                  .map((it: Record<string, unknown>) => `
+                  .map(
+                    (it: Record<string, unknown>) => `
                   <details class="faq-item">
                     <summary class="faq-question">${escapeHtml(String(it.question || ""))}</summary>
                     <div class="faq-answer">${escapeHtml(String(it.answer || ""))}</div>
-                  </details>`)
+                  </details>`,
+                  )
                   .join("")}
               </div>
             </div>
@@ -533,6 +701,14 @@ Sitemap: ${domain}/sitemap.xml
           }
           break;
       }
+    }
+
+    // Fallback: If no section produced an H1 on the home page, guarantee one
+    if (!hasRenderedH1) {
+      parts.unshift(`
+      <div class="container" style="padding-top: 2rem;">
+        <h1 class="hero-title">${escapeHtml(siteName)}</h1>
+      </div>`);
     }
 
     parts.push(`</main>`);
