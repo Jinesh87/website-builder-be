@@ -14,7 +14,7 @@ import {
 } from "../ai/ai-ops.js";
 import { PLANNER_SYSTEM_PROMPT, buildPlannerInput } from "../ai/ai-planner.js";
 import { sanitizeCustomData } from "../ai/custom-section.js";
-import { CUSTOM_LIMITS, ICON_NAMES } from "../types/site-content.types.js";
+import { CUSTOM_LIMITS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { isReasoningModel } from "../../../common/constants/ai-models.js";
 
@@ -467,21 +467,12 @@ export function sanitizeSectionData(
 
     case "hero": {
       const validHeroVariants = [
-        "centered",
-        "split",
+        ...HERO_VARIANTS,
         "split-left",
-        "background-image",
-        "video-bg",
-        "gradient",
-        "curved-bottom",
-        "soft-card",
-        "minimal-typography",
-        "floating-cards",
-        "asymmetric",
       ];
       if (
         typeof data.variant !== "string" ||
-        !validHeroVariants.includes(data.variant)
+        !validHeroVariants.includes(data.variant as any)
       ) {
         data.variant = data.backgroundImage ? "background-image" : "centered";
       }
@@ -940,7 +931,7 @@ const SECTION_SCHEMAS_GUIDE = `
 VALID SECTION SCHEMAS & EXACT FIELD KEYS:
 1. "hero":
    data: {
-     "variant": "background-image"|"centered"|"split"|"split-left"|"gradient"|"soft-card"|"floating-cards"|"asymmetric",
+     "variant": "background-image"|"centered"|"split"|"split-left"|"gradient"|"soft-card"|"floating-cards"|"asymmetric"|"curved-carousel"|"curved-bottom"|"minimal-typography"|"video-bg",
      "heading": "...",
      "highlightText": "...",
      "subheading": "...",
