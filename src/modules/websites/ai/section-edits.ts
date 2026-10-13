@@ -57,7 +57,7 @@ export const MAX_EDIT_OPS = 12;
 export const MAX_PAGE_SECTIONS = 8;
 const GENERATE_TOKEN = /^\s*GENERATE\s*:\s*(\S[\s\S]*)$/i;
 
-const sectionId = Joi.string().trim().min(1).max(64).required();
+const sectionId = Joi.string().trim().min(1).max(128).required();
 const draft = Joi.object({
   type: Joi.string().required(),
   settings: Joi.object().unknown(true).optional(),

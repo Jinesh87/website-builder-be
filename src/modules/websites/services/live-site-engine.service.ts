@@ -611,6 +611,38 @@ Sitemap: ${domain}/sitemap.xml
         font-size: 0.85rem; text-align: center; color: #64748b;
       }
 
+      /* Blog Card Grid & Details */
+      .blog-card {
+        background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.85rem;
+        overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .blog-card:hover { transform: translateY(-4px); box-shadow: 0 16px 32px -8px rgba(0,0,0,0.1); }
+      .blog-card-media { width: 100%; aspect-ratio: 16/10; object-fit: cover; }
+      .blog-card-body { padding: 1.5rem; display: flex; flex-direction: column; flex: 1; }
+      .blog-badge {
+        display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.08em; color: var(--color-primary); margin-bottom: 0.5rem;
+      }
+      .blog-card-title { font-size: 1.25rem; font-weight: 700; color: var(--color-text); margin-bottom: 0.6rem; line-height: 1.35; }
+      .blog-card-excerpt { font-size: 0.92rem; color: var(--color-muted); line-height: 1.6; margin-bottom: 1.25rem; flex: 1; }
+      .blog-card-footer {
+        display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(0,0,0,0.06);
+        padding-top: 0.85rem; font-size: 0.82rem; color: var(--color-muted);
+      }
+      .blog-read-more { color: var(--color-primary); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+      .blog-prose { font-size: 1.1rem; line-height: 1.8; color: var(--color-text); max-width: 780px; margin: 0 auto; }
+      .blog-prose h2 { font-size: 1.8rem; font-weight: 700; margin: 2rem 0 0.75rem; }
+      .blog-prose h3 { font-size: 1.35rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+      .blog-prose p { margin-bottom: 1.5rem; }
+      .blog-quote {
+        border-left: 3px solid var(--color-primary); padding: 1rem 1.5rem; margin: 2rem 0;
+        font-style: italic; font-size: 1.2rem; background: rgba(0,0,0,0.02); border-radius: 0 0.5rem 0.5rem 0;
+      }
+      .blog-callout {
+        padding: 1.25rem 1.5rem; margin: 2rem 0; border-radius: 0.75rem;
+        background: rgba(15, 123, 108, 0.06); border: 1px solid rgba(15, 123, 108, 0.2);
+      }
+
       @media (max-width: 768px) {
         .nav-links { display: none; }
         section { padding: 3rem 0; }
@@ -1276,6 +1308,117 @@ Sitemap: ${domain}/sitemap.xml
               </section>`);
             }
           }
+          break;
+        }
+
+        case "blog": {
+          const rawPosts = Array.isArray(d.posts) ? (d.posts as Record<string, unknown>[]) : [];
+          const effectiveHeading = heading || "Our Blog";
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+
+          sectionParts.push(`
+          <section class="section-blog" id="blog" style="padding: 4.5rem 0;">
+            <div class="container">
+              <div style="text-align: center; max-width: 720px; margin: 0 auto 3.5rem;">
+                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${subheading || text ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(subheading || text)}</p>` : ""}
+              </div>
+              <div class="grid-3">
+                ${rawPosts
+                  .map((post) => {
+                    const postTitle = String(post.title || "Blog Post");
+                    const postSlug = resolveSafeHref(String(post.slug || "#"), availableSlugs);
+                    const postExcerpt = String(post.excerpt || "");
+                    const postCategory = String(post.category || "");
+                    const postAuthor = String(post.authorName || "");
+                    const postDate = String(post.date || "");
+                    const postImg =
+                      post.coverImage && typeof post.coverImage === "object" && "url" in post.coverImage
+                        ? String((post.coverImage as Record<string, unknown>).url)
+                        : "";
+
+                    return `
+                    <article class="blog-card">
+                      ${
+                        postImg
+                          ? `<a href="${escapeHtml(postSlug)}"><img src="${escapeHtml(postImg)}" alt="${escapeHtml(postTitle)}" class="blog-card-media" loading="lazy" /></a>`
+                          : ""
+                      }
+                      <div class="blog-card-body">
+                        ${postCategory ? `<span class="blog-badge">${escapeHtml(postCategory)}</span>` : ""}
+                        <a href="${escapeHtml(postSlug)}"><h3 class="blog-card-title">${escapeHtml(postTitle)}</h3></a>
+                        ${postExcerpt ? `<p class="blog-card-excerpt">${escapeHtml(postExcerpt)}</p>` : ""}
+                        <div class="blog-card-footer">
+                          <span>${escapeHtml(postAuthor)}${postDate ? ` • ${escapeHtml(postDate)}` : ""}</span>
+                          <a href="${escapeHtml(postSlug)}" class="blog-read-more">Read More →</a>
+                        </div>
+                      </div>
+                    </article>`;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          </section>`);
+          break;
+        }
+
+        case "blog_detail": {
+          const effectiveHeading = heading || String(d.title || "Blog Post");
+          const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
+          const category = String(d.category || "");
+          const authorName = String(d.authorName || "");
+          const date = String(d.date || "");
+          const readTime = String(d.readTime || "");
+          const rawSections = Array.isArray(d.content) ? (d.content as Record<string, unknown>[]) : [];
+          const coverImg =
+            d.coverImage && typeof d.coverImage === "object" && "url" in d.coverImage
+              ? String((d.coverImage as Record<string, unknown>).url)
+              : "";
+
+          sectionParts.push(`
+          <article class="section-blog-detail" style="padding: 4.5rem 0;">
+            <div class="container" style="max-width: 900px;">
+              <header style="text-align: center; margin-bottom: 2.5rem;">
+                ${category ? `<span class="section-badge">${escapeHtml(category)}</span>` : ""}
+                <${headingTag} class="${headingClass}" style="margin: 0.75rem 0 1rem;">${escapeHtml(effectiveHeading)}</${headingTag}>
+                ${subheading || text ? `<p class="subtitle" style="margin: 0 auto 1.5rem;">${escapeHtml(subheading || text)}</p>` : ""}
+                <div style="display: flex; gap: 1.5rem; justify-content: center; font-size: 0.9rem; color: var(--color-muted); border-top: 1px solid rgba(0,0,0,0.08); border-bottom: 1px solid rgba(0,0,0,0.08); padding: 0.75rem 0;">
+                  <span><strong>Date:</strong> ${escapeHtml(date)}</span>
+                  <span><strong>Author:</strong> ${escapeHtml(authorName)}</span>
+                  <span><strong>Read:</strong> ${escapeHtml(readTime)}</span>
+                </div>
+              </header>
+
+              ${
+                coverImg
+                  ? `<div style="border-radius: 1rem; overflow: hidden; margin-bottom: 3rem; box-shadow: 0 16px 36px -10px rgba(0,0,0,0.12);">
+                      <img src="${escapeHtml(coverImg)}" alt="${escapeHtml(effectiveHeading)}" style="width: 100%; max-height: 520px; object-fit: cover;" />
+                    </div>`
+                  : ""
+              }
+
+              <div class="blog-prose">
+                ${rawSections
+                  .map((sec) => {
+                    const secHeading = sec.heading ? `<h2>${escapeHtml(String(sec.heading))}</h2>` : "";
+                    const secSubheading = sec.subheading ? `<h3>${escapeHtml(String(sec.subheading))}</h3>` : "";
+                    const secParas = Array.isArray(sec.paragraphs)
+                      ? (sec.paragraphs as string[]).map((p) => `<p>${escapeHtml(p)}</p>`).join("")
+                      : "";
+                    const secQuote = sec.quote
+                      ? `<blockquote class="blog-quote">${escapeHtml(String(sec.quote))}</blockquote>`
+                      : "";
+                    const secCallout = sec.callout
+                      ? `<div class="blog-callout"><p style="margin: 0;">${escapeHtml(String(sec.callout))}</p></div>`
+                      : "";
+
+                    return `${secHeading}${secSubheading}${secParas}${secQuote}${secCallout}`;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          </article>`);
           break;
         }
 

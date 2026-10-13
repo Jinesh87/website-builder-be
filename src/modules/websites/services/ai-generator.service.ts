@@ -620,7 +620,16 @@ export function sanitizeSectionData(
       ) {
         delete data.contentAlign;
       }
-      const validBottomShapes = ["none", "wave", "curve", "slant", "tilt"];
+      const validBottomShapes = [
+        "none",
+        "wave",
+        "curve",
+        "curved",
+        "slant",
+        "tilt",
+        "arch",
+        "normal",
+      ];
       if (
         data.bottomShape &&
         !validBottomShapes.includes(data.bottomShape as string)
@@ -744,17 +753,13 @@ export function sanitizeSectionData(
         "classical",
         "minimalist",
         "comprehensive",
-        "ecommerce",
         "floating",
         "transparent",
         "glass-dock",
         "split-stacked",
-        "command-bar",
         "mega-menu-grid",
         "side-drawer",
         "headline-ticker",
-        "luxury-editorial",
-        "saas-console",
       ];
       if (
         typeof data.design !== "string" ||
