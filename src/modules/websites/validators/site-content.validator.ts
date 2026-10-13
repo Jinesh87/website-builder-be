@@ -476,6 +476,9 @@ export const heroSchema = Joi.object({
   variant: flexibleVariant(HERO_VARIANTS, "centered", {
     "split-screen": "split",
     "cards": "floating-cards",
+    "campaign": "campaign-banner",
+    "event-banner": "campaign-banner",
+    "video-banner": "campaign-banner",
   }),
   eyebrow: optionalText(200),
   badgeIcon: optionalText(50),
@@ -516,7 +519,9 @@ export const heroSchema = Joi.object({
   overlayBlur: Joi.boolean().optional(),
   minHeight: Joi.string().valid("auto", "compact", "screen", "tall").optional(),
   contentAlign: Joi.string().valid("center", "left", "right").optional(),
-  bottomShape: Joi.string().valid("none", "wave", "curve", "slant", "tilt").optional(),
+  bottomShape: Joi.string()
+    .valid("none", "wave", "curve", "curved", "slant", "tilt", "arch", "normal")
+    .optional(),
   rating: Joi.object({
     stars: Joi.number().min(1).max(5).optional(),
     text: optionalText(200),
@@ -555,6 +560,51 @@ export const heroSchema = Joi.object({
   showDoodles: Joi.boolean().optional(),
   curveIntensity: Joi.string().valid("none", "subtle", "medium", "dramatic").optional(),
   carouselSlides: Joi.array().items(carouselSlide).max(20).optional(),
+  campaignStats: Joi.array()
+    .items(
+      Joi.object({
+        id: optionalText(50),
+        label: text(60).required(),
+        value: text(60).required(),
+        icon: optionalText(50),
+      })
+    )
+    .max(6)
+    .optional(),
+  campaignProgress: Joi.object({
+    raisedAmount: Joi.alternatives().try(Joi.number(), Joi.string().max(60)).optional(),
+    targetAmount: Joi.alternatives().try(Joi.number(), Joi.string().max(60)).optional(),
+    currency: optionalText(10),
+    raisedLabel: optionalText(60),
+    targetLabel: optionalText(100),
+    percentage: Joi.number().min(0).max(100).optional(),
+    donateButton: link.optional(),
+    registerButton: link.optional(),
+  }).optional(),
+  campaignTicker: Joi.array()
+    .items(
+      Joi.object({
+        id: optionalText(50),
+        name: text(60).required(),
+        action: text(60).required(),
+        amount: optionalText(30),
+        avatarIcon: optionalText(50),
+      })
+    )
+    .max(30)
+    .optional(),
+  showCampaignTicker: Joi.boolean().optional(),
+  showCampaignCards: Joi.boolean().optional(),
+  bannerBottomShape: Joi.string().valid("none", "curved", "wave", "normal", "slant", "tilt", "arch").optional(),
+  bannerCurveDepth: Joi.number().min(0).max(300).optional(),
+  bottomDividerColor: optionalText(50),
+  bannerTopBar: Joi.object({
+    enabled: Joi.boolean().optional(),
+    logoText: optionalText(100),
+    logoImage: image.optional(),
+    primaryButton: link.optional(),
+    secondaryButton: link.optional(),
+  }).optional(),
 });
 
 const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {

@@ -90,6 +90,7 @@ export const HERO_VARIANTS = [
   "floating-cards",
   "asymmetric",
   "curved-carousel",
+  "campaign-banner",
 ] as const;
 export const SECTION_BACKGROUNDS = ["default", "surface", "primary", "dark"] as const;
 export const SECTION_SPACINGS = ["none", "compact", "default", "relaxed"] as const;
@@ -431,7 +432,7 @@ export type HeroData = {
   overlayBlur?: boolean;
   minHeight?: "auto" | "compact" | "screen" | "tall";
   contentAlign?: "center" | "left" | "right";
-  bottomShape?: "none" | "wave" | "curve" | "slant" | "tilt";
+  bottomShape?: "none" | "wave" | "curve" | "curved" | "slant" | "tilt" | "arch" | "normal";
   rating?: HeroRating;
   floatingCards?: HeroFloatingCard[];
   trustedBy?: HeroTrustedBy;

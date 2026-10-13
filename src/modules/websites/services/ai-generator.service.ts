@@ -620,7 +620,16 @@ export function sanitizeSectionData(
       ) {
         delete data.contentAlign;
       }
-      const validBottomShapes = ["none", "wave", "curve", "slant", "tilt"];
+      const validBottomShapes = [
+        "none",
+        "wave",
+        "curve",
+        "curved",
+        "slant",
+        "tilt",
+        "arch",
+        "normal",
+      ];
       if (
         data.bottomShape &&
         !validBottomShapes.includes(data.bottomShape as string)
