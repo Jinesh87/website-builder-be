@@ -9,6 +9,7 @@ import {
   createWebsiteSchema,
   generateAiSuggestionSchema,
   generatePageSeoSchema,
+  reviewPageSeoContentSchema,
   listTemplatesQuerySchema,
   listWebsitesQuerySchema,
   pageContentParamsSchema,
@@ -113,6 +114,14 @@ websitesRouter.post(
   rateLimit({ name: "website-ai-generate", max: 60, windowSeconds: 60 }),
   validate(generatePageSeoSchema),
   websiteController.generatePageSeo,
+);
+
+websitesRouter.post(
+  "/:id/pages/:pageId/seo/content-review",
+  validate(pageContentParamsSchema, "params"),
+  rateLimit({ name: "website-ai-generate", max: 60, windowSeconds: 60 }),
+  validate(reviewPageSeoContentSchema),
+  websiteController.reviewPageSeoContent,
 );
 
 websitesRouter.get("/:id/seo/sitemap.xml", byId, websiteController.getSitemapXml);

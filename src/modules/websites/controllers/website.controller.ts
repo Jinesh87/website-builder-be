@@ -342,6 +342,15 @@ export class WebsiteController {
     }
   };
 
+  reviewPageSeoContent = async (req: Request<PageParams>, res: Response, next: NextFunction) => {
+    try {
+      const result = await aiSeoService.reviewPageSeoContent(req.params.id, req.params.pageId, req.body, req.user!);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getSitemapXml = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
     try {
       const xml = await aiSeoService.getSitemapXml(req.params.id, req.user!);
