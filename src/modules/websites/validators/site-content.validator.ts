@@ -25,6 +25,7 @@ import {
   SECTION_TYPES,
   SPACING_SIZES,
   type SectionType,
+  BLOG_DETAIL_DESIGNS,
 } from "../types/site-content.types.js";
 
 /**
@@ -977,6 +978,71 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   auth: authDataSchema,
   custom: customDataSchema,
+  blog: Joi.object({
+    eyebrow: optionalText(120),
+    title: text(160).required(),
+    subtitle: optionalText(320),
+    categories: Joi.array().items(text(60)).max(20).optional(),
+    layout: Joi.string().valid("grid-3", "grid-2", "magazine").optional(),
+    showNewsletterCard: Joi.boolean().optional(),
+    newsletterTitle: optionalText(160),
+    newsletterDescription: optionalText(320),
+    newsletterPlaceholder: optionalText(120),
+    newsletterButtonText: optionalText(60),
+    posts: Joi.array()
+      .items(
+        Joi.object({
+          id: text(64).required(),
+          title: text(200).required(),
+          slug: text(200).required(),
+          excerpt: optionalText(500),
+          coverImage: image.optional(),
+          category: optionalText(60),
+          authorName: optionalText(100),
+          authorAvatar: image.optional(),
+          date: optionalText(60),
+          readTime: optionalText(40),
+          featured: Joi.boolean().optional(),
+          readMoreLabel: optionalText(60),
+        }),
+      )
+      .max(50)
+      .required(),
+  }),
+  blog_detail: Joi.object({
+    design: Joi.string().valid(...BLOG_DETAIL_DESIGNS).required(),
+    title: text(240).required(),
+    subtitle: optionalText(400),
+    category: text(80).required(),
+    date: text(80).required(),
+    authorName: text(120).required(),
+    authorRole: optionalText(120),
+    authorAvatar: image.optional(),
+    authorBio: optionalText(500),
+    readTime: text(60).required(),
+    coverImage: image.required(),
+    coverImageCaption: optionalText(200),
+    content: Joi.array()
+      .items(
+        Joi.object({
+          heading: optionalText(200),
+          subheading: optionalText(200),
+          paragraphs: Joi.array().items(Joi.string().allow("").max(2000)).max(20).required(),
+          quote: optionalText(500),
+          quoteAuthor: optionalText(100),
+          callout: optionalText(500),
+          image: image.optional(),
+        }),
+      )
+      .max(30)
+      .required(),
+    tags: Joi.array().items(text(60)).max(20).optional(),
+    showShareButtons: Joi.boolean().optional(),
+    showAuthorBio: Joi.boolean().optional(),
+    showNewsletter: Joi.boolean().optional(),
+    newsletterTitle: optionalText(160),
+    newsletterDescription: optionalText(320),
+  }),
 };
 
 /** Content schema of each section type; the single source for validation and the AI field catalog. */
@@ -1017,7 +1083,7 @@ export const sectionSettingsSchema = Joi.object({
 });
 
 export const sectionSchema = Joi.object({
-  id: text(64).required(),
+  id: text(128).required(),
   type: Joi.string()
     .valid(...SECTION_TYPES)
     .required(),

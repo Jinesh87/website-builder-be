@@ -187,7 +187,7 @@ export const saveDraftSchema = Joi.object({
 export const generateAiSuggestionSchema = Joi.object({
   prompt: Joi.string().trim().min(1).max(2000).required(),
   scope: Joi.string().valid("section", "page").required(),
-  sectionId: Joi.string().trim().max(64).optional(),
+  sectionId: Joi.string().trim().max(128).optional(),
   currentSection: sectionSchema.optional(),
   currentSections: Joi.array().items(sectionSchema).max(60).optional(),
   pageId: Joi.string().trim().max(64).optional(),

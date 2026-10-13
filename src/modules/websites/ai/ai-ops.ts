@@ -106,7 +106,7 @@ export const AI_PLAN_RESPONSE_FORMAT = {
 } as const;
 
 const instruction = Joi.string().trim().min(1).max(2000).required();
-const sectionId = Joi.string().trim().min(1).max(64).required();
+const sectionId = Joi.string().trim().min(1).max(128).required();
 const creatableType = Joi.string().valid(...AI_CREATABLE_TYPES).required();
 
 const opName = (name: PlannedOp["op"]) => Joi.string().valid(name).required();
