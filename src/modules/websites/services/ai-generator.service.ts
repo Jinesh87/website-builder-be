@@ -744,17 +744,13 @@ export function sanitizeSectionData(
         "classical",
         "minimalist",
         "comprehensive",
-        "ecommerce",
         "floating",
         "transparent",
         "glass-dock",
         "split-stacked",
-        "command-bar",
         "mega-menu-grid",
         "side-drawer",
         "headline-ticker",
-        "luxury-editorial",
-        "saas-console",
       ];
       if (
         typeof data.design !== "string" ||

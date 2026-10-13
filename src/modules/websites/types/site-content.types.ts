@@ -59,17 +59,13 @@ export const HEADER_DESIGNS = [
   "classical",
   "minimalist",
   "comprehensive",
-  "ecommerce",
   "floating",
   "transparent",
   "glass-dock",
   "split-stacked",
-  "command-bar",
   "mega-menu-grid",
   "side-drawer",
   "headline-ticker",
-  "luxury-editorial",
-  "saas-console",
 ] as const;
 export const FOOTER_DESIGNS = [
   "columns",

@@ -392,12 +392,9 @@ export const headerSchema = Joi.object({
     "center": "centered",
     "dock": "glass-dock",
     "stacked": "split-stacked",
-    "search": "command-bar",
     "bento": "mega-menu-grid",
     "drawer": "side-drawer",
     "ticker": "headline-ticker",
-    "editorial": "luxury-editorial",
-    "console": "saas-console",
   }).description('"transparent" = a see-through header laid over the top of the first section (e.g. its background photo); only when position is "static" and sticky is false'),
   siteName: text(120).default("Brand").optional(),
   logo: image.optional(),
@@ -426,7 +423,7 @@ export const headerSchema = Joi.object({
   utilityLinks: Joi.array().items(link).max(8).optional(),
   tagline: optionalText(120),
   statusText: optionalText(80),
-  statusColor: Joi.string().valid("green", "blue", "orange", "purple").optional(),
+  statusColor: Joi.string().valid("green", "blue", "orange", "purple", "red").optional(),
 });
 
 export const footerSchema = Joi.object({
