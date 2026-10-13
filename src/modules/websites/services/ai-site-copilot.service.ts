@@ -142,11 +142,43 @@ function describeContact(facts: SiteFacts): string {
 }
 
 function describeSite(website: WebsiteDetail, page: PageView | null): string {
-  const pages = website.draft.pages.map((p) => `${p.name} -> ${p.slug}`).join(", ");
+  const pages = website.draft.pages
+    .map((p) => {
+      const isCurrent = page && p.id === page.id ? " [CURRENT PAGE]" : "";
+      const secSummary = p.sections
+        .map((s) => {
+          const d = s.data as Record<string, unknown>;
+          const heading = (typeof d.heading === "string" ? d.heading : typeof d.siteName === "string" ? d.siteName : typeof d.title === "string" ? d.title : "") || "";
+          return heading ? `${s.type}("${heading.slice(0, 30)}")` : s.type;
+        })
+        .join(", ");
+      return `- "${p.name}" (${p.slug})${isCurrent}: sections: [${secSummary || "empty"}]`;
+    })
+    .join("\n");
+
+  const headerMenu = website.draft.header.menu.map((m) => `${m.label} -> ${m.href}`).join(", ");
+  const headerCta = website.draft.header.cta?.label
+    ? `Header CTA button: "${website.draft.header.cta.label}" -> ${website.draft.header.cta.href}`
+    : "No header CTA button";
+  const theme = website.draft.theme;
+  const themeSummary = `Theme: primary ${theme.colors.primary}, text ${theme.colors.text}, background ${theme.colors.background}, font ${theme.fonts.heading}`;
+
   const current = page
-    ? `Current page: "${page.name}" (${page.slug}). SEO title: "${page.seoTitle ?? ""}". SEO description: "${page.seoDescription ?? ""}".`
-    : "Current page: unknown (SEO can't be changed).";
-  return `Site pages (name -> slug): ${pages}\n${current}`;
+    ? `Current active page in editor: "${page.name}" (${page.slug}). SEO title: "${page.seoTitle ?? ""}". SEO description: "${page.seoDescription ?? ""}".`
+    : "Current page: unknown.";
+
+  return `SITE PAGES:
+${pages}
+
+NAVIGATION & HEADER:
+Menu: ${headerMenu || "empty"}
+${headerCta}
+
+THEME & STYLE:
+${themeSummary}
+
+ACTIVE CONTEXT:
+${current}`;
 }
 
 /** Instructions shared by every request; first in the prompt so the provider can cache them. */
@@ -154,8 +186,13 @@ const INSTRUCTIONS = `You are the AI copilot inside the website editor of a smal
 
 RESPOND IN JSON
 {
-  "intent": "chat" | "edit" | "look",
+  "intent": "chat" | "edit" | "look" | "clarify",
   "reply": string,
+  "clarification": {
+    "question": string,
+    "options": [string, ...],
+    "allowCustomInput": true
+  } | null,
   "look": [sectionId, ...],
   "imageSource": "library" | "generate" | "unspecified",
   "imageSourceQuote": string,
@@ -163,18 +200,26 @@ RESPOND IN JSON
   "seo": { "title": up to 60 characters, "description": up to 155 characters } | null
 }
 - "chat": greetings, thanks, feedback, questions, advice, reviews or ideas. "reply" is your answer, in plain text without markdown (numbered lines are fine), with concrete suggestions specific to this business (you may propose exact copy). "ops" is empty.
-- "edit": the owner clearly asked for a change. "reply" is "". Don't tell the owner anything is done: the editor applies and checks each operation, then reports the ones that worked using their "note".
+- "clarify": when the owner's request is large, ambiguous, or lacks key specifics (e.g. adding pricing without plans/tiers, building a blog without topics, redesigning without style/vibe, or requesting complex features), ask a targeted question in "clarification" with 2-4 concrete selectable options and custom text input. "reply" is a friendly 1-2 sentence explanation. "ops" is empty. Do NOT clarify if the request is already clear, specific, or if the user is answering a previous question.
+- "edit": the owner clearly asked for a change (or confirmed a choice after clarification). "reply" is "". Don't tell the owner anything is done: the editor applies and checks each operation, then reports the ones that worked using their "note".
 - "look": you need the full content of sections you only have a summary of (e.g. to match, copy or compare with them) before you can answer or edit. List their ids in "look"; "reply" is "" and "ops" is empty. The editor sends their content and you answer again. Never describe, compare or match a section you've only seen summarized.
-When unsure whether a change is wanted, use "chat". If a request can't be done with the operations below (domain, publishing, other pages), use "chat" and explain where to do it in the editor. If you can't do what was asked, use "chat" and say why instead of making a different change.
+When unsure whether a change is wanted, use "chat".
 
 OPERATIONS (each has "note": one short sentence for the owner describing exactly what this operation changes)
 - { "op": "update", "note", "sectionId", "set": { "<path>": value }, "unset": ["<path>"] }
   Changes only the listed fields of an existing section; everything else stays as it is. A path starts with "data." or "settings." and uses dots for nested fields and list positions, e.g. "data.heading", "data.items.2.title", "settings.customColors.primary". Setting a list position equal to the list length appends an item.
   "unset" removes a field or a list item: removing a picture, button or item is an "unset" of its path (e.g. "unset": ["data.image"]). Never keep something the owner asked to remove.
-- { "op": "add", "note", "position": index in the page or null (before the footer), "section": { "type", "settings"?, "data" } }  with every required field.
+- { "op": "add", "note", "position": index in the page or null (before the footer), "section": { "type", "settings"?, "data" } } with every required field.
 - { "op": "remove", "note", "sectionIds": [...] }
 - { "op": "move", "note", "sectionId", "toIndex" }
-- { "op": "replace_page", "note", "sections": [{ "type", "settings"?, "data" }] }  only when the owner explicitly asks to redesign, rebuild or start the page over; 3 to ${MAX_PAGE_SECTIONS} sections between the existing header and footer.
+- { "op": "replace_page", "note", "sections": [{ "type", "settings"?, "data" }] } only when the owner explicitly asks to redesign, rebuild or start the page over; 3 to ${MAX_PAGE_SECTIONS} sections between the existing header and footer.
+- { "op": "create_page", "note", "page": { "name", "slug"?, "pageType"?, "showInNav"?, "seoTitle"?, "seoDescription"?, "sections": [{ "type", "settings"?, "data" }] } }
+  Creates a new page with complete, polished sections matching the site's theme and business (e.g. hero + content/grid/split + cta).
+- { "op": "update_page", "note", "pageIdOrSlug", "name"?, "slug"?, "showInNav"?, "seoTitle"?, "seoDescription"?, "sections"?: [...] }
+  Updates another page on the website.
+- { "op": "delete_page", "note", "pageIdOrSlug" } (except home page "/").
+- { "op": "update_navigation", "note", "headerMenu"?: [{ "label", "href" }], "headerCta"?: { "label", "href" }, "footerColumns"?: [{ "title", "links": [{ "label", "href" }] }] }
+- { "op": "update_theme", "note", "colors"?: { primary, text, background, accent }, "font"?: string }
 Set "seo" when the page's main message changes, or when asked; otherwise null.
 Section types that can be created, removed or moved: ${GENERATED_SECTION_TYPES.join(", ")}. The header (site name, logo, menu, button) and footer can only be updated. FIELDS lists the types shown; if you use another type, the editor sends you its fields.
 
@@ -186,7 +231,8 @@ An IMAGE value is one of:
 Never invent image URLs.
 "imageSource" records what the OWNER said, not your choice: "library" only if the owner's words pick the library or a library photo, "generate" only if the owner's words ask for a generated, AI-made or new image; otherwise "unspecified". "imageSourceQuote" is the owner's exact words that name the source, e.g. "generate one" or "from my library" ("" when unspecified). Still fill in the image with your best choice; the editor asks the owner where the image should come from when it's unspecified.
 
-RULES
+RULES & CROSS-PAGE REASONING
+- Follow existing pages, design patterns, components, and project conventions by default unless the user specifies otherwise.
 - Read each field's note: pick the field whose meaning matches the request (e.g. a picture behind the text is a different field from one beside it).
 - Colors: "settings.background" is a preset; a color the owner names goes in "settings.customColors.<role>" as a 6-digit hex.
 - To make a section match another, give it the other section's "settings.background" and the same "settings.customColors" (set the ones it has, unset the ones it doesn't). Over a photo background, a section matches by being transparent where its fields allow it.
@@ -194,7 +240,7 @@ RULES
 - Write specific, credible, benefit-led copy for this business in its tone of voice. No lorem ipsum or generic filler.
 - Don't invent awards, certifications, exact statistics or prices the owner didn't give; testimonials and team members are placeholders the owner will replace.
 - Never invent contact details; use only the ones on file.
-- Links: only the site's page slugs or "#section" anchors.`;
+- Internal links: buttons and links must use valid page slugs (e.g. "/pricing", "/contact", "/about", "/services", "/") or anchors ("#..."). When creating or renaming pages, link them from hero CTAs, navigation menu, and footer as requested.`;
 
 /** What the AI sees of the page: the section types whose fields it gets, and which sections it sees in full. */
 export type PromptScope = { types: EditableSectionType[]; fullIds: Set<string>; pageJson: string };
@@ -340,6 +386,16 @@ function describeOp(op: EditOp, sections: SectionEnvelope[]): string {
       return `Moved the ${typeOf(op.sectionId)} section.`;
     case "replace_page":
       return `Rebuilt the page with ${op.sections.length} sections.`;
+    case "create_page":
+      return `Created the "${op.page.name}" page.`;
+    case "update_page":
+      return `Updated the "${op.name || op.pageIdOrSlug}" page.`;
+    case "delete_page":
+      return `Removed page "${op.pageIdOrSlug}".`;
+    case "update_navigation":
+      return `Updated navigation menu and links.`;
+    case "update_theme":
+      return `Updated website theme styling.`;
   }
 }
 
@@ -349,6 +405,15 @@ function describeOp(op: EditOp, sections: SectionEnvelope[]): string {
  */
 function describeResult(attempt: Attempt, sections: SectionEnvelope[], seo: boolean, generatedImages: number): string {
   const done = attempt.compiled.outcomes.filter((outcome) => outcome.applied).map((outcome) => describeOp(outcome.op, sections));
+  if (attempt.compiled.createdPages.length > 0) {
+    done.push(...attempt.compiled.createdPages.map((p) => `Created the "${p.name}" page (${p.slug}) with ${p.sections.length} sections.`));
+  }
+  if (attempt.compiled.updatedPages.length > 0) {
+    done.push(`Updated ${attempt.compiled.updatedPages.length} other page(s).`);
+  }
+  if (attempt.compiled.navigationPatch?.headerMenu) {
+    done.push(`Updated header navigation menu.`);
+  }
   const failed = [
     ...attempt.compiled.outcomes.filter((outcome) => !outcome.applied).map((outcome) => describeOp(outcome.op, sections)),
     ...attempt.droppedNotes.map(sentence),
@@ -415,6 +480,8 @@ function check(raw: unknown, options: SiteCopilotOptions, context: CopilotContex
     clean: context.clean,
     generated,
     maxGeneratedImages: MAX_GENERATED_IMAGES,
+    pages: options.website.draft.pages,
+    theme: options.website.draft.theme,
   });
   const problems = [...errors, ...compiled.errors];
   if (reply.intent === "edit" && reply.ops.length === 0 && !reply.seo) {
@@ -457,7 +524,27 @@ export function toCopilotSuggestion(
   const { reply, compiled } = attempt;
   const seo = parseSeo(reply.seo, context.page);
   const sections = pageSections(options);
-  if (compiled.ops.length === 0 && !seo) {
+  const hasCrossPage =
+    compiled.createdPages.length > 0 ||
+    compiled.updatedPages.length > 0 ||
+    compiled.deletedPageIds.length > 0 ||
+    Boolean(compiled.navigationPatch) ||
+    Boolean(compiled.themePatch);
+
+  if (reply.intent === "clarify" && reply.clarification) {
+    return {
+      id: randomUUID(),
+      prompt: options.prompt,
+      summary: reply.clarification.question || reply.reply,
+      chatReply: reply.reply || reply.clarification.question,
+      clarification: reply.clarification,
+      target: { scope: "chat" },
+      before: [],
+      after: [],
+    };
+  }
+
+  if (compiled.ops.length === 0 && !seo && !hasCrossPage) {
     const failed = describeResult(attempt, sections, false, 0);
     return chatPayload(
       options,
@@ -465,17 +552,43 @@ export function toCopilotSuggestion(
     );
   }
 
-  const base = { id: randomUUID(), prompt: options.prompt, summary: describeResult(attempt, sections, Boolean(seo), generatedImages), seo };
+  const base = {
+    id: randomUUID(),
+    prompt: options.prompt,
+    summary: describeResult(attempt, sections, Boolean(seo), generatedImages),
+    seo,
+    createdPages: compiled.createdPages,
+    updatedPages: compiled.updatedPages,
+    deletedPageIds: compiled.deletedPageIds,
+    navigationPatch: compiled.navigationPatch,
+    themePatch: compiled.themePatch,
+  };
+
   const selected = selectedSection(options);
   const onlySelected =
-    selected !== null && compiled.ops.length > 0 && compiled.ops.every((op) => op.op === "update" && op.section.id === selected.id);
+    !hasCrossPage &&
+    selected !== null &&
+    compiled.ops.length > 0 &&
+    compiled.ops.every((op) => op.op === "update" && op.section.id === selected.id);
+
   if (onlySelected) {
     const updated = compiled.after.find((section) => section.id === selected.id)!;
     return { ...base, target: { scope: "section", sectionId: selected.id }, before: [selected], after: [updated] };
   }
+
+  const target = hasCrossPage
+    ? {
+        scope: "site" as const,
+        createdPageIds: compiled.createdPages.map((p) => p.id),
+        affectedPageIds: [options.pageId ?? "", ...compiled.updatedPages.map((p) => p.pageId)].filter(Boolean),
+      }
+    : compiled.rebuild
+      ? { scope: "page" as const, rebuild: true }
+      : { scope: "page" as const, rebuild: false, focusSectionId: compiled.changedIds[0] };
+
   return {
     ...base,
-    target: compiled.rebuild ? { scope: "page", rebuild: true } : { scope: "page", rebuild: false, focusSectionId: compiled.changedIds[0] },
+    target,
     before: sections,
     after: compiled.after,
   };
@@ -495,12 +608,36 @@ export async function runCopilot(
 ): Promise<AiSuggestionPayload> {
   let raw = await ask(messages);
   let attempt = check(raw, options, context);
+  if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {
+    return {
+      id: randomUUID(),
+      prompt: options.prompt,
+      summary: attempt.reply.clarification.question || attempt.reply.reply,
+      chatReply: attempt.reply.reply || attempt.reply.clarification.question,
+      clarification: attempt.reply.clarification,
+      target: { scope: "chat" },
+      before: [],
+      after: [],
+    };
+  }
   if (attempt.reply.intent === "look") {
     const looked = lookPrompt(attempt.reply.look, options, scope);
     messages = [...messages, { role: "assistant", content: JSON.stringify(raw) }, { role: "user", content: looked.prompt }];
     scope = looked.scope;
     raw = await ask(messages);
     attempt = check(raw, options, context);
+    if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {
+      return {
+        id: randomUUID(),
+        prompt: options.prompt,
+        summary: attempt.reply.clarification.question || attempt.reply.reply,
+        chatReply: attempt.reply.reply || attempt.reply.clarification.question,
+        clarification: attempt.reply.clarification,
+        target: { scope: "chat" },
+        before: [],
+        after: [],
+      };
+    }
     if (attempt.reply.intent === "look") return chatPayload(options, attempt.reply.reply);
   }
   if (attempt.reply.intent === "edit" && attempt.errors.length > 0) {
@@ -511,6 +648,18 @@ export async function runCopilot(
     ]);
     const repaired = check(raw, options, context);
     if (repaired.reply.intent === "chat" || repaired.errors.length <= attempt.errors.length) attempt = repaired;
+  }
+  if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {
+    return {
+      id: randomUUID(),
+      prompt: options.prompt,
+      summary: attempt.reply.clarification.question || attempt.reply.reply,
+      chatReply: attempt.reply.reply || attempt.reply.clarification.question,
+      clarification: attempt.reply.clarification,
+      target: { scope: "chat" },
+      before: [],
+      after: [],
+    };
   }
   if (attempt.reply.intent === "chat") return chatPayload(options, attempt.reply.reply);
 

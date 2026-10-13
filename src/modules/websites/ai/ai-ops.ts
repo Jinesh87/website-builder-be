@@ -37,11 +37,25 @@ export type PlannedOp =
   | { op: "remove"; sectionIds: string[] }
   | { op: "move"; sectionId: string; toIndex: number }
   | { op: "replace_page"; sectionTypes: AiCreatableType[]; instruction: string }
-  | { op: "clear" };
+  | { op: "clear" }
+  | {
+      op: "create_page";
+      name: string;
+      slug?: string | null;
+      sectionTypes: AiCreatableType[];
+      instruction: string;
+      showInNav?: boolean;
+    }
+  | { op: "update_navigation"; instruction: string };
 
 export type AiPlan = {
   intent: "chat" | "edit" | "clarify";
   reply: string;
+  clarification?: {
+    question: string;
+    options: string[];
+    allowCustomInput: boolean;
+  } | null;
   ops: PlannedOp[];
 };
 
@@ -76,10 +90,25 @@ export const AI_PLAN_RESPONSE_FORMAT = {
     schema: {
       type: "object",
       additionalProperties: false,
-      required: ["intent", "reply", "ops"],
+      required: ["intent", "reply", "clarification", "ops"],
       properties: {
         intent: { type: "string", enum: ["chat", "edit", "clarify"] },
         reply: { type: "string" },
+        clarification: {
+          anyOf: [
+            {
+              type: "object",
+              additionalProperties: false,
+              required: ["question", "options", "allowCustomInput"],
+              properties: {
+                question: { type: "string" },
+                options: { type: "array", items: { type: "string" } },
+                allowCustomInput: { type: "boolean" },
+              },
+            },
+            { type: "null" },
+          ],
+        },
         ops: {
           type: "array",
           items: {
@@ -97,6 +126,16 @@ export const AI_PLAN_RESPONSE_FORMAT = {
                 instruction: { type: "string" },
               }),
               opVariant("clear", {}),
+              opVariant("create_page", {
+                name: { type: "string" },
+                slug: { type: ["string", "null"] },
+                sectionTypes: { type: "array", items: creatableTypeSchema },
+                instruction: { type: "string" },
+                showInNav: { type: "boolean" },
+              }),
+              opVariant("update_navigation", {
+                instruction: { type: "string" },
+              }),
             ],
           },
         },
@@ -127,11 +166,27 @@ const plannedOpSchema = Joi.alternatives().try(
     instruction,
   }),
   Joi.object({ op: opName("clear") }),
+  Joi.object({
+    op: opName("create_page"),
+    name: Joi.string().trim().min(1).max(120).required(),
+    slug: Joi.string().trim().max(160).allow(null).optional(),
+    sectionTypes: Joi.array().items(creatableType).min(1).max(12).required(),
+    instruction,
+    showInNav: Joi.boolean().default(true),
+  }),
+  Joi.object({ op: opName("update_navigation"), instruction }),
 );
 
 const aiPlanSchema = Joi.object({
   intent: Joi.string().valid("chat", "edit", "clarify").required(),
   reply: Joi.string().allow("").max(3000).required(),
+  clarification: Joi.object({
+    question: Joi.string().trim().min(1).max(500).required(),
+    options: Joi.array().items(Joi.string().trim().min(1).max(200)).min(2).max(6).required(),
+    allowCustomInput: Joi.boolean().default(true),
+  })
+    .allow(null)
+    .optional(),
   ops: Joi.array().items(plannedOpSchema).max(MAX_OPS).required(),
 });
 
@@ -244,17 +299,22 @@ export function previewLayout(
     return { id, type, hidden: false, settings: {}, data: {} };
   };
 
-  const stubOps = ops.map((op, i): CanvasOp => {
+  const stubOps = ops.flatMap((op, i): CanvasOp[] => {
     switch (op.op) {
       case "add":
-        return { op: "add", position: op.position, section: stub(addIds[i] ?? `pending-${i}`, op.sectionType) };
+        return [{ op: "add", position: op.position, section: stub(addIds[i] ?? `pending-${i}`, op.sectionType) }];
       case "update":
         updating.add(op.sectionId);
-        return { op: "remove", sectionIds: [] };
+        return [{ op: "remove", sectionIds: [] }];
       case "replace_page":
-        return { op: "replace_page", sections: op.sectionTypes.map((type, j) => stub(`pending-${i}-${j}`, type)) };
-      default:
-        return op;
+        return [{ op: "replace_page", sections: op.sectionTypes.map((type, j) => stub(`pending-${i}-${j}`, type)) }];
+      case "remove":
+      case "move":
+      case "clear":
+        return [op];
+      case "create_page":
+      case "update_navigation":
+        return [];
     }
   });
 

@@ -245,6 +245,7 @@ export class WebsiteController {
           : aiGeneratorService.generate(
               {
                 ...body,
+                website,
                 clientId: website.clientId,
                 websiteId: website.id,
                 userId: req.user?.id,
