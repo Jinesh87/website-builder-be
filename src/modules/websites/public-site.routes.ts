@@ -1,16 +1,25 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { env } from "../../config/env.js";
 import { publicSiteController } from "./controllers/public-site.controller.js";
 
 export const publicSiteRouter = Router();
 
+const contactLimit = rateLimit({ name: "site-contact", max: 10, windowSeconds: 10 * 60 });
+const submitContact = (req: Request, res: Response, next: NextFunction) =>
+  contactLimit(req, res, (error?: unknown) => (error ? next(error) : publicSiteController.submitContact(req, res, next)));
+
 // Public contact form endpoint for client websites
-publicSiteRouter.post("/api/public/site/:subdomain/contact", publicSiteController.submitContact);
+publicSiteRouter.post("/api/public/site/:subdomain/contact", submitContact);
+
+// Shared stylesheet and runtime of the live renderer, identical for every site.
+publicSiteRouter.get("/_wb/site.css", publicSiteController.serveAsset("css"));
+publicSiteRouter.get("/_wb/site.js", publicSiteController.serveAsset("js"));
 
 // 1. Explicit path routes for previews & local testing (/live/:subdomain and inner slugs)
 publicSiteRouter.use("/live/:subdomain", (req, res, next) => {
   if (req.method === "POST" && (req.path === "/contact" || req.path === "/api/contact")) {
-    return publicSiteController.submitContact(req, res, next);
+    return submitContact(req, res, next);
   }
   if (req.path === "/sitemap.xml") {
     return publicSiteController.serveSitemap(req, res, next);
@@ -37,7 +46,7 @@ publicSiteRouter.use((req, res, next) => {
 
   // Intercept contact submissions on the host domain
   if (req.method === "POST" && (req.path === "/contact" || req.path === "/api/contact")) {
-    return publicSiteController.submitContact(req, res, next);
+    return submitContact(req, res, next);
   }
 
   // Intercept root sitemap & robots for the domain

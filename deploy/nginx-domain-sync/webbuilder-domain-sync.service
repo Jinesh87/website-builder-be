@@ -1,0 +1,8 @@
+[Unit]
+Description=Sync web builder custom domains into nginx
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/webbuilder-domain-sync

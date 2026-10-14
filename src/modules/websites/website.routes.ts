@@ -79,6 +79,7 @@ websitesRouter.post(
   validate(publishSchema),
   websiteController.publish,
 );
+websitesRouter.post("/:id/unpublish", byId, websiteController.unpublish);
 websitesRouter.get("/:id/versions", byId, websiteController.listVersions);
 websitesRouter.post(
   "/:id/templates",
