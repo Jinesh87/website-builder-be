@@ -1,5 +1,7 @@
 import { env } from "../../../config/env.js";
+import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
+import { siteRendererClient, type RenderedSitePage } from "./site-renderer.client.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
@@ -227,7 +229,8 @@ Sitemap: ${domain}/sitemap.xml
 `;
   }
 
-  async renderPage(identifier: string, pathSlug: string): Promise<CachedPage> {
+  /** `basePath` is the URL prefix in preview mode ("/live/<subdomain>"); empty when served on the site's own host. */
+  async renderPage(identifier: string, pathSlug: string, basePath = ""): Promise<CachedPage> {
     // 1. Trailing slash canonical redirect (e.g., /about/ -> /about)
     if (pathSlug.length > 1 && pathSlug.endsWith("/")) {
       const canonicalSlug = pathSlug.replace(/\/+$/, "");
@@ -252,7 +255,7 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     const cleanSlug = pathSlug === "" || pathSlug === "/" ? "/" : pathSlug.startsWith("/") ? pathSlug : `/${pathSlug}`;
-    const cacheKey = `${identifier.toLowerCase()}:${cleanSlug}`;
+    const cacheKey = `${identifier.toLowerCase()}:${basePath}${cleanSlug}`;
 
     const cached = pageCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
@@ -272,10 +275,10 @@ Sitemap: ${domain}/sitemap.xml
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
 
-    // 3. 301 Canonical redirect: if accessed via subdomain but primary custom domain exists
+    // 3. 301 Canonical redirect: if accessed via subdomain but primary custom domain exists (not in preview mode)
     const primaryCustomDomain = website.domains?.[0]?.hostname;
     const isSubdomainRequest = identifier.toLowerCase() === website.subdomain.toLowerCase();
-    if (primaryCustomDomain && isSubdomainRequest) {
+    if (primaryCustomDomain && isSubdomainRequest && !basePath) {
       return {
         html: "",
         statusCode: 301,
@@ -452,10 +455,7 @@ Sitemap: ${domain}/sitemap.xml
       ((snapshot.theme as unknown as Record<string, unknown>)?.language as string | undefined) ||
       "en";
 
-    const fullHtml = `<!DOCTYPE html>
-<html lang="${escapeHtml(String(siteLang))}">
-  <head>
-    <meta charset="UTF-8" />
+    const seoHead = `<meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(description)}" />
@@ -480,7 +480,44 @@ Sitemap: ${domain}/sitemap.xml
     ${ogImageUrl ? `<meta name="twitter:image" content="${escapeHtml(ogImageUrl)}" />` : ""}
 
     <!-- JSON-LD Structured Data for Google Rich Snippets -->
-    ${schemaScripts}
+    ${schemaScripts}`;
+
+    const htmlLang = escapeHtml(String(siteLang));
+    const fingerprint = renderFingerprint(website);
+
+    const siteKitPage = await this.renderWithSiteKit(snapshot, targetPage.slug, identifier);
+    if (siteKitPage) {
+      const assetQuery = `?v=${encodeURIComponent(siteKitPage.assetsVersion)}`;
+      const body = basePath
+        ? siteKitPage.body.replace(/(\shref=")\/(?!\/)([^"]*)"/g, (_, attr: string, rest: string) => `${attr}${basePath}${rest && !rest.startsWith("#") && !rest.startsWith("?") ? `/${rest}` : rest}"`)
+        : siteKitPage.body;
+      const html = `<!DOCTYPE html>
+<html lang="${htmlLang}">
+  <head>
+    ${seoHead}
+    <link rel="stylesheet" href="/_wb/site.css${assetQuery}" />
+    ${siteKitPage.head}
+  </head>
+  <body data-wb-contact="${escapeHtml(`${basePath}/contact`)}">
+    ${body}
+    <script src="/_wb/site.js${assetQuery}" defer></script>
+  </body>
+</html>`;
+      const result: CachedPage = {
+        html,
+        statusCode: 200,
+        contentType: "text/html; charset=utf-8",
+        cachedAt: Date.now(),
+        fingerprint,
+      };
+      pageCache.set(cacheKey, result);
+      return result;
+    }
+
+    const fullHtml = `<!DOCTYPE html>
+<html lang="${htmlLang}">
+  <head>
+    ${seoHead}
 
     <style>
       :root {
@@ -654,16 +691,18 @@ Sitemap: ${domain}/sitemap.xml
   </body>
 </html>`;
 
-    const result: CachedPage = {
-      html: fullHtml,
-      statusCode: 200,
-      contentType: "text/html; charset=utf-8",
-      cachedAt: Date.now(),
-      fingerprint: renderFingerprint(website),
-    };
+    // Not cached: the next request retries the site-kit renderer.
+    return { html: fullHtml, statusCode: 200, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
+  }
 
-    pageCache.set(cacheKey, result);
-    return result;
+  /** The editor's own components, rendered by the site-renderer service. Null means use the legacy renderer. */
+  private async renderWithSiteKit(snapshot: PublishSnapshot, slug: string, identifier: string): Promise<RenderedSitePage | null> {
+    try {
+      return await siteRendererClient.render(snapshot, slug);
+    } catch (error) {
+      logger.warn({ err: error, identifier, slug }, "Site renderer unavailable; serving the legacy page");
+      return null;
+    }
   }
 
   private renderPageSectionsHtml(

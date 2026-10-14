@@ -4,6 +4,23 @@ import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { emailService } from "../../email/services/email.service.js";
 import { liveSiteEngineService } from "../services/live-site-engine.service.js";
+import { siteRendererClient } from "../services/site-renderer.client.js";
+
+/** Client sites embed videos, maps and images from anywhere, so they get a wider policy than the app. */
+const LIVE_SITE_CSP = [
+  "default-src 'self'",
+  "img-src * data: blob:",
+  "media-src * data: blob:",
+  "frame-src https:",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "script-src 'self' 'unsafe-inline'",
+  "connect-src 'self'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+].join("; ");
 
 function extractIdentifier(req: Request): string {
   // 1. Explicit path parameter (e.g. /site/:subdomain or /live/:subdomain)
@@ -38,7 +55,7 @@ export class PublicSiteController {
       }
 
       const slug = req.path || "/";
-      const result = await liveSiteEngineService.renderPage(identifier, slug);
+      const result = await liveSiteEngineService.renderPage(identifier, slug, req.baseUrl || "");
 
       if (result.redirectUrl) {
         const queryString = req.url && req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
@@ -59,10 +76,26 @@ export class PublicSiteController {
       res.status(result.statusCode);
       res.setHeader("Content-Type", result.contentType);
       res.setHeader("X-Robots-Tag", "all");
+      res.setHeader("Content-Security-Policy", LIVE_SITE_CSP);
       res.setHeader("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400");
       res.send(result.html);
     } catch (error) {
       next(error);
+    }
+  };
+
+  /** /_wb/site.css and /_wb/site.js; a request carrying the current ?v= is cached for good. */
+  serveAsset = (kind: "css" | "js") => async (req: Request, res: Response) => {
+    try {
+      const assets = await siteRendererClient.assets();
+      res.setHeader("Content-Type", kind === "css" ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8");
+      res.setHeader(
+        "Cache-Control",
+        req.query.v === assets.version ? "public, max-age=31536000, immutable" : "public, max-age=300",
+      );
+      res.send(assets[kind]);
+    } catch {
+      res.status(503).setHeader("Retry-After", "30").type("text/plain").send("Site assets are temporarily unavailable.");
     }
   };
 

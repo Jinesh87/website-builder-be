@@ -75,6 +75,18 @@ export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY?.trim() || "",
   OPENAI_MODEL: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
   PUBLIC_SITE_DOMAIN: (process.env.PUBLIC_SITE_DOMAIN?.trim() || "bytezora.site").toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, ""),
+
+  /** Renders live pages with the editor's components (frontend `site-renderer`). Falls back to the built-in renderer when unreachable. */
+  SITE_RENDERER_URL: (process.env.SITE_RENDERER_URL?.trim() || "http://127.0.0.1:3100").replace(/\/$/, ""),
+  /** Public IPs custom domains must point at (A/AAAA records), comma-separated. Unset = routing isn't checked. */
+  SITE_SERVER_IPS: (process.env.SITE_SERVER_IPS ?? "")
+    .split(",")
+    .map((ip) => ip.trim())
+    .filter(Boolean),
+  /** Hostname sub-domains like www.example.com may CNAME to instead of using A records, e.g. "sites.example.com". */
+  SITE_CNAME_TARGET: (process.env.SITE_CNAME_TARGET?.trim() ?? "").toLowerCase().replace(/\.$/, ""),
+  /** Shared with the server's nginx domain-sync script (deploy/nginx-domain-sync). Unset = endpoint disabled. */
+  DOMAIN_SYNC_TOKEN: process.env.DOMAIN_SYNC_TOKEN?.trim() || "",
 };
 
 export const isProduction = isProd;

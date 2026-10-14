@@ -117,7 +117,7 @@ function ownClientId(actor: AuthUser): string {
 }
 
 /** The single place that decides which websites an actor may see or change. */
-function scopeFor(actor: AuthUser): Prisma.WebsiteWhereInput {
+export function scopeFor(actor: AuthUser): Prisma.WebsiteWhereInput {
   return actor.role === UserRole.SUPER_ADMIN ? {} : { clientId: ownClientId(actor) };
 }
 
@@ -776,7 +776,21 @@ export class WebsiteService {
     const hostnames = (website.domains || []).map((d) => d.hostname);
     liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     return this.get(id, actor);
+  }
 
+  /** Takes the site offline. The live version is kept, so publishing again restores it. */
+  async unpublish(id: string, actor: AuthUser): Promise<WebsiteDetail> {
+    const website = await prisma.website.findFirst({ where: { id, ...scopeFor(actor) }, include: detailInclude });
+    if (!website) throw NOT_FOUND();
+    if (website.status !== WebsiteStatus.PUBLISHED) {
+      throw new AppError(409, "This website isn't published.", "WEBSITE_NOT_PUBLISHED");
+    }
+
+    await prisma.website.update({ where: { id: website.id }, data: { status: WebsiteStatus.UNPUBLISHED } });
+    logger.info({ websiteId: website.id, actorId: actor.id }, "Website unpublished");
+    const hostnames = (website.domains || []).map((d) => d.hostname);
+    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+    return this.get(id, actor);
   }
 
   async listVersions(id: string, actor: AuthUser): Promise<WebsiteVersionView[]> {

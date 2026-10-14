@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# Keeps nginx in step with the custom domains customers connect in the web builder.
+#
+# For every connected domain it creates  /etc/nginx/sites-enabled/zz-webbuilder-<domain>.conf
+# and a Let's Encrypt certificate named  webbuilder-<domain>. For removed domains it deletes both.
+# It never edits any other nginx file or certificate. Run as root (systemd timer, every minute).
+set -euo pipefail
+
+ENV_FILE=${WB_SYNC_ENV:-/etc/webbuilder/domain-sync.env}
+# shellcheck source=/dev/null
+[[ -f $ENV_FILE ]] && . "$ENV_FILE"
+
+: "${SYNC_TOKEN:?SYNC_TOKEN is not set (see $ENV_FILE)}"
+API_URL=${API_URL:-http://127.0.0.1:3000}
+UPSTREAM=${UPSTREAM:-http://127.0.0.1:3000}
+SITES_DIR=${SITES_DIR:-/etc/nginx/sites-enabled}
+ACME_ROOT=${ACME_ROOT:-/var/www/webbuilder-acme}
+LE_DIR=${LE_DIR:-/etc/letsencrypt}
+STATE_DIR=${STATE_DIR:-/var/lib/webbuilder-domain-sync}
+# A domain whose certificate request failed waits this long before the next try
+# (Let's Encrypt blocks a domain after 5 failures in an hour).
+RETRY_AFTER_SECONDS=${RETRY_AFTER_SECONDS:-3600}
+ACME_EMAIL=${ACME_EMAIL:-}
+
+PREFIX=zz-webbuilder-
+LIST_HEADER="# webbuilder domains v1"
+HOSTNAME_RE='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'
+
+log() { echo "[webbuilder-domain-sync] $*"; }
+
+mkdir -p "$ACME_ROOT" "$STATE_DIR/failed"
+exec 9>"$STATE_DIR/lock"
+flock -n 9 || exit 0
+
+conf_path() { echo "$SITES_DIR/${PREFIX}$1.conf"; }
+cert_name() { echo "webbuilder-$1"; }
+has_cert() { [[ -f "$LE_DIR/live/$(cert_name "$1")/fullchain.pem" ]]; }
+
+acme_location() {
+  cat <<EOF
+    location ^~ /.well-known/acme-challenge/ {
+        root $ACME_ROOT;
+        default_type text/plain;
+    }
+EOF
+}
+
+proxy_location() {
+  cat <<EOF
+    location / {
+        proxy_pass $UPSTREAM;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        client_max_body_size 2m;
+    }
+EOF
+}
+
+# Before the certificate exists: plain HTTP, so Let's Encrypt can check the domain.
+http_conf() {
+  cat <<EOF
+# Managed by webbuilder-domain-sync. Changes are overwritten; remove the domain in the web builder instead.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $1;
+$(acme_location)
+$(proxy_location)
+}
+EOF
+}
+
+https_conf() {
+  local live="$LE_DIR/live/$(cert_name "$1")"
+  local extras=""
+  [[ -f $LE_DIR/options-ssl-nginx.conf ]] && extras+="    include $LE_DIR/options-ssl-nginx.conf;"$'\n'
+  [[ -f $LE_DIR/ssl-dhparams.pem ]] && extras+="    ssl_dhparam $LE_DIR/ssl-dhparams.pem;"$'\n'
+  cat <<EOF
+# Managed by webbuilder-domain-sync. Changes are overwritten; remove the domain in the web builder instead.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $1;
+$(acme_location)
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name $1;
+    ssl_certificate $live/fullchain.pem;
+    ssl_certificate_key $live/privkey.pem;
+${extras}$(proxy_location)
+}
+EOF
+}
+
+# Writes a file only when its content changes; remembers the old version for rollback.
+BACKUP_DIR=$(mktemp -d)
+trap 'rm -rf "$BACKUP_DIR"' EXIT
+touched=()
+
+put_conf() {
+  local path=$1 content=$2
+  [[ -f $path ]] && [[ "$(cat "$path")" == "$content" ]] && return 1
+  [[ -f $path ]] && cp "$path" "$BACKUP_DIR/$(basename "$path")"
+  touched+=("$path")
+  printf '%s\n' "$content" >"$path"
+}
+
+drop_conf() {
+  local path=$1
+  cp "$path" "$BACKUP_DIR/$(basename "$path")"
+  touched+=("$path")
+  rm -f "$path"
+}
+
+rollback() {
+  local path
+  for path in "${touched[@]}"; do
+    if [[ -f "$BACKUP_DIR/$(basename "$path")" ]]; then
+      cp "$BACKUP_DIR/$(basename "$path")" "$path"
+    else
+      rm -f "$path"
+    fi
+  done
+  touched=()
+}
+
+# Applies the touched files, or puts them back when nginx rejects the result.
+apply() {
+  ((${#touched[@]} == 0)) && return 0
+  if nginx -t -q 2>"$STATE_DIR/nginx-test.log"; then
+    systemctl reload nginx
+    touched=()
+    rm -f "$BACKUP_DIR"/*
+    return 0
+  fi
+  log "nginx rejected the change, rolled back: $(cat "$STATE_DIR/nginx-test.log")"
+  rollback
+  return 1
+}
+
+# 1. The list of connected domains. Any doubt about the answer -> change nothing.
+if ! response=$(curl -fsS --max-time 15 -H "Authorization: Bearer $SYNC_TOKEN" "$API_URL/api/internal/domains"); then
+  log "web builder API unreachable; nothing changed"
+  exit 1
+fi
+if [[ "$(head -n 1 <<<"$response")" != "$LIST_HEADER" ]]; then
+  log "unexpected answer from the API; nothing changed"
+  exit 1
+fi
+
+declare -A wanted=()
+while IFS= read -r domain; do
+  [[ -z $domain ]] && continue
+  if [[ $domain =~ $HOSTNAME_RE ]]; then
+    wanted[$domain]=1
+  else
+    log "skipping invalid hostname: $domain"
+  fi
+done < <(tail -n +2 <<<"$response")
+
+# 2. Removed domains: delete the site and its certificate.
+removed=()
+for path in "$SITES_DIR/${PREFIX}"*.conf; do
+  [[ -e $path ]] || continue
+  domain=$(basename "$path" .conf)
+  domain=${domain#"$PREFIX"}
+  if [[ -z ${wanted[$domain]:-} ]]; then
+    drop_conf "$path"
+    removed+=("$domain")
+  fi
+done
+
+# 3. Connected domains: HTTPS site when the certificate exists, HTTP-only until then.
+pending=()
+for domain in "${!wanted[@]}"; do
+  if has_cert "$domain"; then
+    put_conf "$(conf_path "$domain")" "$(https_conf "$domain")" || true
+  else
+    put_conf "$(conf_path "$domain")" "$(http_conf "$domain")" || true
+    pending+=("$domain")
+  fi
+done
+
+apply || exit 1
+for domain in "${removed[@]}"; do
+  log "removed $domain"
+  certbot delete --non-interactive --cert-name "$(cert_name "$domain")" >/dev/null 2>&1 || true
+  rm -f "$STATE_DIR/failed/$domain"
+done
+
+# 4. Certificates for new domains.
+for domain in "${pending[@]}"; do
+  marker="$STATE_DIR/failed/$domain"
+  if [[ -f $marker ]] && (($(date +%s) - $(stat -c %Y "$marker") < RETRY_AFTER_SECONDS)); then
+    continue
+  fi
+  email_args=(--register-unsafely-without-email)
+  [[ -n $ACME_EMAIL ]] && email_args=(--email "$ACME_EMAIL")
+  if certbot certonly --webroot -w "$ACME_ROOT" -d "$domain" --cert-name "$(cert_name "$domain")" \
+    --non-interactive --agree-tos --keep-until-expiring "${email_args[@]}" \
+    --deploy-hook "systemctl reload nginx" >"$STATE_DIR/certbot-$domain.log" 2>&1; then
+    rm -f "$marker"
+    put_conf "$(conf_path "$domain")" "$(https_conf "$domain")" || true
+    if apply; then
+      log "HTTPS ready for $domain"
+    fi
+  else
+    touch "$marker"
+    log "certificate for $domain failed (retry in $((RETRY_AFTER_SECONDS / 60)) min): $(tail -n 3 "$STATE_DIR/certbot-$domain.log" | tr '\n' ' ')"
+  fi
+done
