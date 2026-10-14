@@ -75,7 +75,7 @@ API_PUBLIC_URL=https://webcmsb.hrtrace.com
 CORS_ORIGIN=https://webcms.hrtrace.com
 ```
 
-To save in nano, press Ctrl+O and then Enter. To exit, press Ctrl+X.
+To save in nano, press Ctrl+O and then Enter. atTo exit, press Ctrl+X.
 
 
 ## Step 4: Check the frontend settings
