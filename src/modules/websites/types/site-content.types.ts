@@ -450,6 +450,7 @@ export type SectionDataMap = {
   features: {
     heading: string;
     intro?: string;
+    variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards";
     columns: GridColumns;
     mobileColumns: GridColumns;
     items: { icon?: IconName; title: string; description: string }[];
