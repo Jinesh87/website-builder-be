@@ -1,5 +1,6 @@
 import type { ThemeSettings } from "../../modules/websites/types/site-content.types.js";
 import { BUSINESS_TEMPLATES } from "./business/index.js";
+import { EDUCATION_TEMPLATES } from "./education/index.js";
 import { PORTFOLIO_TEMPLATES } from "./portfolio/index.js";
 
 export type ThemeSeed = { name: string; settings: ThemeSettings };
@@ -82,5 +83,6 @@ export const THEME_SEEDS: ThemeSeed[] = [
     },
   },
   ...BUSINESS_TEMPLATES.map((business) => business.theme),
+  ...EDUCATION_TEMPLATES.map((edu) => edu.theme),
   ...PORTFOLIO_TEMPLATES.map((portfolio) => portfolio.theme),
 ];
