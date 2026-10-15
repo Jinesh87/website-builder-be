@@ -208,6 +208,14 @@ export class WebsiteController {
     }
   };
 
+  unpublish = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ website: await websiteService.unpublish(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   listVersions = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ versions: await websiteService.listVersions(req.params.id, req.user!) });

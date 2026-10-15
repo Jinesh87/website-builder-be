@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from "./common/middleware/error-handler
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import authRouter from "./modules/auth/auth.routes.js";
+import { domainSyncRouter, websiteDomainsRouter } from "./modules/domains/domain.routes.js";
 import clientsRouter from "./modules/clients/client.routes.js";
 import emailSettingsRouter from "./modules/email/email.routes.js";
 import aiSettingsRouter from "./modules/admin-settings/ai-settings.routes.js";
@@ -75,6 +76,8 @@ app.use("/api/admin/wallet", adminWalletRouter);
 app.use("/api/admin/clients", clientsRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);
 app.use("/api/templates", publicTemplatesRouter);
+app.use("/api/internal/domains", domainSyncRouter);
+app.use("/api/websites/:id/domains", websiteDomainsRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
 
