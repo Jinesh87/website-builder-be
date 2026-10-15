@@ -14,6 +14,9 @@ import {
 import { applyOps, type CanvasOp, type SectionEnvelope } from "./ai-ops.js";
 import { dataSpec, fieldAt, settingsSpec, type FieldSpec } from "./field-catalog.js";
 
+import type { PageView } from "../types/website.types.js";
+import type { ThemeSettings } from "../types/site-content.types.js";
+
 /**
  * Field-level edits for AI-built pages. The AI names the exact fields it sets or removes on a section
  * (by path, checked against the field catalog), so every section type is edited the same way and
@@ -25,12 +28,77 @@ type JsonRecord = Record<string, unknown>;
 
 export type SectionDraft = { type: string; settings?: JsonRecord; data: JsonRecord };
 
+export type AiClarification = {
+  question: string;
+  options: string[];
+  allowCustomInput?: boolean;
+};
+
+export type CreatedPageEdit = {
+  id: string;
+  name: string;
+  slug: string;
+  pageType: string;
+  showInNav: boolean;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  sections: SectionEnvelope[];
+};
+
+export type UpdatedPageEdit = {
+  pageId: string;
+  name?: string;
+  slug?: string;
+  showInNav?: boolean;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  sections?: SectionEnvelope[];
+};
+
+export type NavigationPatchEdit = {
+  headerMenu?: Array<{ label: string; href: string }>;
+  headerCta?: { label?: string; href?: string };
+  footerColumns?: Array<{ title?: string; links: Array<{ label: string; href: string }> }>;
+};
+
+export type ThemePatchEdit = Record<string, unknown>;
+
 export type EditOp = (
   | { op: "update"; sectionId: string; set: JsonRecord; unset: string[] }
   | { op: "add"; position: number | null; section: SectionDraft }
   | { op: "remove"; sectionIds: string[] }
   | { op: "move"; sectionId: string; toIndex: number }
   | { op: "replace_page"; sections: SectionDraft[] }
+  | {
+      op: "create_page";
+      page: {
+        name: string;
+        slug?: string;
+        pageType?: string;
+        showInNav?: boolean;
+        seoTitle?: string;
+        seoDescription?: string;
+        sections: SectionDraft[];
+      };
+    }
+  | {
+      op: "update_page";
+      pageIdOrSlug: string;
+      name?: string;
+      slug?: string;
+      showInNav?: boolean;
+      seoTitle?: string;
+      seoDescription?: string;
+      sections?: SectionDraft[];
+    }
+  | { op: "delete_page"; pageIdOrSlug: string }
+  | {
+      op: "update_navigation";
+      headerMenu?: Array<{ label: string; href: string }>;
+      headerCta?: { label?: string; href?: string };
+      footerColumns?: Array<{ title?: string; links: Array<{ label: string; href: string }> }>;
+    }
+  | { op: "update_theme"; colors?: Record<string, string>; font?: string }
 ) & {
   /** The AI's one-line description of this operation, shown to the owner only once it's applied. */
   note?: string;
@@ -42,8 +110,9 @@ export const IMAGE_SOURCES = ["library", "generate", "unspecified"] as const;
 export type ImageSource = (typeof IMAGE_SOURCES)[number];
 
 export type EditReply = {
-  intent: "chat" | "edit" | "look";
+  intent: "chat" | "edit" | "look" | "clarify";
   reply: string;
+  clarification?: AiClarification | null;
   /** Sections the AI needs to see in full before it can answer. */
   look: string[];
   imageSource: ImageSource;
@@ -65,6 +134,11 @@ const draft = Joi.object({
 });
 
 const common = { op: Joi.string().required(), note: Joi.string().trim().allow("").max(300).default("") };
+const navLink = Joi.object({
+  label: Joi.string().trim().min(1).max(100).required(),
+  href: Joi.string().trim().min(1).max(200).required(),
+});
+
 const OP_SCHEMAS: Record<EditOp["op"], Joi.ObjectSchema> = {
   update: Joi.object({
     ...common,
@@ -76,11 +150,68 @@ const OP_SCHEMAS: Record<EditOp["op"], Joi.ObjectSchema> = {
   remove: Joi.object({ ...common, sectionIds: Joi.array().items(sectionId).min(1).required() }),
   move: Joi.object({ ...common, sectionId, toIndex: Joi.number().integer().min(0).required() }),
   replace_page: Joi.object({ ...common, sections: Joi.array().items(draft).min(1).max(MAX_PAGE_SECTIONS).required() }),
+  create_page: Joi.object({
+    ...common,
+    page: Joi.object({
+      name: Joi.string().trim().min(1).max(120).required(),
+      slug: Joi.string().trim().max(160).optional(),
+      pageType: Joi.string().trim().optional(),
+      showInNav: Joi.boolean().default(true),
+      seoTitle: Joi.string().allow("").max(160).optional(),
+      seoDescription: Joi.string().allow("").max(320).optional(),
+      sections: Joi.array().items(draft).min(1).max(MAX_PAGE_SECTIONS).required(),
+    }).required(),
+  }),
+  update_page: Joi.object({
+    ...common,
+    pageIdOrSlug: Joi.string().trim().min(1).max(128).required(),
+    name: Joi.string().trim().min(1).max(120).optional(),
+    slug: Joi.string().trim().max(160).optional(),
+    showInNav: Joi.boolean().optional(),
+    seoTitle: Joi.string().allow("").max(160).optional(),
+    seoDescription: Joi.string().allow("").max(320).optional(),
+    sections: Joi.array().items(draft).max(MAX_PAGE_SECTIONS).optional(),
+  }),
+  delete_page: Joi.object({
+    ...common,
+    pageIdOrSlug: Joi.string().trim().min(1).max(128).required(),
+  }),
+  update_navigation: Joi.object({
+    ...common,
+    headerMenu: Joi.array().items(navLink).max(12).optional(),
+    headerCta: Joi.object({
+      label: Joi.string().trim().max(100).optional(),
+      href: Joi.string().trim().max(200).optional(),
+    }).optional(),
+    footerColumns: Joi.array()
+      .items(
+        Joi.object({
+          title: Joi.string().trim().max(100).optional(),
+          links: Joi.array().items(navLink).max(10).required(),
+        }),
+      )
+      .max(6)
+      .optional(),
+  }),
+  update_theme: Joi.object({
+    ...common,
+    colors: Joi.object().unknown(true).optional(),
+    font: Joi.string().trim().optional(),
+  }),
 };
 
+const clarificationSchema = Joi.object({
+  question: Joi.string().trim().min(1).max(500).required(),
+  options: Joi.array().items(Joi.string().trim().min(1).max(200)).min(2).max(6).required(),
+  allowCustomInput: Joi.boolean().default(true),
+})
+  .allow(null)
+  .optional();
+
 const replySchema = Joi.object({
-  intent: Joi.string().valid("chat", "edit", "look").optional(),
+  intent: Joi.string().valid("chat", "edit", "look", "clarify").optional(),
   reply: Joi.string().allow("").max(4000).default(""),
+  clarification: clarificationSchema,
   look: Joi.array().items(Joi.string().trim().max(64)).max(4).default([]),
   imageSource: Joi.string().valid(...IMAGE_SOURCES).default("unspecified"),
   imageSourceQuote: Joi.string().allow("").max(500).default(""),
@@ -131,7 +262,7 @@ export function parseEditReply(raw: unknown): ParsedEditReply {
     const note = isRecord(rawOp) && typeof rawOp.note === "string" ? rawOp.note.trim() : "";
     if (note) droppedNotes.push(note);
   });
-  const intent = value.intent ?? (ops.length > 0 || value.seo ? "edit" : "chat");
+  const intent = value.intent ?? (value.clarification ? "clarify" : ops.length > 0 || value.seo ? "edit" : "chat");
   return { reply: { ...value, intent, ops } as EditReply, errors, droppedNotes };
 }
 
@@ -144,6 +275,9 @@ export type EditEnv = {
   /** Images already created for "GENERATE: <description>" values. */
   generated?: ReadonlyMap<string, BriefImage>;
   maxGeneratedImages: number;
+  /** Other pages on the site, so cross-page edits can validate and update them. */
+  pages?: readonly PageView[];
+  theme?: ThemeSettings;
 };
 
 /** What happened to one of the AI's operations. */
@@ -161,6 +295,16 @@ export type CompiledEdits = {
   imageNeeds: ImageNeed[];
   /** Some image value isn't on the page yet (library photo or generated). */
   newImages: boolean;
+  /** Pages created by create_page ops. */
+  createdPages: CreatedPageEdit[];
+  /** Other pages updated by update_page ops. */
+  updatedPages: UpdatedPageEdit[];
+  /** Page ids deleted by delete_page ops. */
+  deletedPageIds: string[];
+  /** Navigation updates. */
+  navigationPatch?: NavigationPatchEdit;
+  /** Theme updates. */
+  themePatch?: ThemePatchEdit;
 };
 
 type Resolver = {
@@ -439,12 +583,28 @@ function createSection(sectionDraft: SectionDraft, label: string, resolver: Reso
   return created;
 }
 
+function toSlug(name: string): string {
+  const clean = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+  return `/${clean || "page"}`;
+}
+
 /** Checks the AI's edits against the page and the schema and turns the valid ones into canvas ops. */
 export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdits {
   const resolver: Resolver = { env, errors: [], imageNeeds: [], newImages: false, pageJson: JSON.stringify(env.sections) };
   let page = [...env.sections];
   const applied: CanvasOp[] = [];
   const changedIds: string[] = [];
+  const createdPages: CreatedPageEdit[] = [];
+  const updatedPages: UpdatedPageEdit[] = [];
+  const deletedPageIds: string[] = [];
+  let navigationPatch: NavigationPatchEdit | undefined = undefined;
+  let themePatch: ThemePatchEdit | undefined = undefined;
   let rebuild = false;
   const apply = (op: CanvasOp) => {
     applied.push(op);
@@ -497,6 +657,98 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
         }
         break;
       }
+      case "create_page": {
+        const pageDraft = op.page;
+        const pageSections: SectionEnvelope[] = [];
+        (pageDraft.sections ?? []).forEach((secDraft, idx) => {
+          const created = createSection(secDraft, `${label}.page.sections[${idx}]`, resolver);
+          if (created) pageSections.push(created);
+        });
+        if (pageSections.length > 0) {
+          const rawSlug = pageDraft.slug?.trim() || toSlug(pageDraft.name);
+          const slug = rawSlug.startsWith("/") ? rawSlug : `/${rawSlug}`;
+          const newPageId = randomUUID();
+          createdPages.push({
+            id: newPageId,
+            name: pageDraft.name.trim(),
+            slug,
+            pageType: pageDraft.pageType ?? "CUSTOM",
+            showInNav: pageDraft.showInNav ?? true,
+            seoTitle: pageDraft.seoTitle ?? null,
+            seoDescription: pageDraft.seoDescription ?? null,
+            sections: pageSections,
+          });
+          if (pageDraft.showInNav !== false) {
+            const currentMenu =
+              navigationPatch?.headerMenu ??
+              env.pages?.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug })) ??
+              [];
+            if (!currentMenu.some((m) => m.href === slug)) {
+              navigationPatch = {
+                ...(navigationPatch ?? {}),
+                headerMenu: [...currentMenu, { label: pageDraft.name.trim(), href: slug }],
+              };
+            }
+          }
+        }
+        break;
+      }
+      case "update_page": {
+        const targetPage = env.pages?.find(
+          (p) =>
+            p.id === op.pageIdOrSlug ||
+            p.slug === op.pageIdOrSlug ||
+            p.name.toLowerCase() === op.pageIdOrSlug.toLowerCase(),
+        );
+        if (targetPage) {
+          const updatedSections: SectionEnvelope[] = [];
+          if (op.sections && op.sections.length > 0) {
+            op.sections.forEach((secDraft, idx) => {
+              const created = createSection(secDraft, `${label}.sections[${idx}]`, resolver);
+              if (created) updatedSections.push(created);
+            });
+          }
+          updatedPages.push({
+            pageId: targetPage.id,
+            name: op.name,
+            slug: op.slug ? (op.slug.startsWith("/") ? op.slug : `/${op.slug}`) : undefined,
+            showInNav: op.showInNav,
+            seoTitle: op.seoTitle,
+            seoDescription: op.seoDescription,
+            sections: updatedSections.length > 0 ? updatedSections : undefined,
+          });
+        }
+        break;
+      }
+      case "delete_page": {
+        const targetPage = env.pages?.find(
+          (p) =>
+            p.id === op.pageIdOrSlug ||
+            p.slug === op.pageIdOrSlug ||
+            p.name.toLowerCase() === op.pageIdOrSlug.toLowerCase(),
+        );
+        if (targetPage && targetPage.slug !== "/") {
+          deletedPageIds.push(targetPage.id);
+        }
+        break;
+      }
+      case "update_navigation": {
+        navigationPatch = {
+          ...(navigationPatch ?? {}),
+          ...(op.headerMenu ? { headerMenu: op.headerMenu } : {}),
+          ...(op.headerCta ? { headerCta: op.headerCta } : {}),
+          ...(op.footerColumns ? { footerColumns: op.footerColumns } : {}),
+        };
+        break;
+      }
+      case "update_theme": {
+        themePatch = {
+          ...(themePatch ?? {}),
+          ...(op.colors ? { colors: op.colors } : {}),
+          ...(op.font ? { font: op.font } : {}),
+        };
+        break;
+      }
     }
   }
 
@@ -509,5 +761,10 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
     errors: resolver.errors,
     imageNeeds: resolver.imageNeeds,
     newImages: resolver.newImages,
+    createdPages,
+    updatedPages,
+    deletedPageIds: [...new Set(deletedPageIds)],
+    navigationPatch,
+    themePatch,
   };
 }

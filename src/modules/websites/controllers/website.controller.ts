@@ -253,6 +253,7 @@ export class WebsiteController {
           : aiGeneratorService.generate(
               {
                 ...body,
+                website,
                 clientId: website.clientId,
                 websiteId: website.id,
                 userId: req.user?.id,
@@ -344,6 +345,15 @@ export class WebsiteController {
   generatePageSeo = async (req: Request<PageParams>, res: Response, next: NextFunction) => {
     try {
       const result = await aiSeoService.generatePageSeo(req.params.id, req.params.pageId, req.body, req.user!);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  reviewPageSeoContent = async (req: Request<PageParams>, res: Response, next: NextFunction) => {
+    try {
+      const result = await aiSeoService.reviewPageSeoContent(req.params.id, req.params.pageId, req.body, req.user!);
       res.json(result);
     } catch (error) {
       next(error);

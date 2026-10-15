@@ -210,4 +210,11 @@ export const generatePageSeoSchema = Joi.object({
   contentSummary: optionalText(4000),
 });
 
+export const reviewPageSeoContentSchema = Joi.object({
+  targetKeyword: optionalText(100),
+  language: optionalText(50),
+  sections: Joi.array().items(Joi.object().unknown(true)).optional(),
+});
+
+
 

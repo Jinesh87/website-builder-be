@@ -16,6 +16,14 @@ import { PLANNER_SYSTEM_PROMPT, buildPlannerInput } from "../ai/ai-planner.js";
 import { sanitizeCustomData } from "../ai/custom-section.js";
 import { CUSTOM_LIMITS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
+import {
+  type AiClarification,
+  type CreatedPageEdit,
+  type NavigationPatchEdit,
+  type ThemePatchEdit,
+  type UpdatedPageEdit,
+} from "../ai/section-edits.js";
+import type { WebsiteDetail } from "../types/website.types.js";
 import { isReasoningModel } from "../../../common/constants/ai-models.js";
 
 export type { SectionEnvelope };
@@ -27,12 +35,19 @@ export type AiSuggestionPayload = {
   prompt: string;
   summary: string;
   chatReply?: string;
+  clarification?: AiClarification | null;
   target:
     | { scope: "chat" }
     | { scope: "section"; sectionId: string }
-    | { scope: "page"; rebuild: boolean; focusSectionId?: string };
+    | { scope: "page"; rebuild: boolean; focusSectionId?: string; pageId?: string }
+    | { scope: "site"; affectedPageIds?: string[]; createdPageIds?: string[] };
   before: SectionEnvelope[];
   after: SectionEnvelope[];
+  createdPages?: CreatedPageEdit[];
+  updatedPages?: UpdatedPageEdit[];
+  deletedPageIds?: string[];
+  navigationPatch?: NavigationPatchEdit;
+  themePatch?: ThemePatchEdit;
   /** Proposed SEO for the current page; applied together with the section changes. */
   seo?: { pageId: string; seoTitle: string; seoDescription: string };
 };
@@ -51,6 +66,7 @@ export type GenerateAiOptions = {
   history?: ChatHistoryMessage[];
   /** Page open in the editor. */
   pageId?: string;
+  website?: WebsiteDetail;
   clientId?: string;
   websiteId?: string;
   userId?: string;
@@ -1540,6 +1556,18 @@ export class AiGeneratorService {
       await this.checkModeration(prompt, apiKey, signal);
     }
 
+    const siteContext = options.website
+      ? {
+          pages: options.website.draft.pages.map((p) => ({
+            name: p.name,
+            slug: p.slug,
+            sectionSummary: p.sections.map((s) => s.type).join(", "),
+          })),
+          headerMenu: options.website.draft.header.menu,
+          theme: { primaryColor: options.website.draft.theme.colors.primary },
+        }
+      : undefined;
+
     const plan = await this.plan(
       prompt,
       currentSections,
@@ -1547,7 +1575,21 @@ export class AiGeneratorService {
       history,
       logging,
       signal,
+      siteContext,
     );
+
+    if (plan.intent === "clarify" && plan.clarification) {
+      return {
+        id: crypto.randomUUID(),
+        prompt,
+        summary: plan.clarification.question || plan.reply,
+        chatReply: plan.reply || plan.clarification.question,
+        clarification: plan.clarification,
+        target: { scope: "chat" },
+        before: [],
+        after: [],
+      };
+    }
 
     if (plan.intent !== "edit" || plan.ops.length === 0) {
       const reply =
@@ -1565,20 +1607,75 @@ export class AiGeneratorService {
       };
     }
 
-    const addIds = plan.ops.map((op) =>
+    const createdPageOps = plan.ops.filter(
+      (op): op is Extract<PlannedOp, { op: "create_page" }> => op.op === "create_page",
+    );
+    const navOps = plan.ops.filter(
+      (op): op is Extract<PlannedOp, { op: "update_navigation" }> => op.op === "update_navigation",
+    );
+    const canvasPlanOps = plan.ops.filter(
+      (op): op is Exclude<PlannedOp, { op: "create_page" } | { op: "update_navigation" }> =>
+        op.op !== "create_page" && op.op !== "update_navigation",
+    );
+
+    const addIds = canvasPlanOps.map((op) =>
       op.op === "add" ? crypto.randomUUID() : undefined,
     );
-    onPlan?.(previewLayout(currentSections, plan.ops, addIds));
+    if (canvasPlanOps.length > 0) {
+      onPlan?.(previewLayout(currentSections, canvasPlanOps, addIds));
+    }
 
     const canvasOps = await Promise.all(
-      plan.ops.map((op, i) =>
+      canvasPlanOps.map((op, i) =>
         this.materialize(op, currentSections, logging, addIds[i], signal),
       ),
     );
-    const summary = plan.reply || "Updated the page";
+
+    const createdPages: CreatedPageEdit[] = await Promise.all(
+      createdPageOps.map(async (op) => {
+        const sections = await this.createPage(
+          op.sectionTypes,
+          op.instruction,
+          [],
+          logging,
+          signal,
+        );
+        const rawSlug =
+          op.slug?.trim() ||
+          `/${op.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "page"}`;
+        const slug = rawSlug.startsWith("/") ? rawSlug : `/${rawSlug}`;
+        return {
+          id: crypto.randomUUID(),
+          name: op.name,
+          slug,
+          pageType: "CUSTOM",
+          showInNav: op.showInNav ?? true,
+          sections,
+        };
+      }),
+    );
+
+    let navigationPatch: NavigationPatchEdit | undefined = undefined;
+    if (navOps.length > 0 || createdPages.some((p) => p.showInNav)) {
+      const currentMenu =
+        options.website?.draft.header.menu ??
+        options.website?.draft.pages.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug })) ??
+        [];
+      const newItems = createdPages
+        .filter((p) => p.showInNav && !currentMenu.some((m) => m.href === p.slug))
+        .map((p) => ({ label: p.name, href: p.slug }));
+      if (newItems.length > 0) {
+        navigationPatch = { headerMenu: [...currentMenu, ...newItems] };
+      }
+    }
+
+    const summary = plan.reply || (createdPages.length > 0 ? `Created ${createdPages[0]?.name} page` : "Updated the page");
+
+    const hasCrossPage = createdPages.length > 0 || Boolean(navigationPatch);
+    const afterSections = canvasOps.length > 0 ? applyOps(currentSections, canvasOps) : currentSections;
 
     const [onlyOp] = canvasOps;
-    if (canvasOps.length === 1 && onlyOp?.op === "update") {
+    if (!hasCrossPage && canvasOps.length === 1 && onlyOp?.op === "update") {
       const before = currentSections.filter((s) => s.id === onlyOp.section.id);
       return {
         id: crypto.randomUUID(),
@@ -1594,13 +1691,21 @@ export class AiGeneratorService {
       id: crypto.randomUUID(),
       prompt,
       summary,
-      target: {
-        scope: "page",
-        rebuild: canvasOps.some((op) => op.op === "replace_page"),
-        focusSectionId: focusSectionId(canvasOps),
-      },
+      target: hasCrossPage
+        ? {
+            scope: "site",
+            createdPageIds: createdPages.map((p) => p.id),
+            affectedPageIds: [options.pageId ?? ""].filter(Boolean),
+          }
+        : {
+            scope: "page",
+            rebuild: canvasOps.some((op) => op.op === "replace_page"),
+            focusSectionId: focusSectionId(canvasOps),
+          },
       before: currentSections,
-      after: applyOps(currentSections, canvasOps),
+      after: afterSections,
+      createdPages: createdPages.length > 0 ? createdPages : undefined,
+      navigationPatch,
     };
   }
 
@@ -1611,6 +1716,7 @@ export class AiGeneratorService {
     history: ChatHistoryMessage[],
     logging: LoggingContext,
     signal?: AbortSignal,
+    siteContext?: import("../ai/ai-planner.js").SitePlannerContext,
   ) {
     const messages: OpenAiMessage[] = [
       { role: "system", content: PLANNER_SYSTEM_PROMPT },
@@ -1619,7 +1725,7 @@ export class AiGeneratorService {
         .map((m) => ({ role: m.role, content: m.content })),
       {
         role: "user",
-        content: buildPlannerInput(prompt, sections, selectedSectionId),
+        content: buildPlannerInput(prompt, sections, selectedSectionId, siteContext),
       },
     ];
 
@@ -1644,7 +1750,7 @@ export class AiGeneratorService {
   }
 
   private async materialize(
-    op: PlannedOp,
+    op: Exclude<PlannedOp, { op: "create_page" } | { op: "update_navigation" }>,
     sections: SectionEnvelope[],
     logging: LoggingContext,
     reservedId?: string,
@@ -1691,7 +1797,9 @@ export class AiGeneratorService {
             signal,
           ),
         };
-      default:
+      case "remove":
+      case "move":
+      case "clear":
         return op;
     }
   }
