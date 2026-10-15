@@ -1,7 +1,6 @@
 import { isReasoningModel } from "../../../common/constants/ai-models.js";
 import { AppError } from "../../../common/errors/AppError.js";
-import { logger } from "../../../config/logger.js";
-import { prisma } from "../../../config/prisma.js";
+import { aiBillingService } from "../../wallet/services/ai-billing.service.js";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -124,21 +123,17 @@ export function createOpenAiJsonCompletion(context: OpenAiContext): JsonCompleti
     }
 
     const usage = reply.usage;
-    await prisma.aiUsageLog
-      .create({
-        data: {
-          clientId: context.clientId,
-          websiteId: context.websiteId,
-          userId: context.userId,
-          model: (reply.model ?? context.model).slice(0, 100),
-          scope,
-          promptTokens: usage?.prompt_tokens ?? 0,
-          completionTokens: usage?.completion_tokens ?? 0,
-          totalTokens: usage?.total_tokens ?? 0,
-          durationMs: Date.now() - startedAt,
-        },
-      })
-      .catch((error: unknown) => logger.warn({ err: error, scope }, "Could not record AI usage"));
+    await aiBillingService.recordUsage({
+      clientId: context.clientId,
+      websiteId: context.websiteId,
+      userId: context.userId,
+      model: reply.model ?? context.model,
+      scope,
+      promptTokens: usage?.prompt_tokens ?? 0,
+      completionTokens: usage?.completion_tokens ?? 0,
+      totalTokens: usage?.total_tokens ?? 0,
+      durationMs: Date.now() - startedAt,
+    });
 
     const choice = reply.choices?.[0];
     const content = choice?.message?.content;

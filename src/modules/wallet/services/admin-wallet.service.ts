@@ -71,20 +71,20 @@ export class AdminWalletService {
         },
       }),
       prisma.walletTransaction.count({ where: filtered }),
-      prisma.walletTransaction.groupBy({ by: ["type", "source"], where, _sum: { amountPaise: true }, _count: { _all: true } }),
-      prisma.wallet.aggregate({ _sum: { balancePaise: true }, _count: { _all: true }, where: { balancePaise: { gt: 0 } } }),
+      prisma.walletTransaction.groupBy({ by: ["type", "source"], where, _sum: { amount: true }, _count: { _all: true } }),
+      prisma.wallet.aggregate({ _sum: { balance: true }, _count: { _all: true }, where: { balance: { gt: 0 } } }),
     ]);
 
     const sum = (match: (group: (typeof groups)[number]) => boolean) =>
-      groups.filter(match).reduce((acc, group) => acc + (group._sum.amountPaise ?? 0), 0);
+      Math.round(groups.filter(match).reduce((acc, group) => acc + Number(group._sum.amount ?? 0), 0) * 1000) / 1000;
 
     return {
       items: rows.map((row) => ({
         id: row.id,
         type: row.type,
         source: row.source,
-        amountPaise: row.amountPaise,
-        balanceAfterPaise: row.balanceAfterPaise,
+        amount: Number(row.amount),
+        balanceAfter: Number(row.balanceAfter),
         description: row.description,
         createdAt: row.createdAt.toISOString(),
         client: row.wallet.client as ClientRef,
@@ -93,14 +93,14 @@ export class AdminWalletService {
         razorpayPaymentId: row.paymentOrder?.razorpayPaymentId ?? null,
       })),
       summary: {
-        topupsPaise: sum((group) => group.type === "CREDIT" && group.source === "TOPUP"),
-        topupCount: groups.filter((g) => g.type === "CREDIT" && g.source === "TOPUP").reduce((acc, g) => acc + g._count._all, 0),
-        aiUsagePaise: sum((group) => group.type === "DEBIT" && group.source === "AI_USAGE"),
-        adjustmentsPaise:
+        purchased: sum((group) => group.type === "CREDIT" && group.source === "TOPUP"),
+        purchaseCount: groups.filter((g) => g.type === "CREDIT" && g.source === "TOPUP").reduce((acc, g) => acc + g._count._all, 0),
+        aiUsage: sum((group) => group.type === "DEBIT" && group.source === "AI_USAGE"),
+        adjustments:
           sum((group) => group.type === "CREDIT" && group.source === "ADJUSTMENT") -
           sum((group) => group.type === "DEBIT" && group.source === "ADJUSTMENT"),
-        /** Current balances across every wallet, regardless of filters. */
-        heldBalancePaise: balances._sum.balancePaise ?? 0,
+        /** Connects currently held across every client, regardless of filters. */
+        heldBalance: Number(balances._sum.balance ?? 0),
         fundedWallets: balances._count._all,
       },
       total,
@@ -135,6 +135,7 @@ export class AdminWalletService {
         id: row.id,
         razorpayOrderId: row.razorpayOrderId,
         razorpayPaymentId: row.razorpayPaymentId,
+        connects: row.connects,
         amountPaise: row.amountPaise,
         currency: row.currency,
         status: row.status,

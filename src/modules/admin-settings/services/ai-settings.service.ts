@@ -1,5 +1,7 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import { aiModelOptions, DEFAULT_AI_MODEL, findAiModel, type AiModelOption } from "../../../common/constants/ai-models.js";
+import { aiBillingService } from "../../wallet/services/ai-billing.service.js";
+import { aiPricingService } from "./ai-pricing.service.js";
 import { decryptSecret, encryptSecret } from "../../../common/utils/secret-box.js";
 import { env } from "../../../config/env.js";
 import { prisma } from "../../../config/prisma.js";
@@ -37,7 +39,7 @@ function maskApiKey(key: string): string {
   return `${prefix}••••••••${key.slice(-4)}`;
 }
 
-function toView(config: AiConfig | null): AiConfigView {
+function toView(config: AiConfig | null, models: AiModelOption[]): AiConfigView {
   if (!config) {
     const envKey = env.OPENAI_API_KEY;
     const envModel = env.OPENAI_MODEL || "gpt-4o-mini";
@@ -46,7 +48,7 @@ function toView(config: AiConfig | null): AiConfigView {
       openaiApiKeyMasked: envKey ? maskApiKey(envKey) : null,
       model: envModel,
       updatedAt: null,
-      models: aiModelOptions(),
+      models,
     };
   }
 
@@ -58,7 +60,7 @@ function toView(config: AiConfig | null): AiConfigView {
     openaiApiKeyMasked: activeKey ? maskApiKey(activeKey) : null,
     model: config.model || env.OPENAI_MODEL || "gpt-4o-mini",
     updatedAt: config.updatedAt ? config.updatedAt.toISOString() : null,
-    models: aiModelOptions(),
+    models,
   };
 }
 
@@ -81,8 +83,11 @@ export class AiSettingsService {
 
   async getConfigView(): Promise<AiConfigView> {
     await this.ensureTable();
-    const config = await prisma.aiConfig.findUnique({ where: { id: CONFIG_ID } }).catch(() => null);
-    return toView(config);
+    const [config, overrides] = await Promise.all([
+      prisma.aiConfig.findUnique({ where: { id: CONFIG_ID } }).catch(() => null),
+      aiPricingService.overrides(),
+    ]);
+    return toView(config, aiModelOptions(overrides));
   }
 
   async updateConfig(input: UpdateAiConfigInput): Promise<AiConfigView> {
@@ -106,12 +111,16 @@ export class AiSettingsService {
           },
         });
 
-    return toView(config);
+    return toView(config, aiModelOptions(await aiPricingService.overrides()));
   }
 
-  /** Pass the client id to apply that client's own model choice. */
+  /**
+   * Pass the client id to apply that client's own model choice.
+   * Every AI feature calls this first, so it also refuses clients that are out of connects.
+   */
   async getCredentials(clientId?: string | null): Promise<{ apiKey: string; model: string }> {
     await this.ensureTable();
+    if (clientId) await aiBillingService.assertCanUseAi(clientId);
     const [config, client] = await Promise.all([
       prisma.aiConfig.findUnique({ where: { id: CONFIG_ID } }).catch(() => null),
       clientId ? prisma.client.findUnique({ where: { id: clientId }, select: { aiModel: true } }) : null,
