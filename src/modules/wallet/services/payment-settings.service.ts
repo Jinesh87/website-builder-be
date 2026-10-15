@@ -99,6 +99,12 @@ export class PaymentSettingsService {
     return { keyId: config.razorpayKeyId, keySecret };
   }
 
+  /** The saved secrets in plain text, for the Super Admin's "show" button. */
+  async revealSecrets(): Promise<{ razorpayKeySecret: string | null; razorpayWebhookSecret: string | null }> {
+    const { keySecret, webhookSecret } = secrets(await this.load());
+    return { razorpayKeySecret: keySecret, razorpayWebhookSecret: webhookSecret };
+  }
+
   async getWebhookSecret(): Promise<string | null> {
     return secrets(await this.load()).webhookSecret;
   }

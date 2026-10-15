@@ -58,6 +58,11 @@ export const paymentSettingsRouter = Router();
 paymentSettingsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 paymentSettingsRouter.get("/", walletController.getConfig);
 paymentSettingsRouter.put("/", validate(updatePaymentConfigSchema), walletController.updateConfig);
+paymentSettingsRouter.get(
+  "/secrets",
+  rateLimit({ name: "payment-secrets-reveal", max: 20, windowSeconds: 60 * 60 }),
+  walletController.revealSecrets,
+);
 
 const updateBillingSchema = Joi.object({
   margin: Joi.number().min(0).max(1000).precision(2).required(),

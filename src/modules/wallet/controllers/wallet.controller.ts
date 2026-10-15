@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../../../common/errors/AppError.js";
+import { logger } from "../../../config/logger.js";
 import { aiBillingService } from "../services/ai-billing.service.js";
 import { adminWalletService, type AdminPaymentQuery, type AdminTransactionQuery } from "../services/admin-wallet.service.js";
 import { paymentSettingsService } from "../services/payment-settings.service.js";
@@ -101,6 +102,15 @@ export class WalletController {
   getConfig = async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res.json({ config: await paymentSettingsService.getConfigView() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  revealSecrets = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      logger.warn({ userId: req.user?.id }, "Razorpay secrets revealed in settings");
+      res.json({ secrets: await paymentSettingsService.revealSecrets() });
     } catch (error) {
       next(error);
     }
