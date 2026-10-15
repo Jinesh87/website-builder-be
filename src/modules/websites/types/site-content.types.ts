@@ -457,7 +457,12 @@ export type SectionDataMap = {
     align?: "left" | "center";
     columns: GridColumns;
     mobileColumns: GridColumns;
-    items: { icon?: IconName; title: string; description: string }[];
+    items: {
+      icon?: IconName;
+      iconColor?: "orange" | "green" | "blue" | "yellow" | "purple" | "pink" | "cyan" | "indigo" | "red" | "gray" | "none" | "default";
+      title: string;
+      description: string;
+    }[];
     splitPosition?: "left" | "right";
     splitImage?: ImageRef;
     splitCta?: LinkRef;
