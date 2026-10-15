@@ -441,6 +441,23 @@ export type HeroData = {
   showDoodles?: boolean;
   curveIntensity?: "none" | "subtle" | "medium" | "dramatic";
   carouselSlides?: CarouselSlide[];
+  campaignStats?: { id?: string; label: string; value: string; icon?: string }[];
+  campaignProgress?: {
+    raisedAmount?: number | string;
+    targetAmount?: number | string;
+    currency?: string;
+    raisedLabel?: string;
+    targetLabel?: string;
+    percentage?: number;
+    donateButton?: LinkRef;
+    registerButton?: LinkRef;
+  };
+  campaignTicker?: { id?: string; name: string; action: string; amount?: string; avatarIcon?: string }[];
+  showCampaignTicker?: boolean;
+  showCampaignCards?: boolean;
+  bannerBottomShape?: "none" | "curved" | "wave" | "normal" | "slant" | "tilt" | "arch";
+  bannerCurveDepth?: number;
+  bottomDividerColor?: string;
 };
 
 export type SectionDataMap = {
