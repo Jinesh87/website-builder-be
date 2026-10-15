@@ -424,6 +424,9 @@ export const headerSchema = Joi.object({
   tagline: optionalText(120),
   statusText: optionalText(80),
   statusColor: Joi.string().valid("green", "blue", "orange", "purple", "red").optional(),
+  menuLabel: optionalText(40),
+  contactLabel: optionalText(60),
+  contactEmail: Joi.string().trim().email().max(255).allow("").optional(),
 });
 
 export const footerSchema = Joi.object({

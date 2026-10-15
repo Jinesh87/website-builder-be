@@ -441,6 +441,23 @@ export type HeroData = {
   showDoodles?: boolean;
   curveIntensity?: "none" | "subtle" | "medium" | "dramatic";
   carouselSlides?: CarouselSlide[];
+  campaignStats?: { id?: string; label: string; value: string; icon?: string }[];
+  campaignProgress?: {
+    raisedAmount?: number | string;
+    targetAmount?: number | string;
+    currency?: string;
+    raisedLabel?: string;
+    targetLabel?: string;
+    percentage?: number;
+    donateButton?: LinkRef;
+    registerButton?: LinkRef;
+  };
+  campaignTicker?: { id?: string; name: string; action: string; amount?: string; avatarIcon?: string }[];
+  showCampaignTicker?: boolean;
+  showCampaignCards?: boolean;
+  bannerBottomShape?: "none" | "curved" | "wave" | "normal" | "slant" | "tilt" | "arch";
+  bannerCurveDepth?: number;
+  bottomDividerColor?: string;
 };
 
 export type SectionDataMap = {
@@ -448,11 +465,26 @@ export type SectionDataMap = {
   footer: FooterData;
   hero: HeroData;
   features: {
+    eyebrow?: string;
     heading: string;
     intro?: string;
+    variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards";
+    iconStyle?: "pastel-circle" | "square-badge" | "minimal-accent" | "colored-circle" | "none";
+    cardStyle?: "transparent" | "surface" | "bordered" | "glass";
+    align?: "left" | "center";
     columns: GridColumns;
     mobileColumns: GridColumns;
-    items: { icon?: IconName; title: string; description: string }[];
+    items: {
+      icon?: IconName;
+      iconColor?: "orange" | "green" | "blue" | "yellow" | "purple" | "pink" | "cyan" | "indigo" | "red" | "gray" | "none" | "default";
+      title: string;
+      description: string;
+    }[];
+    splitPosition?: "left" | "right";
+    splitImage?: ImageRef;
+    splitCta?: LinkRef;
+    secondaryCta?: LinkRef;
+    bottomCta?: LinkRef;
   };
   services: {
     heading: string;

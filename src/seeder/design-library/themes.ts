@@ -1,4 +1,5 @@
 import type { ThemeSettings } from "../../modules/websites/types/site-content.types.js";
+import { BUSINESS_TEMPLATES } from "./business/index.js";
 
 export type ThemeSeed = { name: string; settings: ThemeSettings };
 
@@ -79,4 +80,5 @@ export const THEME_SEEDS: ThemeSeed[] = [
       sectionSpacing: "normal",
     },
   },
+  ...BUSINESS_TEMPLATES.map((business) => business.theme),
 ];
