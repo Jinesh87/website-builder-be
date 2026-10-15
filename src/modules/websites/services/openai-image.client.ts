@@ -1,7 +1,6 @@
 import { IMAGE_GENERATION_MODEL } from "../../../common/constants/ai-models.js";
 import { AppError } from "../../../common/errors/AppError.js";
-import { logger } from "../../../config/logger.js";
-import { prisma } from "../../../config/prisma.js";
+import { aiBillingService } from "../../wallet/services/ai-billing.service.js";
 import type { OpenAiContext } from "./openai-json.client.js";
 
 const ENDPOINT = "https://api.openai.com/v1/images/generations";
@@ -67,21 +66,17 @@ export function createOpenAiImageGenerator(context: Omit<OpenAiContext, "model">
       throw new AppError(502, `Image generation failed: ${message.slice(0, 200)}`, "AI_IMAGE_FAILED");
     }
 
-    await prisma.aiUsageLog
-      .create({
-        data: {
-          clientId: context.clientId,
-          websiteId: context.websiteId,
-          userId: context.userId,
-          model: IMAGE_GENERATION_MODEL,
-          scope,
-          promptTokens: body.usage?.input_tokens ?? 0,
-          completionTokens: body.usage?.output_tokens ?? 0,
-          totalTokens: body.usage?.total_tokens ?? 0,
-          durationMs: Date.now() - startedAt,
-        },
-      })
-      .catch((error: unknown) => logger.warn({ err: error, scope }, "Could not record AI usage"));
+    await aiBillingService.recordUsage({
+      clientId: context.clientId,
+      websiteId: context.websiteId,
+      userId: context.userId,
+      model: IMAGE_GENERATION_MODEL,
+      scope,
+      promptTokens: body.usage?.input_tokens ?? 0,
+      completionTokens: body.usage?.output_tokens ?? 0,
+      totalTokens: body.usage?.total_tokens ?? 0,
+      durationMs: Date.now() - startedAt,
+    });
 
     const b64 = body.data?.[0]?.b64_json;
     if (!b64) throw new AppError(502, "The AI returned no image.", "AI_IMAGE_FAILED");

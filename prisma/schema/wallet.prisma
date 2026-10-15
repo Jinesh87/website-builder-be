@@ -1,11 +1,11 @@
-/// One prepaid balance per client, shared by its users. Amounts are in paise (1 INR = 100 paise).
+/// One prepaid balance of connects per client, shared by its users. Connects are bought through Razorpay.
 model Wallet {
-  id           String   @id @default(uuid()) @db.Uuid
-  clientId     String   @unique @db.Uuid
-  balancePaise Int      @default(0)
-  currency     String   @default("INR") @db.VarChar(3)
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+  id        String   @id @default(uuid()) @db.Uuid
+  clientId  String   @unique @db.Uuid
+  /// In connects, to a thousandth. AI usage is charged after the request, so it can dip below zero.
+  balance   Decimal  @default(0) @db.Decimal(14, 3)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
@@ -15,17 +15,17 @@ model Wallet {
 
 /// Append-only ledger; every balance change has exactly one row.
 model WalletTransaction {
-  id                String                  @id @default(uuid()) @db.Uuid
-  walletId          String                  @db.Uuid
-  type              WalletTransactionType
-  source            WalletTransactionSource
-  /// Always positive; `type` says which way it moved.
-  amountPaise       Int
-  balanceAfterPaise Int
-  description       String                  @db.VarChar(300)
-  paymentOrderId    String?                 @unique @db.Uuid
-  userId            String?                 @db.Uuid
-  createdAt         DateTime                @default(now()) @db.Timestamptz(6)
+  id             String                  @id @default(uuid()) @db.Uuid
+  walletId       String                  @db.Uuid
+  type           WalletTransactionType
+  source         WalletTransactionSource
+  /// Connects; always positive, `type` says which way it moved.
+  amount         Decimal                 @db.Decimal(14, 3)
+  balanceAfter   Decimal                 @db.Decimal(14, 3)
+  description    String                  @db.VarChar(300)
+  paymentOrderId String?                 @unique @db.Uuid
+  userId         String?                 @db.Uuid
+  createdAt      DateTime                @default(now()) @db.Timestamptz(6)
 
   wallet       Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
   paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
@@ -35,13 +35,15 @@ model WalletTransaction {
   @@map("wallet_transactions")
 }
 
-/// A Razorpay order created for a wallet top-up.
+/// A Razorpay order created for a purchase of connects.
 model PaymentOrder {
   id                String             @id @default(uuid()) @db.Uuid
   clientId          String             @db.Uuid
   userId            String?            @db.Uuid
   razorpayOrderId   String             @unique @db.VarChar(64)
   razorpayPaymentId String?            @unique @db.VarChar(64)
+  /// Connects credited once paid.
+  connects          Int
   amountPaise       Int
   currency          String             @default("INR") @db.VarChar(3)
   status            PaymentOrderStatus @default(CREATED)
@@ -69,6 +71,27 @@ model PaymentConfig {
   updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("payment_config")
+}
+
+/// Singleton (id = "default"): how AI usage in USD becomes connects.
+model BillingConfig {
+  id           String   @id @default("default") @db.VarChar(50)
+  /// Rupees the Super Admin adds on top of the market USD→INR rate, per US dollar.
+  usdInrMargin Decimal  @default(0) @db.Decimal(10, 2)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("billing_config")
+}
+
+/// Market USD→INR rate, one row per published rate date.
+model ExchangeRate {
+  rateDate  DateTime @id @db.Date
+  rate      Decimal  @db.Decimal(12, 4)
+  /// Which API it came from.
+  source    String   @db.VarChar(100)
+  fetchedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("exchange_rates")
 }
 
 enum WalletTransactionType {

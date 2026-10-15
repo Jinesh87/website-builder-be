@@ -5,7 +5,7 @@ import { authenticate, authorize } from "../../common/middleware/authenticate.js
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { walletController } from "./controllers/wallet.controller.js";
-import { MAX_TOPUP_PAISE, MIN_TOPUP_PAISE } from "./services/wallet.service.js";
+import { CONNECTS_PACK_SIZE, MAX_PURCHASE_CONNECTS, MIN_PURCHASE_CONNECTS } from "./services/wallet.service.js";
 
 const transactionsQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
@@ -13,7 +13,13 @@ const transactionsQuerySchema = Joi.object({
 });
 
 const createTopupSchema = Joi.object({
-  amountPaise: Joi.number().integer().min(MIN_TOPUP_PAISE).max(MAX_TOPUP_PAISE).required(),
+  connects: Joi.number()
+    .integer()
+    .multiple(CONNECTS_PACK_SIZE)
+    .min(MIN_PURCHASE_CONNECTS)
+    .max(MAX_PURCHASE_CONNECTS)
+    .required()
+    .messages({ "number.multiple": `Connects are sold in multiples of ${CONNECTS_PACK_SIZE}` }),
 });
 
 const razorpayId = Joi.string().trim().max(64).pattern(/^[A-Za-z0-9_]+$/).required();
@@ -34,7 +40,7 @@ const updatePaymentConfigSchema = Joi.object({
   razorpayWebhookSecret: Joi.string().trim().allow("").max(200).optional(),
 });
 
-/** Client users: their workspace's wallet. */
+/** Client users: their workspace's connects. */
 export const walletRouter = Router();
 walletRouter.use(authenticate, authorize(UserRole.CLIENT));
 walletRouter.get("/", walletController.get);
@@ -52,6 +58,21 @@ export const paymentSettingsRouter = Router();
 paymentSettingsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 paymentSettingsRouter.get("/", walletController.getConfig);
 paymentSettingsRouter.put("/", validate(updatePaymentConfigSchema), walletController.updateConfig);
+
+const updateBillingSchema = Joi.object({
+  margin: Joi.number().min(0).max(1000).precision(2).required(),
+});
+
+/** Super admin: USD→INR rate and the margin added to it for AI usage. */
+export const billingSettingsRouter = Router();
+billingSettingsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
+billingSettingsRouter.get("/", walletController.getBilling);
+billingSettingsRouter.put("/", validate(updateBillingSchema), walletController.updateBilling);
+billingSettingsRouter.post(
+  "/refresh-rate",
+  rateLimit({ name: "billing-refresh-rate", max: 10, windowSeconds: 60 * 60 }),
+  walletController.refreshRate,
+);
 
 const adminListQuery = {
   search: Joi.string().trim().max(100).allow("").optional(),

@@ -9,3 +9,13 @@ model AiConfig {
 
   @@map("ai_config")
 }
+
+/// Super Admin's USD price for a model; models without a row use the built-in list price.
+model AiModelPrice {
+  modelId          String   @id @db.VarChar(100)
+  inputPerMillion  Decimal  @db.Decimal(12, 4)
+  outputPerMillion Decimal  @db.Decimal(12, 4)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("ai_model_prices")
+}

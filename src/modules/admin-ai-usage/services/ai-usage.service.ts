@@ -1,5 +1,6 @@
 import { prisma } from "../../../config/prisma.js";
-import { AI_MODEL_PRICING, DEFAULT_AI_MODEL } from "../../../common/constants/ai-models.js";
+import { DEFAULT_AI_MODEL, type ModelPrice } from "../../../common/constants/ai-models.js";
+import { aiPricingService } from "../../admin-settings/services/ai-pricing.service.js";
 import { Prisma } from "../../../generated/prisma/client.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import type {
@@ -40,19 +41,19 @@ const PER_TOKEN = 1 / 1_000_000;
  * Per-row USD cost of one side of a call. Logs store the dated model OpenAI returns,
  * e.g. "gpt-4o-mini-2024-07-18"; unknown models are priced like the default model.
  */
-function sideCostSql(side: "input" | "output"): Prisma.Sql {
+function sideCostSql(side: "input" | "output", pricing: readonly ModelPrice[]): Prisma.Sql {
   const column = side === "input" ? Prisma.sql`l."promptTokens"` : Prisma.sql`l."completionTokens"`;
   const rate = (model: { inputPerMillion: number; outputPerMillion: number }) =>
     (side === "input" ? model.inputPerMillion : model.outputPerMillion) * PER_TOKEN;
-  const fallback = AI_MODEL_PRICING.find((model) => model.id === DEFAULT_AI_MODEL)!;
-  const branches = AI_MODEL_PRICING.map(
+  const fallback = pricing.find((model) => model.id === DEFAULT_AI_MODEL)!;
+  const branches = pricing.map(
     (model) => Prisma.sql`WHEN l.model = ${model.id} OR l.model LIKE ${`${model.id}-20%`} THEN ${column} * ${rate(model)}::float8`,
   );
   return Prisma.sql`CASE ${Prisma.join(branches, " ")} ELSE ${column} * ${rate(fallback)}::float8 END`;
 }
 
-function usageCostSql(): Prisma.Sql {
-  return Prisma.sql`(${sideCostSql("input")} + ${sideCostSql("output")})`;
+function usageCostSql(pricing: readonly ModelPrice[]): Prisma.Sql {
+  return Prisma.sql`(${sideCostSql("input", pricing)} + ${sideCostSql("output", pricing)})`;
 }
 
 /** UTC bounds for a whole year, or one month of it. */
@@ -116,7 +117,7 @@ export class AiUsageService {
         break;
     }
 
-    const costSql = usageCostSql();
+    const costSql = usageCostSql(await aiPricingService.pricing());
     const offset = (query.page - 1) * query.pageSize;
     const limit = query.pageSize;
 
@@ -260,8 +261,9 @@ export class AiUsageService {
     if (!client) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
 
     const { startDate, endDate } = periodBounds(query.year, query.month ?? null);
-    const inputCost = sideCostSql("input");
-    const outputCost = sideCostSql("output");
+    const pricing = await aiPricingService.pricing();
+    const inputCost = sideCostSql("input", pricing);
+    const outputCost = sideCostSql("output", pricing);
     const where = Prisma.sql`l."clientId" = ${clientId}::uuid AND l."createdAt" >= ${startDate} AND l."createdAt" < ${endDate}`;
 
     const [calls, byFeature] = await Promise.all([

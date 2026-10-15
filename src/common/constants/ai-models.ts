@@ -87,13 +87,35 @@ const LEGACY_PRICING: readonly Pick<AiModelInfo, "id" | "inputPerMillion" | "out
  */
 export const IMAGE_GENERATION_MODEL = "gpt-image-2.5-sunburst";
 
-/** Every priced model, for estimating the cost of logged usage. */
-export const AI_MODEL_PRICING: readonly Pick<AiModelInfo, "id" | "inputPerMillion" | "outputPerMillion">[] = [
+export type ModelPrice = Pick<AiModelInfo, "id" | "inputPerMillion" | "outputPerMillion">;
+
+/** Prices the Super Admin has set, by model id; they replace the list prices above. */
+export type PriceOverrides = ReadonlyMap<string, Omit<ModelPrice, "id">>;
+
+/** Models whose price the Super Admin can set: the chat catalog plus the image model. */
+export const CONFIGURABLE_PRICE_MODELS: readonly (ModelPrice & { label: string; kind: "chat" | "image" })[] = [
+  ...AI_MODELS.map((model) => ({
+    id: model.id,
+    label: model.label,
+    kind: "chat" as const,
+    inputPerMillion: model.inputPerMillion,
+    outputPerMillion: model.outputPerMillion,
+  })),
+  { id: IMAGE_GENERATION_MODEL, label: "Image generation", kind: "image", inputPerMillion: 8, outputPerMillion: 30 },
+];
+
+/** Every priced model at list price, for estimating the cost of logged usage. */
+export const AI_MODEL_PRICING: readonly ModelPrice[] = [
   ...AI_MODELS,
   ...LEGACY_PRICING,
   { id: "gpt-image-1", inputPerMillion: 5, outputPerMillion: 40 },
   { id: IMAGE_GENERATION_MODEL, inputPerMillion: 8, outputPerMillion: 30 },
 ];
+
+/** `AI_MODEL_PRICING` with the Super Admin's prices applied. */
+export function effectivePricing(overrides: PriceOverrides): ModelPrice[] {
+  return AI_MODEL_PRICING.map((model) => ({ ...model, ...overrides.get(model.id) }));
+}
 
 export function findAiModel(id: string | null | undefined): AiModelInfo | undefined {
   return id ? AI_MODELS.find((model) => model.id === id) : undefined;
@@ -123,9 +145,10 @@ function costTier(relativeCost: number): AiModelTier {
 }
 
 /** Catalog with cost estimates, cheapest first. */
-export function aiModelOptions(): AiModelOption[] {
-  const cheapest = Math.min(...AI_MODELS.map(requestCostIndex));
-  return AI_MODELS.map((model) => {
+export function aiModelOptions(overrides: PriceOverrides = new Map()): AiModelOption[] {
+  const models = AI_MODELS.map((model) => ({ ...model, ...overrides.get(model.id) }));
+  const cheapest = Math.max(Number.EPSILON, Math.min(...models.map(requestCostIndex)));
+  return models.map((model) => {
     const ratio = requestCostIndex(model) / cheapest;
     const relativeCost = ratio < 10 ? Math.round(ratio * 10) / 10 : Math.round(ratio);
     return { ...model, relativeCost, tier: costTier(ratio) };

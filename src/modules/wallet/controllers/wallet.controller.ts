@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../../../common/errors/AppError.js";
+import { aiBillingService } from "../services/ai-billing.service.js";
 import { adminWalletService, type AdminPaymentQuery, type AdminTransactionQuery } from "../services/admin-wallet.service.js";
 import { paymentSettingsService } from "../services/payment-settings.service.js";
 import { walletService } from "../services/wallet.service.js";
@@ -31,8 +32,8 @@ export class WalletController {
   createTopup = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { clientId, userId } = requireClient(req);
-      const { amountPaise } = req.body as { amountPaise: number };
-      res.status(201).json({ checkout: await walletService.createTopup(clientId, userId, amountPaise) });
+      const { connects } = req.body as { connects: number };
+      res.status(201).json({ checkout: await walletService.createTopup(clientId, userId, connects) });
     } catch (error) {
       next(error);
     }
@@ -67,6 +68,31 @@ export class WalletController {
   adminPayments = async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json(await adminWalletService.listPayments(req.query as unknown as AdminPaymentQuery));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getBilling = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ billing: await aiBillingService.settings() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateBilling = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { margin } = req.body as { margin: number };
+      res.json({ billing: await aiBillingService.updateMargin(margin) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  refreshRate = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ billing: await aiBillingService.refreshRate() });
     } catch (error) {
       next(error);
     }
