@@ -17,7 +17,13 @@ import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
-import { adminWalletRouter, paymentSettingsRouter, razorpayWebhookRouter, walletRouter } from "./modules/wallet/wallet.routes.js";
+import {
+  adminWalletRouter,
+  billingSettingsRouter,
+  paymentSettingsRouter,
+  razorpayWebhookRouter,
+  walletRouter,
+} from "./modules/wallet/wallet.routes.js";
 
 
 const app = express();
@@ -72,6 +78,7 @@ app.use("/api/admin/settings/ai", aiSettingsRouter);
 app.use("/api/account/ai-settings", clientAiSettingsRouter);
 app.use("/api/account/wallet", walletRouter);
 app.use("/api/admin/settings/payments", paymentSettingsRouter);
+app.use("/api/admin/settings/billing", billingSettingsRouter);
 app.use("/api/admin/wallet", adminWalletRouter);
 app.use("/api/admin/clients", clientsRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);

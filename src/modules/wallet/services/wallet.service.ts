@@ -18,9 +18,12 @@ import {
   isValidWebhookSignature,
 } from "./razorpay.client.js";
 
-export const WALLET_CURRENCY = "INR";
-export const MIN_TOPUP_PAISE = 10 * 100;
-export const MAX_TOPUP_PAISE = 100_000 * 100;
+export const PAYMENT_CURRENCY = "INR";
+export const CONNECTS_PER_RUPEE = 3;
+/** Connects are sold in multiples of this. */
+export const CONNECTS_PACK_SIZE = 50;
+export const MIN_PURCHASE_CONNECTS = CONNECTS_PACK_SIZE;
+export const MAX_PURCHASE_CONNECTS = 300_000;
 
 type Tx = Prisma.TransactionClient;
 
@@ -28,24 +31,26 @@ export type WalletTransactionView = {
   id: string;
   type: WalletTransactionType;
   source: WalletTransactionSource;
-  amountPaise: number;
-  balanceAfterPaise: number;
+  amount: number;
+  balanceAfter: number;
   description: string;
   createdAt: string;
 };
 
 export type WalletView = {
-  balancePaise: number;
-  currency: string;
+  balance: number;
   paymentsEnabled: boolean;
-  minTopupPaise: number;
-  maxTopupPaise: number;
+  connectsPerRupee: number;
+  packSize: number;
+  minPurchase: number;
+  maxPurchase: number;
 };
 
 export type TopupCheckout = {
   /** Razorpay order id, passed to Checkout as `order_id`. */
   orderId: string;
   keyId: string;
+  connects: number;
   amountPaise: number;
   currency: string;
   businessName: string;
@@ -55,10 +60,13 @@ export type TopupCheckout = {
 export type LedgerEntry = {
   type: WalletTransactionType;
   source: WalletTransactionSource;
-  amountPaise: number;
+  /** Connects, to a thousandth. */
+  amount: number;
   description: string;
   userId?: string | null;
   paymentOrderId?: string;
+  /** For charges after the fact (AI usage): the cost is already incurred, so the balance may go below zero. */
+  allowNegative?: boolean;
 };
 
 function toTransactionView(row: WalletTransaction): WalletTransactionView {
@@ -66,39 +74,60 @@ function toTransactionView(row: WalletTransaction): WalletTransactionView {
     id: row.id,
     type: row.type,
     source: row.source,
-    amountPaise: row.amountPaise,
-    balanceAfterPaise: row.balanceAfterPaise,
+    amount: Number(row.amount),
+    balanceAfter: Number(row.balanceAfter),
     description: row.description,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** Rounds to the thousandth of a connect the ledger stores, as a string so no float error reaches the database. */
+function toConnectsDecimal(amount: number): string {
+  return (Math.round(amount * 1000) / 1000).toFixed(3);
+}
+
+/** Price of a purchase, rounded to the nearest paisa: 50 connects = ₹16.67, 150 = ₹50. */
+export function priceInPaise(connects: number): number {
+  return Math.round((connects * 100) / CONNECTS_PER_RUPEE);
 }
 
 function formatInr(paise: number): string {
   return `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0 })}`;
 }
 
+export function formatConnects(connects: number): string {
+  return `${connects.toLocaleString("en-IN", { maximumFractionDigits: 3 })} ${connects === 1 ? "connect" : "connects"}`;
+}
+
 /**
- * Moves money in or out of a client's wallet and records it in the ledger, in the caller's transaction.
- * Debits never take the balance below zero: they fail with INSUFFICIENT_BALANCE instead.
+ * Moves connects in or out of a client's wallet and records it in the ledger, in the caller's transaction.
+ * Debits fail with INSUFFICIENT_BALANCE rather than go below zero, unless `allowNegative` is set.
  */
-async function applyEntry(tx: Tx, clientId: string, entry: LedgerEntry): Promise<WalletTransaction> {
-  if (!Number.isInteger(entry.amountPaise) || entry.amountPaise <= 0) {
-    throw new AppError(400, "Amount must be a positive whole number of paise.", "VALIDATION_ERROR");
+export async function applyLedgerEntry(tx: Tx, clientId: string, entry: LedgerEntry): Promise<WalletTransaction> {
+  const amount = toConnectsDecimal(entry.amount);
+  if (!Number.isFinite(entry.amount) || Number(amount) <= 0) {
+    throw new AppError(400, "Amount must be a positive number of connects.", "VALIDATION_ERROR");
   }
   let wallet;
   if (entry.type === WalletTransactionType.CREDIT) {
     wallet = await tx.wallet.upsert({
       where: { clientId },
-      create: { clientId, balancePaise: entry.amountPaise, currency: WALLET_CURRENCY },
-      update: { balancePaise: { increment: entry.amountPaise } },
+      create: { clientId, balance: amount },
+      update: { balance: { increment: amount } },
+    });
+  } else if (entry.allowNegative) {
+    wallet = await tx.wallet.upsert({
+      where: { clientId },
+      create: { clientId, balance: `-${amount}` },
+      update: { balance: { decrement: amount } },
     });
   } else {
     const debited = await tx.wallet.updateMany({
-      where: { clientId, balancePaise: { gte: entry.amountPaise } },
-      data: { balancePaise: { decrement: entry.amountPaise } },
+      where: { clientId, balance: { gte: amount } },
+      data: { balance: { decrement: amount } },
     });
     if (debited.count === 0) {
-      throw new AppError(402, "Your wallet balance is too low. Please add money to continue.", "INSUFFICIENT_BALANCE");
+      throw new AppError(402, "You don't have enough connects. Please buy more to continue.", "INSUFFICIENT_BALANCE");
     }
     wallet = await tx.wallet.findUniqueOrThrow({ where: { clientId } });
   }
@@ -107,8 +136,8 @@ async function applyEntry(tx: Tx, clientId: string, entry: LedgerEntry): Promise
       walletId: wallet.id,
       type: entry.type,
       source: entry.source,
-      amountPaise: entry.amountPaise,
-      balanceAfterPaise: wallet.balancePaise,
+      amount,
+      balanceAfter: wallet.balance,
       description: entry.description.slice(0, 300),
       userId: entry.userId ?? null,
       paymentOrderId: entry.paymentOrderId,
@@ -123,11 +152,12 @@ export class WalletService {
       paymentSettingsService.isConfigured(),
     ]);
     return {
-      balancePaise: wallet?.balancePaise ?? 0,
-      currency: wallet?.currency ?? WALLET_CURRENCY,
+      balance: Number(wallet?.balance ?? 0),
       paymentsEnabled,
-      minTopupPaise: MIN_TOPUP_PAISE,
-      maxTopupPaise: MAX_TOPUP_PAISE,
+      connectsPerRupee: CONNECTS_PER_RUPEE,
+      packSize: CONNECTS_PACK_SIZE,
+      minPurchase: MIN_PURCHASE_CONNECTS,
+      maxPurchase: MAX_PURCHASE_CONNECTS,
     };
   }
 
@@ -145,24 +175,30 @@ export class WalletService {
     return { transactions: rows.map(toTransactionView), total, page, pageSize };
   }
 
-  /** Credits the wallet; for top-ups and future refunds or adjustments. */
+  /** Credits connects; for purchases and future refunds or adjustments. */
   credit(clientId: string, entry: Omit<LedgerEntry, "type">): Promise<WalletTransaction> {
-    return prisma.$transaction((tx) => applyEntry(tx, clientId, { ...entry, type: WalletTransactionType.CREDIT }));
+    return prisma.$transaction((tx) => applyLedgerEntry(tx, clientId, { ...entry, type: WalletTransactionType.CREDIT }));
   }
 
-  /** Debits the wallet (e.g. AI usage); throws INSUFFICIENT_BALANCE (402) rather than going below zero. */
+  /** Debits connects (e.g. AI usage); throws INSUFFICIENT_BALANCE (402) rather than going below zero. */
   debit(clientId: string, entry: Omit<LedgerEntry, "type">): Promise<WalletTransaction> {
-    return prisma.$transaction((tx) => applyEntry(tx, clientId, { ...entry, type: WalletTransactionType.DEBIT }));
+    return prisma.$transaction((tx) => applyLedgerEntry(tx, clientId, { ...entry, type: WalletTransactionType.DEBIT }));
   }
 
-  async createTopup(clientId: string, userId: string, amountPaise: number): Promise<TopupCheckout> {
-    if (!Number.isInteger(amountPaise) || amountPaise < MIN_TOPUP_PAISE || amountPaise > MAX_TOPUP_PAISE) {
+  async createTopup(clientId: string, userId: string, connects: number): Promise<TopupCheckout> {
+    if (
+      !Number.isInteger(connects) ||
+      connects % CONNECTS_PACK_SIZE !== 0 ||
+      connects < MIN_PURCHASE_CONNECTS ||
+      connects > MAX_PURCHASE_CONNECTS
+    ) {
       throw new AppError(
         400,
-        `Enter an amount between ${formatInr(MIN_TOPUP_PAISE)} and ${formatInr(MAX_TOPUP_PAISE)}.`,
+        `Buy connects in multiples of ${CONNECTS_PACK_SIZE}, between ${formatConnects(MIN_PURCHASE_CONNECTS)} and ${formatConnects(MAX_PURCHASE_CONNECTS)}.`,
         "VALIDATION_ERROR",
       );
     }
+    const amountPaise = priceInPaise(connects);
     const keys = await paymentSettingsService.getKeys();
     const [client, user] = await Promise.all([
       prisma.client.findUniqueOrThrow({ where: { id: clientId }, select: { businessName: true } }),
@@ -170,18 +206,19 @@ export class WalletService {
     ]);
     const order = await createRazorpayOrder(keys, {
       amountPaise,
-      currency: WALLET_CURRENCY,
-      receipt: `wallet_${randomBytes(8).toString("hex")}`,
-      notes: { purpose: "wallet_topup", clientId, userId },
+      currency: PAYMENT_CURRENCY,
+      receipt: `connects_${randomBytes(8).toString("hex")}`,
+      notes: { purpose: "connects_purchase", connects: String(connects), clientId, userId },
     });
     await prisma.paymentOrder.create({
-      data: { clientId, userId, razorpayOrderId: order.id, amountPaise, currency: WALLET_CURRENCY },
+      data: { clientId, userId, razorpayOrderId: order.id, connects, amountPaise, currency: PAYMENT_CURRENCY },
     });
     return {
       orderId: order.id,
       keyId: keys.keyId,
+      connects,
       amountPaise,
-      currency: WALLET_CURRENCY,
+      currency: PAYMENT_CURRENCY,
       businessName: client.businessName,
       prefill: { name: user.fullName, email: user.email, ...(user.phone ? { contact: user.phone } : {}) },
     };
@@ -197,18 +234,18 @@ export class WalletService {
 
     const keys = await paymentSettingsService.getKeys();
     if (!isValidPaymentSignature(keys.keySecret, input.razorpayOrderId, input.razorpayPaymentId, input.razorpaySignature)) {
-      throw new AppError(400, "We couldn't verify this payment. If money was taken, it will be added automatically.", "PAYMENT_VERIFICATION_FAILED");
+      throw new AppError(400, "We couldn't verify this payment. If money was taken, your connects will be added automatically.", "PAYMENT_VERIFICATION_FAILED");
     }
 
     let payment = await fetchRazorpayPayment(keys, input.razorpayPaymentId);
     if (payment.order_id !== order.razorpayOrderId || payment.amount !== order.amountPaise || payment.currency !== order.currency) {
-      throw new AppError(400, "This payment doesn't match the top-up.", "PAYMENT_VERIFICATION_FAILED");
+      throw new AppError(400, "This payment doesn't match the purchase.", "PAYMENT_VERIFICATION_FAILED");
     }
     if (payment.status === "authorized") {
       payment = await captureRazorpayPayment(keys, payment.id, order.amountPaise, order.currency);
     }
     if (payment.status !== "captured") {
-      throw new AppError(400, "The payment hasn't completed yet. Your balance updates as soon as it does.", "PAYMENT_PENDING");
+      throw new AppError(400, "The payment hasn't completed yet. Your connects are added as soon as it does.", "PAYMENT_PENDING");
     }
 
     const transaction = await this.markPaid(order.razorpayOrderId, payment.id, payment.amount);
@@ -231,11 +268,11 @@ export class WalletService {
         data: { status: PaymentOrderStatus.PAID, razorpayPaymentId, paidAt: new Date(), failureReason: null },
       });
       if (claimed.count === 0) return null;
-      return applyEntry(tx, order.clientId, {
+      return applyLedgerEntry(tx, order.clientId, {
         type: WalletTransactionType.CREDIT,
         source: WalletTransactionSource.TOPUP,
-        amountPaise: order.amountPaise,
-        description: `Added ${formatInr(order.amountPaise)} via Razorpay`,
+        amount: order.connects,
+        description: `Bought ${formatConnects(order.connects)} for ${formatInr(order.amountPaise)}`,
         userId: order.userId,
         paymentOrderId: order.id,
       });
@@ -261,7 +298,7 @@ export class WalletService {
 
     if (event.event === "payment.captured" || event.event === "order.paid") {
       const credited = await this.markPaid(payment.order_id, payment.id, payment.amount);
-      if (credited) logger.info({ razorpayOrderId: payment.order_id }, "wallet top-up credited from webhook");
+      if (credited) logger.info({ razorpayOrderId: payment.order_id }, "connects purchase credited from webhook");
     } else if (event.event === "payment.failed") {
       await prisma.paymentOrder.updateMany({
         where: { razorpayOrderId: payment.order_id, status: PaymentOrderStatus.CREATED },
