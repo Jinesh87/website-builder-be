@@ -87,7 +87,7 @@ const ctaBand = section(
     button: { label: "Start a project", href: "/contact" },
     secondaryButton: { label: "View portfolio", href: "/portfolio" },
   },
-  { background: "dark" },
+  { background: "default" },
 );
 
 export const ARCHITECTURE_FIRM: BusinessTemplate = businessTemplate({

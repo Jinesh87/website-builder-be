@@ -88,6 +88,7 @@ const ctaBand = section(
   "cta",
   {
     variant: "centered-card",
+    cardStyle: "elevated",
     eyebrow: "Free 30-minute call",
     heading: "Talk to an accountant this week",
     text: "Tell us about your business and we will show you exactly what we would do — and what it would cost.",
@@ -95,7 +96,7 @@ const ctaBand = section(
     secondaryButton: { label: "See pricing", href: "/services" },
     trustBadges: ["Fixed monthly fees", "No long contracts", "Certified CPAs"],
   },
-  { background: "primary" },
+  { background: "surface" },
 );
 
 export const ACCOUNTING_FIRM: BusinessTemplate = businessTemplate({

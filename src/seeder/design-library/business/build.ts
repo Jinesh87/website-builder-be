@@ -35,6 +35,7 @@ const PAGE_TYPES: Readonly<Record<string, PageType>> = {
   "/about": PageType.ABOUT,
   "/services": PageType.SERVICES,
   "/contact": PageType.CONTACT,
+  "/blog": PageType.BLOG,
 };
 
 type PageDraft = { name: string; slug: string; sections: TemplateSection[] };

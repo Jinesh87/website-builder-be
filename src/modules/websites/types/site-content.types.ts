@@ -448,12 +448,21 @@ export type SectionDataMap = {
   footer: FooterData;
   hero: HeroData;
   features: {
+    eyebrow?: string;
     heading: string;
     intro?: string;
     variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards";
+    iconStyle?: "pastel-circle" | "square-badge" | "minimal-accent" | "colored-circle" | "none";
+    cardStyle?: "transparent" | "surface" | "bordered" | "glass";
+    align?: "left" | "center";
     columns: GridColumns;
     mobileColumns: GridColumns;
     items: { icon?: IconName; title: string; description: string }[];
+    splitPosition?: "left" | "right";
+    splitImage?: ImageRef;
+    splitCta?: LinkRef;
+    secondaryCta?: LinkRef;
+    bottomCta?: LinkRef;
   };
   services: {
     heading: string;
