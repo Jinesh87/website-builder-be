@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { aiPricingService, type AiModelPriceInput } from "../../admin-settings/services/ai-pricing.service.js";
 import { clientService } from "../services/client.service.js";
 import type { ClientListQuery } from "../types/client.types.js";
 
@@ -48,6 +49,23 @@ export class ClientController {
   reactivate = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ client: await clientService.reactivate(req.params.id, req.user!.id) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  aiPrices = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ prices: await aiPricingService.listForClient(req.params.id) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateAiPrices = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      const { prices } = req.body as { prices: AiModelPriceInput[] };
+      res.json({ prices: await aiPricingService.updateForClient(req.params.id, prices) });
     } catch (error) {
       next(error);
     }

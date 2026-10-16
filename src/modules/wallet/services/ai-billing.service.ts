@@ -113,7 +113,7 @@ export class AiBillingService {
    */
   async recordUsage(usage: AiUsageRecord): Promise<void> {
     try {
-      const [pricing, billing] = await Promise.all([aiPricingService.pricing(), this.settings()]);
+      const [pricing, billing] = await Promise.all([aiPricingService.pricingFor(usage.clientId), this.settings()]);
       const price = priceFor(usage.model, pricing);
       const costUsd = (usage.promptTokens * price.inputPerMillion + usage.completionTokens * price.outputPerMillion) / 1_000_000;
       // Rounded up to the thousandth of a connect the ledger stores.
