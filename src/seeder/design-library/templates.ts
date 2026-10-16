@@ -11,6 +11,8 @@ import type {
   TemplateSection,
 } from "../../modules/websites/types/template.types.js";
 import { BUSINESS_TEMPLATES } from "./business/index.js";
+import { EDUCATION_TEMPLATES } from "./education/index.js";
+import { PORTFOLIO_TEMPLATES } from "./portfolio/index.js";
 
 export type WebsiteTemplateSeed = {
   key: string;
@@ -353,4 +355,6 @@ export const WEBSITE_TEMPLATE_SEEDS: WebsiteTemplateSeed[] = [
     ],
   },
   ...BUSINESS_TEMPLATES.map((business) => business.template),
+  ...EDUCATION_TEMPLATES.map((edu) => edu.template),
+  ...PORTFOLIO_TEMPLATES.map((portfolio) => portfolio.template),
 ];
