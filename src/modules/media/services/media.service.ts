@@ -26,6 +26,7 @@ import type {
 } from "../types/media.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { detectFile, type DetectedFile } from "./file-signature.js";
+import { optimizeMp4FastStart } from "./mp4-faststart.service.js";
 import { generateImageVariations } from "./openai-image-variations.client.js";
 
 const MB = 1024 * 1024;
@@ -278,9 +279,36 @@ export class MediaService {
       throw new AppError(409, "Your media storage is full. Delete some files first.", "STORAGE_LIMIT");
     }
 
+    let payloadBuffer = file.buffer;
+    let payloadSize = file.size;
+    let width = detected.width ?? null;
+    let height = detected.height ?? null;
+
+    if (detected.kind === MediaKind.VIDEO && detected.mimeType === "video/mp4") {
+      const faststart = optimizeMp4FastStart(file.buffer);
+      if (faststart.optimized) {
+        payloadBuffer = faststart.buffer;
+        payloadSize = faststart.buffer.length;
+        logger.info(
+          {
+            originalSize: file.size,
+            optimizedSize: payloadSize,
+            width: faststart.width,
+            height: faststart.height,
+            durationSec: faststart.durationSec,
+          },
+          "Optimized MP4 for instant web streaming (FastStart moov shift applied)",
+        );
+      }
+      if (faststart.width && faststart.height) {
+        width = faststart.width;
+        height = faststart.height;
+      }
+    }
+
     const id = randomUUID();
     const storageKey = `clients/${clientId}/media/${id}.${detected.extension}`;
-    await putObject({ key: storageKey, body: file.buffer, contentType: detected.mimeType });
+    await putObject({ key: storageKey, body: payloadBuffer, contentType: detected.mimeType });
 
     try {
       const created = await prisma.mediaFile.create({
@@ -292,9 +320,9 @@ export class MediaService {
           kind: detected.kind,
           fileName: cleanFileName(file.originalName, detected.extension),
           mimeType: detected.mimeType,
-          sizeBytes: file.size,
-          width: detected.width ?? null,
-          height: detected.height ?? null,
+          sizeBytes: payloadSize,
+          width,
+          height,
           altText: target.altText?.trim().slice(0, 300) || null,
           storageKey,
           uploadedById: target.uploadedById,
