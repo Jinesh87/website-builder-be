@@ -711,9 +711,58 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .required(),
   }),
   testimonials: Joi.object({
+    variant: flexibleVariant(
+      [
+        "cards-grid",
+        "carousel-slider",
+        "marquee-wall",
+        "spotlight-featured",
+        "minimal-editorial",
+      ],
+      "cards-grid",
+      {
+        "grid": "cards-grid",
+        "cards": "cards-grid",
+        "carousel": "carousel-slider",
+        "slider": "carousel-slider",
+        "marquee": "marquee-wall",
+        "ticker": "marquee-wall",
+        "spotlight": "spotlight-featured",
+        "featured": "spotlight-featured",
+        "editorial": "minimal-editorial",
+        "minimal": "minimal-editorial",
+      },
+    ),
+    eyebrow: optionalText(80),
     heading: text(200).required(),
+    intro: optionalText(500),
+    cardStyle: Joi.string()
+      .valid("default", "bordered", "flat", "glass", "elevated")
+      .optional(),
+    align: Joi.string().valid("left", "center").optional(),
+    columns: Joi.number().valid(1, 2, 3, 4).optional().default(3),
+    showRatings: Joi.boolean().optional().default(true),
+    showAvatars: Joi.boolean().optional().default(true),
+    showBadges: Joi.boolean().optional().default(true),
+    ratingMetric: Joi.object({
+      score: optionalText(20),
+      label: optionalText(80),
+      count: optionalText(60),
+    }).optional(),
     items: Joi.array()
-      .items(Joi.object({ quote: text(800).required(), name: text(120).required(), role: optionalText(120) }))
+      .items(
+        Joi.object({
+          quote: text(800).required(),
+          name: text(120).required(),
+          role: optionalText(120),
+          company: optionalText(120),
+          avatar: image.optional(),
+          rating: Joi.number().min(1).max(5).optional().default(5),
+          verified: Joi.boolean().optional().default(true),
+          badge: optionalText(60),
+          highlight: optionalText(80),
+        }),
+      )
       .max(24)
       .required(),
   }),

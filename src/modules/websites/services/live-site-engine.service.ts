@@ -2,23 +2,12 @@ import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { siteRendererClient, type RenderedSitePage } from "./site-renderer.client.js";
+import { siteCacheService, type CachedPagePayload } from "./site-cache.service.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 
-export type CachedPage = {
-  html: string;
-  statusCode: number;
-  contentType: string;
-  cachedAt: number;
-  redirectUrl?: string;
-  /** Set on cached pages; see renderFingerprint. */
-  fingerprint?: string;
-};
-
-// In-memory cache with 10-minute TTL; entries are revalidated against the database on every hit
-const pageCache = new Map<string, CachedPage>();
-const CACHE_TTL_MS = 10 * 60 * 1000;
+export type CachedPage = CachedPagePayload;
 
 function escapeHtml(str: string | null | undefined): string {
   if (!str) return "";
@@ -88,59 +77,16 @@ const renderStateSelect = {
   },
 };
 
-type RenderState = {
-  liveVersionId: string | null;
-  name: string;
-  subdomain: string;
-  businessName: string | null;
-  description: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-  address: string | null;
-  logoMediaId: string | null;
-  domains: Array<{ hostname: string }>;
-};
-
-/**
- * Cached pages are checked against this on every hit, so changes made by another
- * process or outside this service (domains, business details) are never served stale.
- */
-function renderFingerprint(state: RenderState): string {
-  return JSON.stringify([
-    state.liveVersionId,
-    state.name,
-    state.subdomain,
-    state.businessName,
-    state.description,
-    state.contactEmail,
-    state.contactPhone,
-    state.address,
-    state.logoMediaId,
-    state.domains.map((d) => d.hostname),
-  ]);
-}
 
 export class LiveSiteEngineService {
-  /** Purges cache entries for a specific subdomain or custom domain */
-  purgeCache(identifier?: string | null): void {
-    if (!identifier) {
-      pageCache.clear();
-      return;
-    }
-    const target = identifier.toLowerCase().trim();
-    for (const key of pageCache.keys()) {
-      if (key === target || key.startsWith(`${target}:`)) {
-        pageCache.delete(key);
-      }
-    }
+  /** Purges cache entries for a specific subdomain or custom domain across L1 memory and L2 Redis */
+  async purgeCache(identifier?: string | null): Promise<void> {
+    await siteCacheService.purgeSite(identifier);
   }
 
   /** Clears cache for both subdomain and all configured custom domains upon publish */
-  purgeWebsiteCache(subdomain: string, hostnames: string[] = []): void {
-    this.purgeCache(subdomain);
-    for (const host of hostnames) {
-      this.purgeCache(host);
-    }
+  async purgeWebsiteCache(subdomain: string, hostnames: string[] = []): Promise<void> {
+    await siteCacheService.purgeWebsite(subdomain, hostnames);
   }
 
   async resolveWebsite(identifier: string) {
@@ -170,6 +116,11 @@ export class LiveSiteEngineService {
   }
 
   async renderSitemap(identifier: string): Promise<{ xml: string; statusCode: number }> {
+    const cached = await siteCacheService.getPage(identifier, "/sitemap.xml");
+    if (cached) {
+      return { xml: cached.html, statusCode: cached.statusCode };
+    }
+
     const website = await this.resolveWebsite(identifier);
     if (!website || !website.liveVersion) {
       return { xml: "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></urlset>", statusCode: 404 };
@@ -198,10 +149,22 @@ export class LiveSiteEngineService {
 ${urls.join("\n")}
 </urlset>`;
 
+    await siteCacheService.setPage(identifier, "/sitemap.xml", {
+      html: xml,
+      statusCode: 200,
+      contentType: "application/xml; charset=utf-8",
+      cachedAt: Date.now(),
+    });
+
     return { xml, statusCode: 200 };
   }
 
   async renderRobots(identifier: string): Promise<string> {
+    const cached = await siteCacheService.getPage(identifier, "/robots.txt");
+    if (cached) {
+      return cached.html;
+    }
+
     const website = await this.resolveWebsite(identifier);
     if (!website) {
       return `# This site is not published
@@ -211,7 +174,7 @@ Disallow: /
     }
     const domain = this.getPublicDomain(website);
 
-    return `# Robots.txt generated automatically by Bytezora Engine
+    const txt = `# Robots.txt generated automatically by Bytezora Engine
 User-agent: *
 Allow: /
 
@@ -227,6 +190,15 @@ Allow: /
 
 Sitemap: ${domain}/sitemap.xml
 `;
+
+    await siteCacheService.setPage(identifier, "/robots.txt", {
+      html: txt,
+      statusCode: 200,
+      contentType: "text/plain; charset=utf-8",
+      cachedAt: Date.now(),
+    });
+
+    return txt;
   }
 
   /** `basePath` is the URL prefix in preview mode ("/live/<subdomain>"); empty when served on the site's own host. */
@@ -255,20 +227,15 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     const cleanSlug = pathSlug === "" || pathSlug === "/" ? "/" : pathSlug.startsWith("/") ? pathSlug : `/${pathSlug}`;
-    const cacheKey = `${identifier.toLowerCase()}:${basePath}${cleanSlug}`;
+    const pageRoute = `${basePath}${cleanSlug}`;
 
-    const cached = pageCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-      const state = await prisma.website.findFirst({
-        where: publishedWebsiteWhere(identifier),
-        select: renderStateSelect,
-      });
-      if (state && renderFingerprint(state) === cached.fingerprint) {
-        return cached;
-      }
-    }
-    pageCache.delete(cacheKey);
+    // Multi-tier L1 Memory + L2 Redis cached resolution with single-flight stampede protection
+    return siteCacheService.getOrRender(identifier, pageRoute, async () => {
+      return this.renderPageInternal(identifier, cleanSlug, basePath);
+    });
+  }
 
+  private async renderPageInternal(identifier: string, cleanSlug: string, basePath = ""): Promise<CachedPage> {
     const website = await this.resolveWebsite(identifier);
     if (!website || !website.liveVersion) {
       const notFoundHtml = this.renderNotFoundHtml(identifier);
@@ -483,7 +450,6 @@ Sitemap: ${domain}/sitemap.xml
     ${schemaScripts}`;
 
     const htmlLang = escapeHtml(String(siteLang));
-    const fingerprint = renderFingerprint(website);
 
     const siteKitPage = await this.renderWithSiteKit(snapshot, targetPage.slug, identifier);
     if (siteKitPage) {
@@ -503,15 +469,12 @@ Sitemap: ${domain}/sitemap.xml
     <script src="/_wb/site.js${assetQuery}" defer></script>
   </body>
 </html>`;
-      const result: CachedPage = {
+      return {
         html,
         statusCode: 200,
         contentType: "text/html; charset=utf-8",
         cachedAt: Date.now(),
-        fingerprint,
       };
-      pageCache.set(cacheKey, result);
-      return result;
     }
 
     const fullHtml = `<!DOCTYPE html>

@@ -9,7 +9,7 @@ import type { FolderListQuery, GenerateVariationsInput, MediaListQuery } from ".
 type IdParams = { id: string };
 type FolderParams = { folderId: string };
 
-const CACHE_SECONDS = 30 * 24 * 60 * 60;
+const CACHE_SECONDS = 365 * 24 * 60 * 60; // 1 year immutable cache
 
 /** Parses a single `bytes=` range; multi-range requests are answered with the whole file. */
 function parseRange(header: string | undefined, size: number): ByteRange | "invalid" | undefined {
@@ -115,7 +115,7 @@ export class MediaController {
 
       const etag = `"${req.params.id}"`;
       res.setHeader("ETag", etag);
-      res.setHeader("Cache-Control", `public, max-age=${CACHE_SECONDS}`);
+      res.setHeader("Cache-Control", `public, max-age=${CACHE_SECONDS}, immutable`);
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       if (req.headers["if-none-match"] === etag) {
         res.status(304).end();

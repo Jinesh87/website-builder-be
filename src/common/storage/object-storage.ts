@@ -51,7 +51,13 @@ function localPathForKey(key: string): string {
   return path;
 }
 
-export async function putObject(params: { key: string; body: Buffer; contentType: string }): Promise<void> {
+export async function putObject(params: {
+  key: string;
+  body: Buffer;
+  contentType: string;
+  cacheControl?: string;
+}): Promise<void> {
+  const cacheControl = params.cacheControl ?? "public, max-age=31536000, immutable";
   if (isRemoteObjectStorage()) {
     await getS3().send(
       new PutObjectCommand({
@@ -59,6 +65,7 @@ export async function putObject(params: { key: string; body: Buffer; contentType
         Key: remoteKey(params.key),
         Body: params.body,
         ContentType: params.contentType,
+        CacheControl: cacheControl,
       }),
     );
     return;

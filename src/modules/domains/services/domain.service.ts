@@ -7,6 +7,7 @@ import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { Prisma, type Domain } from "../../../generated/prisma/client.js";
 import { scopeFor } from "../../websites/services/website.service.js";
+import { liveSiteEngineService } from "../../websites/services/live-site-engine.service.js";
 import { checkDomainDns } from "./dns-check.js";
 import { dnsRecordsFor, hostnameProblem, normalizeHostname, type DnsRecord } from "./domain-rules.js";
 
@@ -103,6 +104,7 @@ export class DomainService {
       prisma.domain.updateMany({ where: { websiteId: domain.websiteId, id: { not: domain.id } }, data: { isPrimary: false } }),
       prisma.domain.update({ where: { id: domain.id }, data: { isPrimary: true } }),
     ]);
+    void this.purgeWebsiteCacheForDomain(domain.websiteId);
     return toView(updated);
   }
 
@@ -110,6 +112,7 @@ export class DomainService {
     const domain = await this.findDomainOrThrow(websiteId, domainId, actor);
     await prisma.domain.delete({ where: { id: domain.id } });
     if (domain.isPrimary) await this.promoteNextPrimary(domain.websiteId);
+    void this.purgeWebsiteCacheForDomain(domain.websiteId);
     logger.info({ websiteId: domain.websiteId, hostname: domain.hostname, actorId: actor.id }, "Domain removed");
   }
 
@@ -150,6 +153,7 @@ export class DomainService {
       });
       if (activated) {
         logger.info({ websiteId: domain.websiteId, hostname: domain.hostname }, "Domain verified");
+        void this.purgeWebsiteCacheForDomain(domain.websiteId);
         const hasPrimary = await prisma.domain.count({
           where: { websiteId: domain.websiteId, isPrimary: true, status: DomainStatus.ACTIVE },
         });
@@ -173,7 +177,25 @@ export class DomainService {
       where: { websiteId, status: DomainStatus.ACTIVE },
       orderBy: { verifiedAt: "asc" },
     });
-    if (next) await prisma.domain.update({ where: { id: next.id }, data: { isPrimary: true } });
+    if (next) {
+      await prisma.domain.update({ where: { id: next.id }, data: { isPrimary: true } });
+      void this.purgeWebsiteCacheForDomain(websiteId);
+    }
+  }
+
+  private async purgeWebsiteCacheForDomain(websiteId: string): Promise<void> {
+    try {
+      const website = await prisma.website.findUnique({
+        where: { id: websiteId },
+        select: { subdomain: true, domains: { select: { hostname: true } } },
+      });
+      if (website) {
+        const hostnames = website.domains.map((d) => d.hostname);
+        await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+      }
+    } catch (error) {
+      logger.warn({ err: error, websiteId }, "Failed to purge website cache after domain change");
+    }
   }
 
   private async findWebsiteOrThrow(id: string, actor: AuthUser) {
