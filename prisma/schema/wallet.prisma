@@ -78,6 +78,8 @@ model BillingConfig {
   id           String   @id @default("default") @db.VarChar(50)
   /// Rupees the Super Admin adds on top of the market USD→INR rate, per US dollar.
   usdInrMargin Decimal  @default(0) @db.Decimal(10, 2)
+  /// Connects a client must have before starting an AI request. 0 means any balance above zero.
+  minAiBalance Decimal  @default(0) @db.Decimal(14, 3)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("billing_config")

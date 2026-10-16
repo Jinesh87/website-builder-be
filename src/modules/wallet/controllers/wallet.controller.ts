@@ -84,8 +84,8 @@ export class WalletController {
 
   updateBilling = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { margin } = req.body as { margin: number };
-      res.json({ billing: await aiBillingService.updateMargin(margin) });
+      const { margin, minBalance } = req.body as { margin: number; minBalance: number };
+      res.json({ billing: await aiBillingService.updateSettings(margin, minBalance) });
     } catch (error) {
       next(error);
     }

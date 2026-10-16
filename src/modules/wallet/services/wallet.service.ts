@@ -44,6 +44,8 @@ export type WalletView = {
   packSize: number;
   minPurchase: number;
   maxPurchase: number;
+  /** Connects required before AI features. 0 means any balance above zero. */
+  minAiBalance: number;
 };
 
 export type TopupCheckout = {
@@ -147,9 +149,10 @@ export async function applyLedgerEntry(tx: Tx, clientId: string, entry: LedgerEn
 
 export class WalletService {
   async getWallet(clientId: string): Promise<WalletView> {
-    const [wallet, paymentsEnabled] = await Promise.all([
+    const [wallet, paymentsEnabled, billing] = await Promise.all([
       prisma.wallet.findUnique({ where: { clientId } }),
       paymentSettingsService.isConfigured(),
+      prisma.billingConfig.findUnique({ where: { id: "default" }, select: { minAiBalance: true } }),
     ]);
     return {
       balance: Number(wallet?.balance ?? 0),
@@ -158,6 +161,7 @@ export class WalletService {
       packSize: CONNECTS_PACK_SIZE,
       minPurchase: MIN_PURCHASE_CONNECTS,
       maxPurchase: MAX_PURCHASE_CONNECTS,
+      minAiBalance: Number(billing?.minAiBalance ?? 0),
     };
   }
 

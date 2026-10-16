@@ -5,7 +5,7 @@ import { prisma } from "../../../config/prisma.js";
 import { WalletTransactionSource, WalletTransactionType } from "../../../generated/prisma/client.js";
 import { aiPricingService } from "../../admin-settings/services/ai-pricing.service.js";
 import { exchangeRateService, type UsdInrRate } from "./exchange-rate.service.js";
-import { applyLedgerEntry, CONNECTS_PER_RUPEE } from "./wallet.service.js";
+import { applyLedgerEntry, CONNECTS_PER_RUPEE, formatConnects } from "./wallet.service.js";
 
 const CONFIG_ID = "default";
 const CONFIG_CACHE_TTL_MS = 60_000;
@@ -45,9 +45,11 @@ export type BillingSettingsView = {
   connectsPerRupee: number;
   /** Connects charged per US dollar of AI usage. */
   connectsPerUsd: number;
+  /** Connects required before an AI request can start. 0 means any balance above zero. */
+  minAiBalance: number;
 };
 
-let marginCache: { margin: number; loadedAt: number } | null = null;
+let configCache: { margin: number; minAiBalance: number; loadedAt: number } | null = null;
 
 /** Logs carry dated snapshots ("gpt-4o-mini-2024-07-18"); unknown models are priced like the default model. */
 function priceFor(model: string, pricing: readonly ModelPrice[]): ModelPrice {
@@ -62,16 +64,18 @@ function featureLabel(scope: string): string {
 }
 
 export class AiBillingService {
-  async margin(): Promise<number> {
-    if (marginCache && Date.now() - marginCache.loadedAt < CONFIG_CACHE_TTL_MS) return marginCache.margin;
-    const config = await prisma.billingConfig.findUnique({ where: { id: CONFIG_ID } });
-    const margin = Number(config?.usdInrMargin ?? 0);
-    marginCache = { margin, loadedAt: Date.now() };
-    return margin;
+  async config(): Promise<{ margin: number; minAiBalance: number }> {
+    if (configCache && Date.now() - configCache.loadedAt < CONFIG_CACHE_TTL_MS) {
+      return { margin: configCache.margin, minAiBalance: configCache.minAiBalance };
+    }
+    const row = await prisma.billingConfig.findUnique({ where: { id: CONFIG_ID } });
+    const value = { margin: Number(row?.usdInrMargin ?? 0), minAiBalance: Number(row?.minAiBalance ?? 0) };
+    configCache = { ...value, loadedAt: Date.now() };
+    return value;
   }
 
   async settings(): Promise<BillingSettingsView> {
-    const [market, margin] = await Promise.all([exchangeRateService.current(), this.margin()]);
+    const [market, { margin, minAiBalance }] = await Promise.all([exchangeRateService.current(), this.config()]);
     const effectiveRate = Math.round((market.rate + margin) * 10_000) / 10_000;
     return {
       market,
@@ -79,17 +83,17 @@ export class AiBillingService {
       effectiveRate,
       connectsPerRupee: CONNECTS_PER_RUPEE,
       connectsPerUsd: Math.round(effectiveRate * CONNECTS_PER_RUPEE * 1000) / 1000,
+      minAiBalance,
     };
   }
 
-  async updateMargin(margin: number): Promise<BillingSettingsView> {
-    const value = margin.toFixed(2);
+  async updateSettings(margin: number, minAiBalance: number): Promise<BillingSettingsView> {
     await prisma.billingConfig.upsert({
       where: { id: CONFIG_ID },
-      create: { id: CONFIG_ID, usdInrMargin: value },
-      update: { usdInrMargin: value },
+      create: { id: CONFIG_ID, usdInrMargin: margin.toFixed(2), minAiBalance: minAiBalance.toFixed(3) },
+      update: { usdInrMargin: margin.toFixed(2), minAiBalance: minAiBalance.toFixed(3) },
     });
-    marginCache = null;
+    configCache = null;
     return this.settings();
   }
 
@@ -98,11 +102,21 @@ export class AiBillingService {
     return this.settings();
   }
 
-  /** Called before any AI request: clients with no connects left can't start one. */
+  /** Called before any AI request. The balance must be above zero and at least the platform minimum. */
   async assertCanUseAi(clientId: string): Promise<void> {
-    const wallet = await prisma.wallet.findUnique({ where: { clientId }, select: { balance: true } });
-    if (!wallet || Number(wallet.balance) <= 0) {
-      throw new AppError(402, "You're out of connects. Buy more connects to keep using AI.", "INSUFFICIENT_BALANCE");
+    const [wallet, { minAiBalance }] = await Promise.all([
+      prisma.wallet.findUnique({ where: { clientId }, select: { balance: true } }),
+      this.config(),
+    ]);
+    const balance = Number(wallet?.balance ?? 0);
+    if (balance <= 0 || balance < minAiBalance) {
+      throw new AppError(
+        402,
+        minAiBalance > 0
+          ? `You need at least ${formatConnects(minAiBalance)} to use AI. You have ${formatConnects(balance)}.`
+          : "You're out of connects. Buy more connects to keep using AI.",
+        "INSUFFICIENT_BALANCE",
+      );
     }
   }
 
