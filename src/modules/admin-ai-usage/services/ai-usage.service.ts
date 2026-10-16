@@ -49,7 +49,16 @@ function sideCostSql(side: "input" | "output", pricing: readonly ModelPrice[]): 
   const branches = pricing.map(
     (model) => Prisma.sql`WHEN l.model = ${model.id} OR l.model LIKE ${`${model.id}-20%`} THEN ${column} * ${rate(model)}::float8`,
   );
-  return Prisma.sql`CASE ${Prisma.join(branches, " ")} ELSE ${column} * ${rate(fallback)}::float8 END`;
+  const platform = Prisma.sql`CASE ${Prisma.join(branches, " ")} ELSE ${column} * ${rate(fallback)}::float8 END`;
+  const clientColumn = side === "input" ? Prisma.sql`p."inputPerMillion"` : Prisma.sql`p."outputPerMillion"`;
+  const clientRate = Prisma.sql`(
+    SELECT ${clientColumn}
+    FROM "client_ai_model_prices" p
+    WHERE p."clientId" = l."clientId" AND (l.model = p."modelId" OR l.model LIKE p."modelId" || '-20%')
+    ORDER BY length(p."modelId") DESC
+    LIMIT 1
+  )`;
+  return Prisma.sql`COALESCE(${clientRate} * ${column} / 1000000.0, ${platform})`;
 }
 
 function usageCostSql(pricing: readonly ModelPrice[]): Prisma.Sql {

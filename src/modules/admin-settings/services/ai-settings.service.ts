@@ -141,12 +141,14 @@ export class AiSettingsService {
     ]);
     if (!client) throw new AppError(404, "Client not found");
     const model = findAiModel(client.aiModel)?.id ?? null;
+    const prices = await aiPricingService.pricingFor(clientId);
+    const overrides = new Map(prices.map((price) => [price.id, { inputPerMillion: price.inputPerMillion, outputPerMillion: price.outputPerMillion }]));
     return {
       model,
       defaultModel: platform.model,
       effectiveModel: model ?? platform.model,
       configured: platform.configured,
-      models: platform.models,
+      models: aiModelOptions(overrides),
     };
   }
 

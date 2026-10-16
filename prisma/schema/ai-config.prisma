@@ -19,3 +19,17 @@ model AiModelPrice {
 
   @@map("ai_model_prices")
 }
+
+/// A company's own USD price for a model. Missing rows use the platform price.
+model ClientAiModelPrice {
+  clientId         String   @db.Uuid
+  modelId          String   @db.VarChar(100)
+  inputPerMillion  Decimal  @db.Decimal(12, 4)
+  outputPerMillion Decimal  @db.Decimal(12, 4)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, modelId])
+  @@map("client_ai_model_prices")
+}

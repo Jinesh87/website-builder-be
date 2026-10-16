@@ -66,6 +66,7 @@ paymentSettingsRouter.get(
 
 const updateBillingSchema = Joi.object({
   margin: Joi.number().min(0).max(1000).precision(2).required(),
+  minBalance: Joi.number().min(0).max(1_000_000).precision(3).required(),
 });
 
 /** Super admin: USD→INR rate and the margin added to it for AI usage. */
