@@ -1,6 +1,7 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { env } from "../../../config/env.js";
+import { logger } from "../../../config/logger.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 
 import { createOpenAiJsonCompletion } from "./openai-json.client.js";
@@ -248,17 +249,25 @@ Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and 
       targetPage.seoKeywords?.[0] ||
       `${industry} ${location ? `in ${location}` : "solutions"}`.trim();
 
-    // Try AI if credentials configured
+    // Enforce AI token balance and credentials, identical to generatePageSeo
+    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId);
+    if (!apiKey) {
+      throw new AppError(
+        503,
+        "The AI assistant isn't available yet. Ask the administrator to configure AI settings.",
+        "AI_NOT_CONFIGURED",
+      );
+    }
+
+    const run = createOpenAiJsonCompletion({
+      apiKey,
+      model,
+      clientId: website.clientId,
+      websiteId: website.id,
+      userId: actor.id ?? null,
+    });
+
     try {
-      const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId);
-      if (apiKey) {
-        const run = createOpenAiJsonCompletion({
-          apiKey,
-          model,
-          clientId: website.clientId,
-          websiteId: website.id,
-          userId: actor.id ?? null,
-        });
 
         const sectionsPayload = sections.map((s, idx) => {
           const d = (s.data || {}) as Record<string, unknown>;
@@ -441,10 +450,12 @@ Respond ONLY with valid JSON.`,
             sectionSuggestions: suggestions,
           };
         }
+      } catch (error) {
+        if (error instanceof AppError && error.code === "INSUFFICIENT_BALANCE") {
+          throw error;
+        }
+        logger.warn({ err: error, websiteId, pageId }, "OpenAI page SEO review failed; falling back to heuristic analysis");
       }
-    } catch {
-      // Fallback seamlessly to deterministic rule-based analysis
-    }
 
     return this.buildHeuristicSeoReview(website, targetPage, sections, primaryKeyword);
   }
