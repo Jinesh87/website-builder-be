@@ -200,7 +200,9 @@ RESPOND IN JSON
   "seo": { "title": up to 60 characters, "description": up to 155 characters } | null
 }
 - "chat": greetings, thanks, feedback, questions, advice, reviews or ideas. "reply" is your answer, in plain text without markdown (numbered lines are fine), with concrete suggestions specific to this business (you may propose exact copy). "ops" is empty.
-- "clarify": when the owner's request is large, ambiguous, or lacks key specifics (e.g. adding pricing without plans/tiers, building a blog without topics, redesigning without style/vibe, or requesting complex features), ask a targeted question in "clarification" with 2-4 concrete selectable options and custom text input. "reply" is a friendly 1-2 sentence explanation. "ops" is empty. Do NOT clarify if the request is already clear, specific, or if the user is answering a previous question.
+- "clarify": when the owner's request is genuinely ambiguous or lacks key specifics (e.g. asking for custom pricing tiers without knowing what they are, or requesting complex unprompted features).
+  DO NOT CLARIFY when the owner asks to build, create, or generate a landing page, homepage, or complete website (e.g. "build complete landing page", "create landing page", "build website", "design complete page"). For these requests, NEVER ask what sections to include; immediately generate a complete, high-converting page with ALL standard sections (Hero + Features + Services/Content + Testimonials + CTA + FAQ) using "replace_page".
+  Do NOT clarify if the request is already clear, specific, or if the user is answering a previous question.
 - "edit": the owner clearly asked for a change (or confirmed a choice after clarification). "reply" is "". Don't tell the owner anything is done: the editor applies and checks each operation, then reports the ones that worked using their "note".
 - "look": you need the full content of sections you only have a summary of (e.g. to match, copy or compare with them) before you can answer or edit. List their ids in "look"; "reply" is "" and "ops" is empty. The editor sends their content and you answer again. Never describe, compare or match a section you've only seen summarized.
 When unsure whether a change is wanted, use "chat".
@@ -212,7 +214,7 @@ OPERATIONS (each has "note": one short sentence for the owner describing exactly
 - { "op": "add", "note", "position": index in the page or null (before the footer), "section": { "type", "settings"?, "data" } } with every required field.
 - { "op": "remove", "note", "sectionIds": [...] }
 - { "op": "move", "note", "sectionId", "toIndex" }
-- { "op": "replace_page", "note", "sections": [{ "type", "settings"?, "data" }] } only when the owner explicitly asks to redesign, rebuild or start the page over; 3 to ${MAX_PAGE_SECTIONS} sections between the existing header and footer.
+- { "op": "replace_page", "note", "sections": [{ "type", "settings"?, "data" }] } when the owner asks to build, create, generate, redesign, rebuild or start the page over (e.g. "build complete landing page", "build website", "generate landing page", "rebuild page"); creates 4 to ${MAX_PAGE_SECTIONS} complete, rich, compelling sections (Hero, Features, Services/Content, Testimonials, CTA, FAQ) between the existing header and footer.
 - { "op": "create_page", "note", "page": { "name", "slug"?, "pageType"?, "showInNav"?, "seoTitle"?, "seoDescription"?, "sections": [{ "type", "settings"?, "data" }] } }
   Creates a new page with complete, polished sections matching the site's theme and business (e.g. hero + content/grid/split + cta).
 - { "op": "update_page", "note", "pageIdOrSlug", "name"?, "slug"?, "showInNav"?, "seoTitle"?, "seoDescription"?, "sections"?: [...] }
@@ -239,8 +241,19 @@ RULES & CROSS-PAGE REASONING
 - Only say something is already done after comparing the actual values on the page; if they differ, it isn't done.
 - Write specific, credible, benefit-led copy for this business in its tone of voice. No lorem ipsum or generic filler.
 - Don't invent awards, certifications, exact statistics or prices the owner didn't give; testimonials and team members are placeholders the owner will replace.
-- Never invent contact details; use only the ones on file.
-- Internal links: buttons and links must use valid page slugs (e.g. "/pricing", "/contact", "/about", "/services", "/") or anchors ("#..."). When creating or renaming pages, link them from hero CTAs, navigation menu, and footer as requested.`;
+- Internal links: buttons and links must use valid page slugs (e.g. "/pricing", "/contact", "/about", "/services", "/") or anchors ("#..."). When creating or renaming pages, link them from hero CTAs, navigation menu, and footer as requested.
+- The Home page (slug "/") is the website's primary landing page. When the owner asks to create, build, or redesign a "landing page", "homepage", "home", or "complete website", and the active page is Home (or has slug "/"), you MUST build directly on the active page using "replace_page" or "add" operations. NEVER create a separate page named "/landing-page" or "/home" when on the Home page.
+- If the current active page has 0 content sections and the owner asks to build or design a page/website, always build directly on the active page using "replace_page" so they can see and edit it immediately on their canvas.
+- FULL COMPLETE PAGE GENERATION: When the owner asks to "build a complete landing page", "build complete website", "create landing page", "generate landing page", "build homepage", or build the whole page:
+  1. DO NOT use "clarify". DO NOT ask "What sections do you want?".
+  2. ALWAYS use "replace_page" with ALL 4-7 essential sections in order:
+     - Hero (strong headline, badge, subtitle, primary & secondary action buttons)
+     - Features or Services (core benefits/offerings tailored to this business)
+     - Content / Split / About (detailed narrative or product showcase)
+     - Testimonials (customer quotes and reviews)
+     - Call to Action (bold closing conversion banner with button)
+     - FAQ (key questions answered)
+  3. Never generate only a single section when the user asked for a complete landing page or website.`;
 
 /** What the AI sees of the page: the section types whose fields it gets, and which sections it sees in full. */
 export type PromptScope = { types: EditableSectionType[]; fullIds: Set<string>; pageJson: string };
@@ -482,6 +495,8 @@ function check(raw: unknown, options: SiteCopilotOptions, context: CopilotContex
     maxGeneratedImages: MAX_GENERATED_IMAGES,
     pages: options.website.draft.pages,
     theme: options.website.draft.theme,
+    currentPageId: options.pageId,
+    currentPageSlug: context.page?.slug ?? "/",
   });
   const problems = [...errors, ...compiled.errors];
   if (reply.intent === "edit" && reply.ops.length === 0 && !reply.seo) {
@@ -609,6 +624,20 @@ export async function runCopilot(
   let raw = await ask(messages);
   let attempt = check(raw, options, context);
   if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {
+    const isCompletePageRequest = /\b(complete|all\s+sections?|full\s+page|full\s+website|whole\s+page|landing\s*page|website)\b/i.test(options.prompt);
+    if (isCompletePageRequest) {
+      raw = await ask([
+        ...messages,
+        { role: "assistant", content: JSON.stringify(raw) },
+        {
+          role: "user",
+          content: `The owner wants a complete landing page with ALL standard sections (Hero, Features, Services/Content, Testimonials, CTA, FAQ) in one shot. Do NOT clarify or ask what sections they want. Generate all sections now using "replace_page".`,
+        },
+      ]);
+      attempt = check(raw, options, context);
+    }
+  }
+  if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {
     return {
       id: randomUUID(),
       prompt: options.prompt,
@@ -681,7 +710,7 @@ export class AiSiteCopilotService {
 
     const [generation, { apiKey, model }] = await Promise.all([
       prisma.websiteGeneration.findUnique({ where: { websiteId: website.id }, select: { input: true } }),
-      aiSettingsService.getCredentials(website.clientId),
+      aiSettingsService.getCredentials(website.clientId, options.userId),
     ]);
     if (!apiKey) {
       throw new AppError(503, "The AI assistant isn't available yet. Ask the administrator to set it up.", "AI_NOT_CONFIGURED");

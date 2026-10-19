@@ -135,7 +135,7 @@ export class AiSeoService {
       throw new AppError(404, "Page not found", "PAGE_NOT_FOUND");
     }
 
-    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId);
+    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId, actor.id);
     if (!apiKey) {
       throw new AppError(
         503,
@@ -250,7 +250,7 @@ Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and 
       `${industry} ${location ? `in ${location}` : "solutions"}`.trim();
 
     // Enforce AI token balance and credentials, identical to generatePageSeo
-    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId);
+    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId, actor.id);
     if (!apiKey) {
       throw new AppError(
         503,
