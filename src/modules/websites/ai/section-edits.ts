@@ -278,6 +278,8 @@ export type EditEnv = {
   /** Other pages on the site, so cross-page edits can validate and update them. */
   pages?: readonly PageView[];
   theme?: ThemeSettings;
+  currentPageId?: string;
+  currentPageSlug?: string;
 };
 
 /** What happened to one of the AI's operations. */
@@ -667,6 +669,27 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
         if (pageSections.length > 0) {
           const rawSlug = pageDraft.slug?.trim() || toSlug(pageDraft.name);
           const slug = rawSlug.startsWith("/") ? rawSlug : `/${rawSlug}`;
+
+          // If the user is currently on the Home page (or active page has no body sections)
+          // and the AI tried to create a redundant "Landing Page" (/landing-page) or "Home" (/home),
+          // redirect it to populate the active page directly so the user sees the landing page on Home!
+          const isCurrentHome = env.currentPageSlug === "/" || !env.currentPageSlug;
+          const currentHasBody = page.some((s) => s.type !== "header" && s.type !== "footer");
+          const isLandingOrHomeRequest =
+            slug === "/landing-page" ||
+            slug === "/landing" ||
+            slug === "/home" ||
+            pageDraft.name.toLowerCase() === "landing page" ||
+            pageDraft.name.toLowerCase() === "home";
+
+          if (isCurrentHome && !currentHasBody && isLandingOrHomeRequest) {
+            const kept = (type: string) => page.filter((section) => section.type === type);
+            apply({ op: "replace_page", sections: [...kept("header"), ...(pageSections as SectionEnvelope[]), ...kept("footer")] });
+            changedIds.push(...pageSections.map((item) => item.id));
+            rebuild = true;
+            break;
+          }
+
           const newPageId = randomUUID();
           createdPages.push({
             id: newPageId,

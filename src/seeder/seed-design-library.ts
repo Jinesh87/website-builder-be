@@ -72,7 +72,16 @@ export async function seedDesignLibrary(): Promise<void> {
         pages: seed.pages as unknown as Prisma.InputJsonValue,
         sortOrder: index,
       },
-      update: {},
+      update: {
+        name: seed.name,
+        category: seed.category,
+        description: seed.description,
+        themeId: themeIds.get(seed.themeName) ?? null,
+        header: seed.header as Prisma.InputJsonValue,
+        footer: seed.footer as Prisma.InputJsonValue,
+        pages: seed.pages as unknown as Prisma.InputJsonValue,
+        sortOrder: index,
+      },
     });
   }
 

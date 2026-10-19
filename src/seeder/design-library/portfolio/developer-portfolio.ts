@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { DEVELOPER_PORTFOLIO_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "logo-left",
   siteName: NAME,
+  logo: DEVELOPER_PORTFOLIO_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Overview", href: "/" },
     { label: "Systems & Code", href: "/portfolio" },
@@ -22,6 +25,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: DEVELOPER_PORTFOLIO_LOGO,
   tagline: "Staff Systems & Distributed Infrastructure Engineer",
   description: "Engineering fault-tolerant distributed backends, high-throughput edge runtimes, and developer infrastructure. Built for reliability.",
   columns: [

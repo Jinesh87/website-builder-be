@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { DESIGN_STUDIO_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "floating",
   siteName: NAME,
+  logo: DESIGN_STUDIO_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Home", href: "/" },
     { label: "Work", href: "/portfolio" },
@@ -21,6 +24,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "cta-banner",
   siteName: NAME,
+  logo: DESIGN_STUDIO_LOGO,
   description: "Independent design studio for brands that refuse to blend in.",
   ctaBanner: {
     enabled: true,

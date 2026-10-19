@@ -71,6 +71,14 @@ export class ClientController {
     }
   };
 
+  setPassword = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ client: await clientService.setPassword(req.params.id, req.body.password, req.user!.id) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   resendEmail = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
     try {
       res.json(await clientService.resendEmail(req.params.id));

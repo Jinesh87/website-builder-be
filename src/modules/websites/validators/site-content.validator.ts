@@ -33,7 +33,8 @@ import {
  * schemes that can't execute script, and colors to plain hex values.
  */
 export const SAFE_HREF = /^(https?:\/\/\S+|mailto:\S+|tel:[+0-9() -]+|\/(?!\/)\S*|#\S*)$/i;
-export const SAFE_IMAGE_URL = /^(https?:\/\/\S+|\/(?!\/)\S*)$/i;
+export const SAFE_IMAGE_URL =
+  /^(https?:\/\/\S+|\/(?!\/)\S*|data:image\/(?:png|jpe?g|webp|gif|svg\+xml|avif)(?:;[a-z0-9=_-]+)*;?(?:base64)?,[\s\S]*)$/i;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 /** Only these hosts are embedded, and only via an iframe src the renderer builds itself. */
 export const SAFE_VIDEO_URL =
@@ -92,11 +93,11 @@ const menuItem = Joi.object({
 });
 
 const image = Joi.object({
-  url: text(2048)
+  url: text(65536)
     .pattern(SAFE_IMAGE_URL)
     .allow("")
     .optional()
-    .messages({ "string.pattern.base": "Images must use an http(s) URL or a /path" }),
+    .messages({ "string.pattern.base": "Images must use an http(s) URL, a /path, or a valid image data URI" }),
   alt: text(300).allow("").optional().default(""),
 })
   .allow(null)
@@ -174,10 +175,10 @@ const customBlockSchema = Joi.alternatives()
     }),
     Joi.object({
       type: customType("image"),
-      url: text(2048)
+      url: text(65536)
         .pattern(SAFE_IMAGE_URL)
         .required()
-        .messages({ "string.pattern.base": "Images must use an http(s) URL or a /path" }),
+        .messages({ "string.pattern.base": "Images must use an http(s) URL, a /path, or a valid image data URI" }),
       alt: text(300).allow("").required(),
       aspect: Joi.string().valid(...CUSTOM_IMAGE_ASPECTS).optional(),
     }),

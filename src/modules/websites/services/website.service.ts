@@ -12,6 +12,7 @@ import {
   type WebsiteTemplate,
 } from "../../../generated/prisma/client.js";
 import { THEME_SEEDS } from "../../../seeder/design-library/themes.js";
+import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
 import type { FooterData, HeaderData, LinkRef, Section, ThemeSettings } from "../types/site-content.types.js";
 import type { TemplateFooter, TemplateHeader, TemplatePage } from "../types/template.types.js";
 import type {
@@ -163,11 +164,69 @@ function toPage(page: WebsiteWithPages["pages"][number]): PageView {
     seoTitle: page.seoTitle,
     seoDescription: page.seoDescription,
     seoKeywords: page.seoKeywords ?? [],
+    templateKey: page.templateKey ?? null,
     sections: page.sections as unknown as Section[],
   };
 }
 
 function toDetail(website: WebsiteWithPages): WebsiteDetail {
+  let header = website.header as unknown as HeaderData;
+  let footer = website.footer as unknown as FooterData;
+  let pages = website.pages.map(toPage);
+
+  // If website header or footer has no logo, check if any page was created from a built-in template seed
+  const templateKey = pages.find((p) => p.templateKey)?.templateKey;
+  const seed = templateKey ? WEBSITE_TEMPLATE_SEEDS.find((s) => s.key === templateKey) : null;
+  if (seed) {
+    if (!header.logo?.url && seed.header.logo) {
+      header = {
+        ...header,
+        logo: seed.header.logo,
+        logoDisplay: header.logoDisplay ?? seed.header.logoDisplay ?? "logo_only",
+      };
+    }
+    if (!footer.logo?.url && seed.footer.logo) {
+      footer = {
+        ...footer,
+        logo: seed.footer.logo,
+        logoDisplay: footer.logoDisplay ?? seed.footer.logoDisplay ?? "logo_only",
+      };
+    }
+
+    pages = pages.map((page) => ({
+      ...page,
+      sections: (page.sections as Section[]).map((sec) => {
+        if (sec.type === "header") {
+          const secHeader = (sec.data || {}) as HeaderData;
+          if (!secHeader.logo?.url && seed.header.logo) {
+            return {
+              ...sec,
+              data: {
+                ...secHeader,
+                logo: seed.header.logo,
+                logoDisplay: secHeader.logoDisplay ?? seed.header.logoDisplay ?? "logo_only",
+              },
+            };
+          }
+        }
+        if (sec.type === "footer") {
+          const secFooter = (sec.data || {}) as FooterData;
+          if (!secFooter.logo?.url && seed.footer.logo) {
+            return {
+              ...sec,
+              data: {
+                ...secFooter,
+                logo: seed.footer.logo,
+                logoDisplay: secFooter.logoDisplay ?? seed.footer.logoDisplay ?? "logo_only",
+              },
+            };
+          }
+        }
+        return sec;
+      }),
+    }));
+  }
+
   return {
     ...toSummary(website),
     customDomain: website.domains[0]?.hostname ?? null,
@@ -175,9 +234,9 @@ function toDetail(website: WebsiteWithPages): WebsiteDetail {
     generation: website.generation ? toGenerationView(website.generation) : null,
     draft: {
       theme: website.theme as unknown as ThemeSettings,
-      header: website.header as unknown as HeaderData,
-      footer: website.footer as unknown as FooterData,
-      pages: website.pages.map(toPage),
+      header,
+      footer,
+      pages,
       draftUpdatedAt: website.draftUpdatedAt.toISOString(),
     },
   };
@@ -216,27 +275,48 @@ function buildTemplateContent(
   siteName: string,
   websiteName: string,
 ): { pages: TemplatePage[]; header: HeaderData; footer: FooterData } {
+  const seed = template ? WEBSITE_TEMPLATE_SEEDS.find((s) => s.key === template.key) : null;
+  const rawHeader = seed ? seed.header : (template ? (template.header as unknown as TemplateHeader) : BLANK_HEADER);
+  const rawFooter = seed ? seed.footer : (template ? (template.footer as unknown as TemplateFooter) : BLANK_FOOTER);
+  const rawPages = seed ? seed.pages : (template ? (template.pages as unknown as TemplatePage[]) : BLANK_PAGES);
+
   const vars = { businessName: siteName, websiteName };
-  const pages = template ? fillPlaceholders(template.pages as unknown as TemplatePage[], vars) : BLANK_PAGES;
-  const templateHeader = template ? (template.header as unknown as TemplateHeader) : BLANK_HEADER;
-  const templateFooter = template ? fillPlaceholders(template.footer as unknown as TemplateFooter, vars) : BLANK_FOOTER;
+  const pages = fillPlaceholders(rawPages, vars);
+  const templateHeader = rawHeader;
+  const templateFooter = fillPlaceholders(rawFooter, vars);
   const navLinks: LinkRef[] = pages
     .filter((page) => page.showInNav && page.visible !== false)
     .slice(0, 12)
     .map((page) => ({ label: page.name, href: page.slug }));
 
+  const finalHeader: HeaderData = { ...templateHeader, siteName, menu: navLinks };
+  const finalFooter: FooterData = {
+    ...templateFooter,
+    siteName,
+    columns:
+      templateFooter.design === "columns" && templateFooter.columns.length === 0 && navLinks.length > 0
+        ? [{ title: "Pages", links: navLinks }]
+        : templateFooter.columns,
+    copyright: `© ${new Date().getFullYear()} ${siteName}`,
+  };
+
+  const syncedPages: TemplatePage[] = pages.map((page) => ({
+    ...page,
+    sections: page.sections.map((sec) => {
+      if (sec.type === "header") {
+        return { ...sec, data: finalHeader };
+      }
+      if (sec.type === "footer") {
+        return { ...sec, data: finalFooter };
+      }
+      return sec;
+    }),
+  }));
+
   return {
-    pages,
-    header: { ...templateHeader, siteName, menu: navLinks },
-    footer: {
-      ...templateFooter,
-      siteName,
-      columns:
-        templateFooter.design === "columns" && templateFooter.columns.length === 0 && navLinks.length > 0
-          ? [{ title: "Pages", links: navLinks }]
-          : templateFooter.columns,
-      copyright: `© ${new Date().getFullYear()} ${siteName}`,
-    },
+    pages: syncedPages,
+    header: finalHeader,
+    footer: finalFooter,
   };
 }
 

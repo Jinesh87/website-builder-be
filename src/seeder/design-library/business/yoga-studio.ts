@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { YOGA_STUDIO_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "split-stacked",
   siteName: NAME,
+  logo: YOGA_STUDIO_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Mindful movement and botanical sanctuary",
   statusText: "Next class: 5:30pm Heated Vinyasa Flow with Anya",
   statusColor: "green",
@@ -30,6 +33,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: YOGA_STUDIO_LOGO,
   tagline: "Breathe, stretch and slow down",
   description: "A sunlit sanctuary for yoga, sound healing and conscious breathwork. Heated and non-heated daily practices for all bodies.",
   columns: [
@@ -67,7 +71,7 @@ const footer: FooterData = {
   paymentMethods: { enabled: true, methods: ["visa", "mastercard", "applepay"] },
   legalLinks: [
     { label: "Studio guidelines", href: "/about" },
-    { label: "Liability waiver", href: "/terms" },
+    { label: "Liability waiver", href: "/about" },
   ],
   copyright: `© 2026 ${NAME} Sanctuary LLC · 1% For The Planet Member`,
 };

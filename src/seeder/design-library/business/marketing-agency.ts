@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { MARKETING_AGENCY_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "glass-dock",
   siteName: NAME,
+  logo: MARKETING_AGENCY_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Home", href: "/" },
     { label: "Services", href: "/services" },
@@ -23,6 +26,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "newsletter",
   siteName: NAME,
+  logo: MARKETING_AGENCY_LOGO,
   description: "Performance marketing for brands that measure everything.",
   newsletter: {
     enabled: true,
@@ -57,8 +61,8 @@ const footer: FooterData = {
     { label: "YouTube", href: "https://www.youtube.com" },
   ],
   legalLinks: [
-    { label: "Privacy", href: "/privacy" },
-    { label: "Terms", href: "/terms" },
+    { label: "Privacy", href: "/about" },
+    { label: "Terms", href: "/contact" },
   ],
   copyright: `© 2026 ${NAME} Inc.`,
 };

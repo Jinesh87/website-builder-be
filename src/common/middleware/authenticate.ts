@@ -6,7 +6,7 @@ import { verifyAccessToken } from "../utils/jwt.js";
 
 export type AuthUser = {
   id: string;
-  email: string;
+  email: string | null;
   role: UserRole;
   clientId: string | null;
 };

@@ -3,7 +3,9 @@ import type { ClientSource, UserStatus } from "../../../common/constants/roles.j
 export type ClientOwner = {
   id: string;
   fullName: string;
-  email: string;
+  email: string | null;
+  /** Set only for clients whose login was created by a Super Admin. */
+  username: string | null;
   phone: string | null;
   status: UserStatus;
   emailVerified: boolean;
@@ -39,17 +41,18 @@ export type ClientListResult = {
 export type ClientDetailsInput = {
   businessName: string;
   fullName: string;
-  email: string;
+  email?: string;
+  /** Only for clients that already log in with a username. */
+  username?: string;
   phone?: string;
   address?: string;
 };
 
-export type CreateClientInput = ClientDetailsInput & {
-  sendInvite: boolean;
+export type CreateClientInput = Omit<ClientDetailsInput, "username"> & {
+  username: string;
+  password: string;
 };
 
 export type CreateClientResult = {
   client: ClientView;
-  /** Null when no invite was requested. */
-  inviteSent: boolean | null;
 };

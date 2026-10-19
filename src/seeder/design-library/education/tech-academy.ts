@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { TECH_ACADEMY_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "glass-dock",
   siteName: NAME,
+  logo: TECH_ACADEMY_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Curriculum", href: "/courses" },
     { label: "Admissions", href: "/admissions" },
@@ -21,6 +24,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "cta-banner",
   siteName: NAME,
+  logo: TECH_ACADEMY_LOGO,
   description:
     "Quantum Tech Academy is a next-generation engineering fellowship training senior AI researchers, distributed systems architects, and modern engineering leaders.",
   ctaBanner: {

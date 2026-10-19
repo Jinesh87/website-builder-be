@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { DESIGN_INSTITUTE_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "classical",
   siteName: NAME,
+  logo: DESIGN_INSTITUTE_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Studios", href: "/courses" },
     { label: "Faculty", href: "/about" },
@@ -22,6 +25,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: DESIGN_INSTITUTE_LOGO,
   description:
     "Atelier Institute of Visual Arts & Architecture is an independent European-inspired design academy cultivating the vanguard of spatial environments, editorial craft, and generative aesthetics.",
   columns: [

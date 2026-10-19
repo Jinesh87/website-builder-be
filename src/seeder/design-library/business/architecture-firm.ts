@@ -1,11 +1,33 @@
-import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
+import type { FooterData, HeaderData, ImageRef } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
 
 const NAME = "{{businessName}}";
 
+export const ATELIER_LOGO: ImageRef = {
+  url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 40" width="210" height="40" fill="none">` +
+      `<defs>` +
+      `<linearGradient id="aa-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">` +
+      `<stop offset="0%" stop-color="#111111"/>` +
+      `<stop offset="100%" stop-color="#242424"/>` +
+      `</linearGradient>` +
+      `</defs>` +
+      `<rect x="2" y="2" width="36" height="36" rx="5" fill="url(#aa-grad)"/>` +
+      `<path d="M10 27L20 11L30 27" stroke="#F4F4F2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>` +
+      `<path d="M13.5 22H26.5" stroke="#F4F4F2" stroke-width="2.2" stroke-linecap="round"/>` +
+      `<circle cx="20" cy="18" r="2" fill="#8A7F6D"/>` +
+      `<text x="46" y="21" font-family="'Playfair Display', Georgia, serif" font-size="16.5" font-weight="700" fill="#111111" letter-spacing="0.8">ATELIER</text>` +
+      `<text x="47" y="32" font-family="'Archivo', -apple-system, BlinkMacSystemFont, sans-serif" font-size="8" font-weight="600" fill="#8A7F6D" letter-spacing="3.4">ARCHITECTS</text>` +
+      `</svg>`,
+  )}`,
+  alt: "Atelier Architects Logo",
+};
+
 const header: HeaderData = {
   design: "minimalist",
   siteName: NAME,
+  logo: ATELIER_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Home", href: "/" },
     { label: "Portfolio", href: "/portfolio" },
@@ -20,10 +42,31 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "centered",
   siteName: NAME,
+  logo: ATELIER_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Architecture and interiors",
   description: "Homes and workplaces designed around the people who use them.",
-  columns: [],
+  columns: [
+    {
+      title: "Studio",
+      links: [
+        { label: "Home", href: "/" },
+        { label: "Portfolio", href: "/portfolio" },
+        { label: "About us", href: "/about" },
+        { label: "Contact", href: "/contact" },
+      ],
+    },
+    {
+      title: "Practice",
+      links: [
+        { label: "Residential", href: "/portfolio" },
+        { label: "Commercial", href: "/portfolio" },
+        { label: "Interiors", href: "/portfolio" },
+      ],
+    },
+  ],
   menu: [
+    { label: "Home", href: "/" },
     { label: "Portfolio", href: "/portfolio" },
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
@@ -37,6 +80,10 @@ const footer: FooterData = {
     { label: "Instagram", href: "https://www.instagram.com" },
     { label: "LinkedIn", href: "https://www.linkedin.com" },
     { label: "Pinterest", href: "https://www.pinterest.com" },
+  ],
+  legalLinks: [
+    { label: "Privacy Policy", href: "/contact" },
+    { label: "Terms of Service", href: "/contact" },
   ],
   copyright: `© 2026 ${NAME} Ltd.`,
 };

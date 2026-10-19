@@ -1308,7 +1308,7 @@ export class AiGeneratorService {
       responseFormat = { type: "json_object" },
       signal,
     } = options;
-    const { apiKey, model } = await aiSettingsService.getCredentials(logging.clientId);
+    const { apiKey, model } = await aiSettingsService.getCredentials(logging.clientId, logging.userId);
     if (!apiKey) {
       throw new AppError(
         400,
@@ -1551,7 +1551,7 @@ export class AiGeneratorService {
     } = options;
     const logging: LoggingContext = { clientId, websiteId, userId };
 
-    const { apiKey } = await aiSettingsService.getCredentials(clientId);
+    const { apiKey } = await aiSettingsService.getCredentials(clientId, userId);
     if (apiKey) {
       await this.checkModeration(prompt, apiKey, signal);
     }

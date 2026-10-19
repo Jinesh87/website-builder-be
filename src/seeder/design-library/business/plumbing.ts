@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { PLUMBING_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "headline-ticker",
   siteName: NAME,
+  logo: PLUMBING_LOGO,
+  logoDisplay: "logo_only",
   announcement: "Plumbers available today in Austin • No call-out fee on repairs • 12-month guarantee on every job",
   announcementLink: { label: "Book now", href: "/contact" },
   menu: [
@@ -23,6 +26,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: PLUMBING_LOGO,
   tagline: "Plumbing with a smile",
   description: "Friendly, licensed plumbers serving Austin and Round Rock. Upfront prices, tidy work and a 12-month guarantee.",
   columns: [

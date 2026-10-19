@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { SAAS_PLATFORM_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "floating",
   siteName: NAME,
+  logo: SAAS_PLATFORM_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Features", href: "/#features" },
     { label: "Architecture", href: "/#architecture" },
@@ -21,6 +24,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: SAAS_PLATFORM_LOGO,
   description:
     "Nexus AI is the autonomous infrastructure platform powering real-time multi-agent orchestration, ultra-low latency inference, and enterprise zero-trust model guardrails.",
   columns: [
@@ -63,9 +67,9 @@ const footer: FooterData = {
     { label: "Discord", href: "https://discord.com" },
   ],
   legalLinks: [
-    { label: "Privacy Policy", href: "/privacy" },
-    { label: "Terms of Service", href: "/terms" },
-    { label: "Security Whitepaper", href: "/security" },
+    { label: "Privacy Policy", href: "/#architecture" },
+    { label: "Terms of Service", href: "/#pricing" },
+    { label: "Security Whitepaper", href: "/#architecture" },
   ],
   copyright: `© 2026 ${NAME}. Built for mission-critical intelligence.`,
 };
