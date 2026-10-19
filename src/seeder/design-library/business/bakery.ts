@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { BAKERY_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "split-stacked",
   siteName: NAME,
+  logo: BAKERY_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Naturally leavened bread, pastry and celebration cakes",
   statusText: "Pre-orders close daily at 3:00pm",
   statusColor: "orange",
@@ -30,6 +33,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: BAKERY_LOGO,
   tagline: "Small-batch bakery and coffee counter",
   description: "A bright coastal bakery making sourdough, croissants, cakes and cafe boxes from a glass-fronted kitchen.",
   columns: [

@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { ROOFING_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "side-drawer",
   siteName: NAME,
+  logo: ROOFING_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Now booking spring re-roofs",
   menu: [
     { label: "Home", href: "/" },
@@ -24,6 +27,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "centered",
   siteName: NAME,
+  logo: ROOFING_LOGO,
   tagline: "Roofs built to outlast the mortgage",
   description: "Premium slate, metal and shingle roofing across the Pacific Northwest. Family-owned since 1998.",
   columns: [
@@ -64,7 +68,7 @@ const footer: FooterData = {
   ],
   paymentMethods: { enabled: false },
   legalLinks: [
-    { label: "Privacy", href: "/privacy" },
+    { label: "Privacy", href: "/about" },
     { label: "Warranty terms", href: "/services" },
   ],
   copyright: `© 2026 ${NAME} Co. · OR CCB #204118`,

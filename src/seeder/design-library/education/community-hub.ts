@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { COMMUNITY_HUB_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "floating",
   siteName: NAME,
+  logo: COMMUNITY_HUB_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Initiatives", href: "/courses" },
     { label: "Chapters", href: "/about" },
@@ -22,6 +25,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "mega",
   siteName: NAME,
+  logo: COMMUNITY_HUB_LOGO,
   tagline: "Regenerating neighborhoods, building food security, and empowering grassroots civic resilience worldwide.",
   description:
     "Solaria Civic Collective is a decentralised, community-owned nonprofit network mobilizing 28,000+ neighbors across 140 municipal chapters.",

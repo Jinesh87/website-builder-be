@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { VIDEO_PRODUCTION_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "minimalist",
   siteName: NAME,
+  logo: VIDEO_PRODUCTION_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Home", href: "/" },
     { label: "Portfolio", href: "/portfolio" },
@@ -20,6 +23,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "split",
   siteName: NAME,
+  logo: VIDEO_PRODUCTION_LOGO,
   tagline: "Brand films, ads and social video",
   description: "A boutique production company making videos people actually watch.",
   columns: [

@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { DENTAL_CLINIC_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "headline-ticker",
   siteName: NAME,
+  logo: DENTAL_CLINIC_LOGO,
+  logoDisplay: "logo_only",
   announcement: "Now welcoming new patients • Same-day emergency appointments • 0% dental financing available",
   announcementLink: { label: "Book visit", href: "/contact" },
   menu: [
@@ -23,6 +26,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: DENTAL_CLINIC_LOGO,
   tagline: "Gentle dental care in a calm, modern space",
   description: "Comprehensive aesthetic, restorative and preventative family dentistry with state-of-the-art digital technology.",
   columns: [
@@ -59,8 +63,8 @@ const footer: FooterData = {
   ],
   paymentMethods: { enabled: true, methods: ["visa", "mastercard", "amex", "applepay"] },
   legalLinks: [
-    { label: "Privacy policy", href: "/privacy" },
-    { label: "HIPAA notice", href: "/terms" },
+    { label: "Privacy policy", href: "/about" },
+    { label: "HIPAA notice", href: "/contact" },
   ],
   copyright: `© 2026 ${NAME} Dental Group · IL Dental License #DS-94210`,
 };

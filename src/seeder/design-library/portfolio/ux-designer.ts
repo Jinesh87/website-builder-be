@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { UX_DESIGNER_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "glass-dock",
   siteName: NAME,
+  logo: UX_DESIGNER_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Overview", href: "/" },
     { label: "Case Studies", href: "/portfolio" },
@@ -21,6 +24,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "cta-banner",
   siteName: NAME,
+  logo: UX_DESIGNER_LOGO,
   description: "Senior Staff Product Designer crafting AI interfaces, scalable design systems, and high-conversion software products for visionary tech companies.",
   ctaBanner: {
     enabled: true,

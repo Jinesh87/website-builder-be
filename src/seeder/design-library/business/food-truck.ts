@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { FOOD_TRUCK_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "headline-ticker",
   siteName: NAME,
+  logo: FOOD_TRUCK_LOGO,
+  logoDisplay: "logo_only",
   announcement: "This week: Mission Market, Friday night tacos, Sunday brunch park-up",
   announcementLink: { label: "Find the truck", href: "/locations" },
   menu: [
@@ -23,6 +26,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: FOOD_TRUCK_LOGO,
   tagline: "Street food with a sunny side",
   description: "A modern food truck serving grilled wraps, rice bowls, crispy sides and seasonal drinks across the city.",
   columns: [
@@ -56,7 +60,7 @@ const footer: FooterData = {
     { label: "TikTok", href: "https://www.tiktok.com" },
   ],
   paymentMethods: { enabled: true, methods: ["visa", "mastercard", "applepay"] },
-  legalLinks: [{ label: "Catering terms", href: "/terms" }],
+  legalLinks: [{ label: "Catering terms", href: "/catering" }],
   copyright: `(c) 2026 ${NAME} LLC`,
 };
 

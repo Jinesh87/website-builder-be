@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { ELECTRICIAN_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "split-stacked",
   siteName: NAME,
+  logo: ELECTRICIAN_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Licensed master electricians",
   statusText: "Electricians available today across Chicagoland",
   statusColor: "green",
@@ -30,6 +33,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "mega",
   siteName: NAME,
+  logo: ELECTRICIAN_LOGO,
   tagline: "Power done properly",
   description: "Residential and light-commercial electrical work across Chicagoland since 2009. Licensed, bonded and insured.",
   columns: [
@@ -74,8 +78,8 @@ const footer: FooterData = {
   ],
   paymentMethods: { enabled: true, methods: ["visa", "mastercard", "amex", "paypal"] },
   legalLinks: [
-    { label: "Privacy", href: "/privacy" },
-    { label: "Terms", href: "/terms" },
+    { label: "Privacy", href: "/about" },
+    { label: "Terms", href: "/services" },
   ],
   copyright: `© 2026 ${NAME} LLC · IL License #EC-48213`,
 };

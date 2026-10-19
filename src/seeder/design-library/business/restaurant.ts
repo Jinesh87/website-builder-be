@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
+import { RESTAURANT_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "side-drawer",
   siteName: NAME,
+  logo: RESTAURANT_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Modern fire cooking and low-lit cocktails",
   menu: [
     { label: "Home", href: "/" },
@@ -24,6 +27,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "mega",
   siteName: NAME,
+  logo: RESTAURANT_LOGO,
   tagline: "Seasonal plates, open fire, intimate rooms",
   description: "A modern neighborhood restaurant and cocktail bar built around live fire, local farms and warm hospitality.",
   columns: [

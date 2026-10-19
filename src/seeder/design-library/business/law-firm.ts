@@ -1,11 +1,36 @@
-import type { FooterData, HeaderData, SectionDataMap } from "../../../modules/websites/types/site-content.types.js";
+import type { FooterData, HeaderData, ImageRef, SectionDataMap } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
 
 const NAME = "{{businessName}}";
 
+export const MERIDIAN_LOGO: ImageRef = {
+  url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 40" width="210" height="40" fill="none">` +
+      `<defs>` +
+      `<linearGradient id="ml-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">` +
+      `<stop offset="0%" stop-color="#A63D10"/>` +
+      `<stop offset="100%" stop-color="#802804"/>` +
+      `</linearGradient>` +
+      `</defs>` +
+      `<rect x="2" y="2" width="36" height="36" rx="7" fill="url(#ml-grad)"/>` +
+      `<path d="M20 9V29" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>` +
+      `<path d="M11 14H29" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>` +
+      `<path d="M11 14L8 20H14L11 14Z" stroke="#FFFFFF" stroke-width="1.5" fill="none" stroke-linejoin="round"/>` +
+      `<path d="M29 14L26 20H32L29 14Z" stroke="#FFFFFF" stroke-width="1.5" fill="none" stroke-linejoin="round"/>` +
+      `<path d="M16 29H24" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>` +
+      `<circle cx="20" cy="9" r="2" fill="#FDE68A"/>` +
+      `<text x="46" y="21" font-family="'Libre Baskerville', Georgia, serif" font-size="15.5" font-weight="700" fill="#2B2118" letter-spacing="-0.2">MERIDIAN</text>` +
+      `<text x="47" y="32" font-family="'Manrope', -apple-system, BlinkMacSystemFont, sans-serif" font-size="8.5" font-weight="700" fill="#A63D10" letter-spacing="2.8">LEGAL</text>` +
+      `</svg>`,
+  )}`,
+  alt: "Meridian Legal Logo",
+};
+
 const header: HeaderData = {
   design: "classical",
   siteName: NAME,
+  logo: MERIDIAN_LOGO,
+  logoDisplay: "logo_only",
   tagline: "Solicitors since 1998",
   menu: [
     { label: "Home", href: "/" },
@@ -34,6 +59,8 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "mega",
   siteName: NAME,
+  logo: MERIDIAN_LOGO,
+  logoDisplay: "logo_only",
   description: "Practical legal advice for families and growing companies. Fixed fees where we can.",
   columns: [
     {
@@ -48,11 +75,19 @@ const footer: FooterData = {
     {
       title: "Firm",
       links: [
+        { label: "Home", href: "/" },
         { label: "About", href: "/about" },
         { label: "Our team", href: "/team" },
         { label: "Contact", href: "/contact" },
       ],
     },
+  ],
+  menu: [
+    { label: "Home", href: "/" },
+    { label: "About", href: "/about" },
+    { label: "Services", href: "/services" },
+    { label: "Team", href: "/team" },
+    { label: "Contact", href: "/contact" },
   ],
   contact: {
     email: "info@meridianlegal.com",
@@ -62,9 +97,9 @@ const footer: FooterData = {
   },
   social: [{ label: "LinkedIn", href: "https://www.linkedin.com" }],
   legalLinks: [
-    { label: "Privacy policy", href: "/privacy" },
-    { label: "Terms of engagement", href: "/terms" },
-    { label: "Attorney advertising", href: "/disclaimer" },
+    { label: "Privacy Policy", href: "/contact" },
+    { label: "Terms of Engagement", href: "/contact" },
+    { label: "Attorney Advertising", href: "/contact" },
   ],
   copyright: `© 2026 ${NAME} LLP. Attorney advertising. Prior results do not guarantee a similar outcome.`,
 };
