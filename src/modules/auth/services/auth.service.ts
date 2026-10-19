@@ -16,6 +16,7 @@ import type {
   LoginInput,
   PublicUser,
   SignupInput,
+  UpdateProfileInput,
   VerificationDispatch,
 } from "../types/auth.types.js";
 import { clearLoginLockout, getLoginLockStatus, recordFailedLoginAttempt } from "../utils/login-lockout.js";
@@ -25,14 +26,18 @@ import {
   getPasswordResetUserId,
   INVITE_TOKEN_TTL_SECONDS,
   RESET_TOKEN_TTL_SECONDS,
+  revokePasswordResetToken,
 } from "../utils/password-reset.js";
+import { clearPendingEmail, getPendingEmail, storePendingEmail } from "../utils/pending-email.js";
 import {
   checkVerificationCode,
+  clearVerificationCode,
   generateVerificationCode,
   getResendCooldownSeconds,
   RESEND_COOLDOWN_SECONDS,
   storeVerificationCode,
   VERIFICATION_CODE_TTL_SECONDS,
+  type VerifyCodeResult,
 } from "../utils/verification-code.js";
 
 type UserWithClient = User & { client: { id: string; businessName: string } | null };
@@ -81,6 +86,18 @@ function userLockoutKey(userId: string): string {
 
 function lockoutKey(user: { id: string } | null, identifier: string): string {
   return user ? userLockoutKey(user.id) : `identifier:${identifier}`;
+}
+
+function assertCodeAccepted(result: VerifyCodeResult): void {
+  if (result === "expired") {
+    throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
+  }
+  if (result === "too_many_attempts") {
+    throw new AppError(429, "Too many incorrect attempts. Request a new code.", "CODE_ATTEMPTS_EXCEEDED");
+  }
+  if (result === "invalid") {
+    throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
+  }
 }
 
 function lockedError(lockedUntil: Date) {
@@ -153,16 +170,7 @@ export class AuthService {
       throw new AppError(409, "This email is already verified. Please log in.", "ALREADY_VERIFIED");
     }
 
-    const result = await checkVerificationCode(user.id, code);
-    if (result === "expired") {
-      throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
-    }
-    if (result === "too_many_attempts") {
-      throw new AppError(429, "Too many incorrect attempts. Request a new code.", "CODE_ATTEMPTS_EXCEEDED");
-    }
-    if (result === "invalid") {
-      throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
-    }
+    assertCodeAccepted(await checkVerificationCode(user.id, code));
 
     const verified = await prisma.user.update({
       where: { id: user.id },
@@ -360,6 +368,117 @@ export class AuthService {
     await prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } });
     await this.revokeAllSessions(userId);
     await clearLoginLockout(userLockoutKey(userId));
+  }
+
+  /** Phone is contact info only, so it's saved without verification. */
+  async updateProfile(userId: string, input: UpdateProfileInput): Promise<PublicUser> {
+    await this.findActiveUser(userId);
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { phone: input.phone.trim() || null },
+      include: { client: clientSelect },
+    });
+    return toPublicUser(user);
+  }
+
+  /** Step 1 of adding or changing an email: the address is only saved once the emailed code is confirmed. */
+  async requestEmailChange(userId: string, rawEmail: string): Promise<VerificationDispatch> {
+    const email = rawEmail.trim().toLowerCase();
+    const user = await this.findActiveUser(userId);
+    if (email === user.email) {
+      throw new AppError(400, "This is already your email address.", "EMAIL_UNCHANGED");
+    }
+    const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (taken) {
+      throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
+    }
+
+    const cooldown = await getResendCooldownSeconds(user.id, "email-change");
+    if (cooldown > 0) {
+      throw new AppError(429, `Please wait ${cooldown}s before requesting another code.`, "RESEND_COOLDOWN", {
+        retryAfterSeconds: cooldown,
+      });
+    }
+
+    const code = generateVerificationCode();
+    await storeVerificationCode(user.id, code, "email-change");
+    await storePendingEmail(user.id, email);
+
+    let emailSent = true;
+    try {
+      await emailService.sendEmailChangeCode({
+        to: email,
+        fullName: user.fullName,
+        code,
+        expiresInMinutes: VERIFICATION_CODE_TTL_SECONDS / 60,
+      });
+    } catch (error) {
+      emailSent = false;
+      logger.error({ err: error, userId: user.id }, "Failed to send email change code");
+      if (!isProduction) {
+        logger.warn({ email, code }, "Email change code (development fallback)");
+      }
+    }
+
+    return { email, emailSent, resendAvailableInSeconds: RESEND_COOLDOWN_SECONDS };
+  }
+
+  /** Step 2: the code proves the user owns the new address, so it's saved as verified. */
+  async confirmEmailChange(userId: string, code: string): Promise<PublicUser> {
+    await this.findActiveUser(userId);
+    const email = await getPendingEmail(userId);
+    if (!email) {
+      throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
+    }
+    assertCodeAccepted(await checkVerificationCode(userId, code, "email-change"));
+    await clearPendingEmail(userId);
+
+    let user: UserWithClient;
+    try {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: { email, emailVerifiedAt: new Date() },
+        include: { client: clientSelect },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
+      }
+      throw error;
+    }
+    // Reset links point at the old address, so they stop working.
+    await revokePasswordResetToken(userId);
+    logger.info({ userId }, "Email changed");
+    return toPublicUser(user);
+  }
+
+  /** Only accounts that log in with a username can go without an email. */
+  async removeEmail(userId: string): Promise<PublicUser> {
+    const existing = await this.findActiveUser(userId);
+    if (!existing.username) {
+      throw new AppError(400, "You log in with your email, so it can't be removed.", "EMAIL_REQUIRED");
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { email: null, emailVerifiedAt: null },
+      include: { client: clientSelect },
+    });
+    await Promise.all([
+      revokePasswordResetToken(userId),
+      clearPendingEmail(userId),
+      clearVerificationCode(userId, "email-change"),
+    ]);
+    logger.info({ userId }, "Email removed");
+    return toPublicUser(user);
+  }
+
+  private async findActiveUser(userId: string): Promise<User> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    }
+    return user;
   }
 
   /** Emails an admin-created client a link to set their password. Returns whether the email was sent. */

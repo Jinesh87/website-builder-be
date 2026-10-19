@@ -39,6 +39,11 @@ export type ChangePasswordInput = {
   newPassword: string;
 };
 
+export type UpdateProfileInput = {
+  /** Empty string clears the phone number. */
+  phone: string;
+};
+
 export type VerificationDispatch = {
   email: string;
   emailSent: boolean;

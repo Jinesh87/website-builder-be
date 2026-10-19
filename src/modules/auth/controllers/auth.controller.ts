@@ -106,6 +106,38 @@ export class AuthController {
       next(error);
     }
   };
+
+  updateProfile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ user: await authService.updateProfile(req.user!.id, req.body) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  requestEmailChange = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json(await authService.requestEmailChange(req.user!.id, req.body.email));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  confirmEmailChange = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ user: await authService.confirmEmailChange(req.user!.id, req.body.code) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  removeEmail = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({ user: await authService.removeEmail(req.user!.id) });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 /** Keeps the "Remember me" choice of the current session when its tokens are reissued. */
