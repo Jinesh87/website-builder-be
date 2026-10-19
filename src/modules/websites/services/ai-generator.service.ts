@@ -14,7 +14,8 @@ import {
 } from "../ai/ai-ops.js";
 import { PLANNER_SYSTEM_PROMPT, buildPlannerInput } from "../ai/ai-planner.js";
 import { sanitizeCustomData } from "../ai/custom-section.js";
-import { CUSTOM_LIMITS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
+import { repairSection } from "../ai/repair-section.js";
+import { CUSTOM_LIMITS, FEATURE_ICON_COLORS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import {
   type AiClarification,
@@ -527,8 +528,7 @@ export function sanitizeSectionData(
               ? item.description
               : "High-impact capabilities designed for modern growth.",
           icon: typeof item?.icon === "string" ? item.icon : "sparkles",
-          iconColor:
-            typeof item?.iconColor === "string" ? item.iconColor : "purple",
+          iconColor: (FEATURE_ICON_COLORS as readonly unknown[]).includes(item?.iconColor) ? item.iconColor : "purple",
           badge: typeof item?.badge === "string" ? item.badge : undefined,
         }));
       }
@@ -1227,6 +1227,9 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   }
 }
 
+const UNUSABLE_AI_SECTION = () =>
+  new AppError(502, "The AI returned content that couldn't be used. Try rephrasing your request.", "AI_INVALID_SECTION");
+
 function buildSection(
   type: string,
   raw: Record<string, unknown>,
@@ -1823,11 +1826,12 @@ export class AiGeneratorService {
     );
     const parsed = parseJsonObject(raw);
     const section = asRecord(parsed.section);
-    return buildSection(
-      type,
-      Object.keys(section).length > 0 ? section : parsed,
-      id,
+    const repaired = repairSection(
+      buildSection(type, Object.keys(section).length > 0 ? section : parsed, id),
+      "section_add",
     );
+    if (!repaired) throw UNUSABLE_AI_SECTION();
+    return repaired;
   }
 
   private async editSection(
@@ -1854,17 +1858,22 @@ Return the updated section JSON. If changing color/background, use a valid 6-dig
     );
     const parsed = parseJsonObject(raw);
 
-    return {
-      ...target,
-      settings: sanitizeSectionSettings({
-        ...target.settings,
-        ...asRecord(parsed.settings),
-      }),
-      data: sanitizeSectionData(target.type, {
-        ...target.data,
-        ...asRecord(parsed.data),
-      }),
-    };
+    const repaired = repairSection(
+      {
+        ...target,
+        settings: sanitizeSectionSettings({
+          ...target.settings,
+          ...asRecord(parsed.settings),
+        }),
+        data: sanitizeSectionData(target.type, {
+          ...target.data,
+          ...asRecord(parsed.data),
+        }),
+      },
+      "section_edit",
+    );
+    if (!repaired) throw UNUSABLE_AI_SECTION();
+    return repaired;
   }
 
   /** Existing header/footer are reused so a page redesign keeps the site's branding and navigation. */
@@ -1904,7 +1913,8 @@ Return the updated section JSON. If changing color/background, use a valid 6-dig
       const index = generated.findIndex((s) => s.type === type);
       if (index === -1) return [];
       const [match] = generated.splice(index, 1);
-      return [buildSection(type, match!)];
+      const repaired = repairSection(buildSection(type, match!), "page");
+      return repaired ? [repaired] : [];
     });
 
     if (page.length === 0) {

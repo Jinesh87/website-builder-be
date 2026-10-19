@@ -14,6 +14,7 @@ import {
   CUSTOM_IMAGE_ASPECTS,
   CUSTOM_LIMITS,
   type CustomBlock,
+  FEATURE_ICON_COLORS,
   FONT_KEYS,
   FOOTER_DESIGNS,
   HEADER_DESIGNS,
@@ -647,7 +648,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .items(
         Joi.object({
           icon: Joi.string().max(50).optional(),
-          iconColor: Joi.string().valid("orange", "green", "blue", "yellow", "purple", "pink", "cyan", "indigo", "red", "gray", "none", "default").optional(),
+          iconColor: Joi.string()
+            .valid(...FEATURE_ICON_COLORS)
+            .optional(),
           backgroundColor: Joi.string().max(100).allow("").optional(),
           badge: optionalText(50),
           title: text(120).required(),

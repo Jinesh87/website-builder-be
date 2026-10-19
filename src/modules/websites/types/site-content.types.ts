@@ -255,6 +255,24 @@ export const BRAND_DISPLAY_MODES = [
 
 export type BrandDisplayMode = (typeof BRAND_DISPLAY_MODES)[number];
 
+/** Icon badge colours of feature cards; "default" follows the theme. */
+export const FEATURE_ICON_COLORS = [
+  "orange",
+  "green",
+  "blue",
+  "yellow",
+  "purple",
+  "pink",
+  "cyan",
+  "indigo",
+  "red",
+  "gray",
+  "none",
+  "default",
+] as const;
+
+export type FeatureIconColor = (typeof FEATURE_ICON_COLORS)[number];
+
 export type HeaderMenuItem = {
   label: string;
   href: string;
@@ -476,7 +494,7 @@ export type SectionDataMap = {
     mobileColumns: GridColumns;
     items: {
       icon?: IconName;
-      iconColor?: "orange" | "green" | "blue" | "yellow" | "purple" | "pink" | "cyan" | "indigo" | "red" | "gray" | "none" | "default";
+      iconColor?: FeatureIconColor;
       title: string;
       description: string;
     }[];
