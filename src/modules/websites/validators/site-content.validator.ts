@@ -5,6 +5,7 @@ import {
   AUTH_SOCIAL_PROVIDERS,
   AUTH_VARIANTS,
   AUTH_VIEWS,
+  BRAND_DISPLAY_MODES,
   BUTTON_STYLES,
   CARD_STYLES,
   CUSTOM_ALIGNS,
@@ -102,6 +103,12 @@ const image = Joi.object({
 })
   .allow(null)
   .meta(meta({ kind: "image" }));
+
+/** How the header/footer combines the logo and the site name. */
+const logoDisplay = Joi.string()
+  .valid(...BRAND_DISPLAY_MODES)
+  .optional()
+  .description('"logo_only" hides the site name; "text_only" hides the logo');
 
 const color = Joi.string().pattern(HEX_COLOR).required().messages({ "string.pattern.base": "Use a #rrggbb color" });
 
@@ -399,6 +406,7 @@ export const headerSchema = Joi.object({
   }).description('"transparent" = a see-through header laid over the top of the first section (e.g. its background photo); only when position is "static" and sticky is false'),
   siteName: text(120).default("Brand").optional(),
   logo: image.optional(),
+  logoDisplay,
   menu: Joi.array().items(menuItem).max(24).default([]).optional(),
   cta: link.optional(),
   secondaryCta: link.optional(),
@@ -437,6 +445,7 @@ export const footerSchema = Joi.object({
   }),
   siteName: text(120).required(),
   logo: image.optional(),
+  logoDisplay,
   tagline: optionalText(200),
   description: optionalText(500),
   columns: Joi.array()
