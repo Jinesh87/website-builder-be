@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { clearAuthCookies, getRefreshToken, setAuthCookies } from "../../../common/utils/cookies.js";
+import { verifyRefreshToken } from "../../../common/utils/jwt.js";
 import { authService } from "../services/auth.service.js";
 import type { AuthResult } from "../types/auth.types.js";
 
@@ -97,6 +98,25 @@ export class AuthController {
       next(error);
     }
   };
+
+  changePassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSession(res, await authService.changePassword(req.user!.id, req.body, isRememberedSession(req)));
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/** Keeps the "Remember me" choice of the current session when its tokens are reissued. */
+function isRememberedSession(req: Request): boolean {
+  const refreshToken = getRefreshToken(req);
+  if (!refreshToken) return false;
+  try {
+    return verifyRefreshToken(refreshToken).remember;
+  } catch {
+    return false;
+  }
 }
 
 export const authController = new AuthController();

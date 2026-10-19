@@ -4,6 +4,7 @@ import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { authController } from "./controllers/auth.controller.js";
 import {
+  changePasswordSchema,
   emailOnlySchema,
   loginSchema,
   resetPasswordQuerySchema,
@@ -61,6 +62,13 @@ authRouter.post(
   rateLimit({ name: "reset-password", max: 10, windowSeconds: 15 * MINUTE }),
   validate(resetPasswordSchema),
   authController.resetPassword,
+);
+authRouter.post(
+  "/change-password",
+  authenticate,
+  rateLimit({ name: "change-password", max: 10, windowSeconds: 15 * MINUTE }),
+  validate(changePasswordSchema),
+  authController.changePassword,
 );
 
 export default authRouter;

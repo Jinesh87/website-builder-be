@@ -14,6 +14,20 @@ export const password = Joi.string()
     "string.pattern.name": "Password must contain at least one {#name}",
   });
 
+/** Lowercase, no "@" (so login can tell it apart from an email), 3–40 characters. */
+export const username = Joi.string()
+  .trim()
+  .lowercase()
+  .min(3)
+  .max(40)
+  .pattern(/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/)
+  .messages({
+    "string.min": "Username must be at least 3 characters",
+    "string.max": "Username must be at most 40 characters",
+    "string.pattern.base":
+      "Use lowercase letters, numbers, dots, dashes or underscores, starting and ending with a letter or number",
+  });
+
 export const signupSchema = Joi.object({
   fullName: Joi.string().trim().min(2).max(120).required(),
   businessName: Joi.string().trim().min(2).max(160).required(),
@@ -43,10 +57,18 @@ export const emailOnlySchema = Joi.object({
   email: email.required(),
 });
 
+/** `identifier` is an email or a username; the legacy `email` key is still accepted. */
 export const loginSchema = Joi.object({
-  email: email.required(),
+  identifier: Joi.string().trim().lowercase().min(1).max(255).required().messages({
+    "any.required": "Email or username is required",
+    "string.empty": "Email or username is required",
+  }),
   password: Joi.string().min(1).max(200).required(),
   remember: Joi.boolean().default(false),
+}).rename("email", "identifier", { ignoreUndefined: true });
+
+export const changePasswordSchema = Joi.object({
+  newPassword: password.required(),
 });
 
 export const resetPasswordQuerySchema = Joi.object({

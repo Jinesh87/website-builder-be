@@ -163,7 +163,7 @@ export class PublicSiteController {
           where: { id: website.clientId },
           include: { users: { select: { email: true } } },
         });
-        targetRecipient = client?.users?.[0]?.email;
+        targetRecipient = client?.users?.[0]?.email ?? undefined;
       }
 
       const siteName = website.businessName || website.name;
@@ -188,6 +188,8 @@ export class PublicSiteController {
             "Failed to dispatch contact form notification email, but lead was logged safely.",
           );
         }
+      } else {
+        logger.warn({ websiteId: website.id }, "Contact lead has no recipient; set a contact email on the website");
       }
 
       return res.status(200).json({

@@ -3,7 +3,8 @@ import type { UserRole, UserStatus } from "../../../common/constants/roles.js";
 
 export type PublicUser = {
   id: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   fullName: string;
   phone: string | null;
   role: UserRole;
@@ -28,9 +29,14 @@ export type SignupInput = {
 };
 
 export type LoginInput = {
-  email: string;
+  /** Email or username, already lowercased by the validator. */
+  identifier: string;
   password: string;
   remember: boolean;
+};
+
+export type ChangePasswordInput = {
+  newPassword: string;
 };
 
 export type VerificationDispatch = {

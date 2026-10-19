@@ -12,6 +12,7 @@ import { Prisma, type User } from "../../../generated/prisma/client.js";
 import { emailService } from "../../email/services/email.service.js";
 import type {
   AuthResult,
+  ChangePasswordInput,
   LoginInput,
   PublicUser,
   SignupInput,
@@ -42,7 +43,7 @@ const clientSelect = { select: { id: true, businessName: true } } as const;
 const dummyPasswordHash = hashPassword(randomUUID());
 
 const INVALID_CREDENTIALS = () =>
-  new AppError(401, "Email or password is incorrect.", "INVALID_CREDENTIALS");
+  new AppError(401, "Email/username or password is incorrect.", "INVALID_CREDENTIALS");
 const INVALID_RESET_LINK = () =>
   new AppError(400, "This reset link is invalid or has expired.", "INVALID_RESET_TOKEN");
 const INVALID_REFRESH = () =>
@@ -52,6 +53,7 @@ function toPublicUser(user: UserWithClient): PublicUser {
   return {
     id: user.id,
     email: user.email,
+    username: user.username,
     fullName: user.fullName,
     phone: user.phone,
     role: user.role,
@@ -65,6 +67,20 @@ function toPublicUser(user: UserWithClient): PublicUser {
 /** Suspended accounts can't use password links; pending ones can (it verifies their email). */
 function canUsePasswordLink(status: UserStatus): boolean {
   return status === UserStatus.ACTIVE || status === UserStatus.PENDING_VERIFICATION;
+}
+
+/** Usernames can't contain "@", so anything with one is treated as an email. */
+function identifierWhere(identifier: string): Prisma.UserWhereUniqueInput {
+  return identifier.includes("@") ? { email: identifier } : { username: identifier };
+}
+
+/** Prefixed so a typed identifier can never collide with a known account's user-id key. */
+function userLockoutKey(userId: string): string {
+  return `user:${userId}`;
+}
+
+function lockoutKey(user: { id: string } | null, identifier: string): string {
+  return user ? userLockoutKey(user.id) : `identifier:${identifier}`;
 }
 
 function lockedError(lockedUntil: Date) {
@@ -105,7 +121,7 @@ export class AuthService {
     }
 
     logger.info({ userId: user.id, clientId: user.clientId }, "Client signed up");
-    return this.dispatchVerificationCode(user);
+    return this.dispatchVerificationCode({ id: user.id, email, fullName: user.fullName });
   }
 
   async resendVerification(rawEmail: string): Promise<VerificationDispatch> {
@@ -123,7 +139,7 @@ export class AuthService {
         retryAfterSeconds: cooldown,
       });
     }
-    return this.dispatchVerificationCode(user);
+    return this.dispatchVerificationCode({ id: user.id, email, fullName: user.fullName });
   }
 
   async verifyEmail(rawEmail: string, code: string): Promise<AuthResult> {
@@ -159,16 +175,20 @@ export class AuthService {
   }
 
   async login(input: LoginInput): Promise<AuthResult> {
-    const email = input.email.toLowerCase();
+    const identifier = input.identifier.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: identifierWhere(identifier),
+      include: { client: clientSelect },
+    });
+    const lockKey = lockoutKey(user, identifier);
 
-    const lock = await getLoginLockStatus(email);
+    const lock = await getLoginLockStatus(lockKey);
     if (lock.locked) throw lockedError(lock.lockedUntil);
 
-    const user = await prisma.user.findUnique({ where: { email }, include: { client: clientSelect } });
     const passwordOk = await verifyPassword(input.password, user?.passwordHash ?? (await dummyPasswordHash));
 
     if (!user || !passwordOk) {
-      const afterFail = await recordFailedLoginAttempt(email);
+      const afterFail = await recordFailedLoginAttempt(lockKey);
       if (afterFail.locked) throw lockedError(afterFail.lockedUntil);
       throw INVALID_CREDENTIALS();
     }
@@ -181,7 +201,7 @@ export class AuthService {
       throw new AppError(403, "Please verify your email first.", "EMAIL_NOT_VERIFIED", { email: user.email });
     }
 
-    await clearLoginLockout(email);
+    await clearLoginLockout(lockKey);
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: { lastSignedInAt: new Date() },
@@ -267,7 +287,7 @@ export class AuthService {
     const resetLink = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
     try {
       await emailService.sendPasswordReset({
-        to: user.email,
+        to: email,
         fullName: user.fullName,
         resetLink,
         expiresInMinutes: RESET_TOKEN_TTL_SECONDS / 60,
@@ -285,7 +305,7 @@ export class AuthService {
     const userId = await getPasswordResetUserId(token);
     if (!userId) throw INVALID_RESET_LINK();
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, status: true } });
-    if (!user || !canUsePasswordLink(user.status)) throw INVALID_RESET_LINK();
+    if (!user?.email || !canUsePasswordLink(user.status)) throw INVALID_RESET_LINK();
     return { email: user.email, isInvite: user.status === UserStatus.PENDING_VERIFICATION };
   }
 
@@ -308,10 +328,38 @@ export class AuthService {
       include: { client: clientSelect },
     });
     await this.revokeAllSessions(user.id);
-    await clearLoginLockout(user.email);
+    await clearLoginLockout(userLockoutKey(user.id));
     logger.info({ userId: user.id, activated: activating }, "Password set from emailed link");
 
     return this.createSession(user, false);
+  }
+
+  /** Signed-in password change; every session is replaced by a fresh one for the current device. */
+  async changePassword(userId: string, input: ChangePasswordInput, remember: boolean): Promise<AuthResult> {
+    const existing = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true, status: true } });
+    if (!existing || existing.status !== UserStatus.ACTIVE) {
+      throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    }
+    if (await verifyPassword(input.newPassword, existing.passwordHash)) {
+      throw new AppError(400, "Choose a password different from your current one.", "PASSWORD_UNCHANGED");
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await hashPassword(input.newPassword) },
+      include: { client: clientSelect },
+    });
+    await this.revokeAllSessions(user.id);
+    logger.info({ userId: user.id }, "Password changed");
+
+    return this.createSession(user, remember);
+  }
+
+  /** Sets a password chosen by a Super Admin and signs the user out everywhere. */
+  async setPasswordByAdmin(userId: string, newPassword: string): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } });
+    await this.revokeAllSessions(userId);
+    await clearLoginLockout(userLockoutKey(userId));
   }
 
   /** Emails an admin-created client a link to set their password. Returns whether the email was sent. */
@@ -335,7 +383,11 @@ export class AuthService {
     }
   }
 
-  private async dispatchVerificationCode(user: UserWithClient): Promise<VerificationDispatch> {
+  private async dispatchVerificationCode(user: {
+    id: string;
+    email: string;
+    fullName: string;
+  }): Promise<VerificationDispatch> {
     const code = generateVerificationCode();
     await storeVerificationCode(user.id, code);
 

@@ -8,6 +8,7 @@ import {
   clientIdParamsSchema,
   createClientSchema,
   listClientsQuerySchema,
+  setClientPasswordSchema,
   updateClientSchema,
 } from "./validators/client.validator.js";
 
@@ -22,6 +23,13 @@ clientsRouter.get("/:id", byId, clientController.get);
 clientsRouter.patch("/:id", byId, validate(updateClientSchema), clientController.update);
 clientsRouter.post("/:id/suspend", byId, clientController.suspend);
 clientsRouter.post("/:id/reactivate", byId, clientController.reactivate);
+clientsRouter.post(
+  "/:id/password",
+  rateLimit({ name: "client-set-password", max: 30, windowSeconds: 60 * 60 }),
+  byId,
+  validate(setClientPasswordSchema),
+  clientController.setPassword,
+);
 clientsRouter.post(
   "/:id/resend-email",
   rateLimit({ name: "client-resend-email", max: 30, windowSeconds: 60 * 60 }),

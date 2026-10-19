@@ -1,6 +1,9 @@
 model User {
   id              String     @id @default(uuid()) @db.Uuid
-  email           String     @unique @db.VarChar(255)
+  /// Null only for admin-created clients that log in with a username.
+  email           String?    @unique @db.VarChar(255)
+  /// Set only when a Super Admin issues the login credentials; stored lowercase.
+  username        String?    @unique @db.VarChar(40)
   passwordHash    String     @db.VarChar(255)
   fullName        String     @db.VarChar(120)
   phone           String?    @db.VarChar(32)

@@ -54,7 +54,7 @@ export type TopupCheckout = {
   amountPaise: number;
   currency: string;
   businessName: string;
-  prefill: { name: string; email: string; contact?: string };
+  prefill: { name: string; email?: string; contact?: string };
 };
 
 export type LedgerEntry = {
@@ -220,7 +220,11 @@ export class WalletService {
       amountPaise,
       currency: PAYMENT_CURRENCY,
       businessName: client.businessName,
-      prefill: { name: user.fullName, email: user.email, ...(user.phone ? { contact: user.phone } : {}) },
+      prefill: {
+        name: user.fullName,
+        ...(user.email ? { email: user.email } : {}),
+        ...(user.phone ? { contact: user.phone } : {}),
+      },
     };
   }
 
