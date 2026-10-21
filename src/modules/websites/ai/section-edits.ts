@@ -280,6 +280,7 @@ export type EditEnv = {
   theme?: ThemeSettings;
   currentPageId?: string;
   currentPageSlug?: string;
+  headerMenu?: Array<{ label: string; href: string }>;
 };
 
 /** What happened to one of the AI's operations. */
@@ -670,9 +671,14 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
           const rawSlug = pageDraft.slug?.trim() || toSlug(pageDraft.name);
           const slug = rawSlug.startsWith("/") ? rawSlug : `/${rawSlug}`;
 
-          // If the user is currently on the Home page (or active page has no body sections)
+          const normalizeSlug = (s: string) => s.trim().toLowerCase().replace(/^\/+/, "");
+          const isCurrentActivePage =
+            (Boolean(env.currentPageSlug) && normalizeSlug(slug) === normalizeSlug(env.currentPageSlug!)) ||
+            (Boolean(env.currentPageSlug) && normalizeSlug(pageDraft.name) === normalizeSlug(env.currentPageSlug!));
+
+          // If the user is currently on the matching page or on the Home page (or active page has no body sections)
           // and the AI tried to create a redundant "Landing Page" (/landing-page) or "Home" (/home),
-          // redirect it to populate the active page directly so the user sees the landing page on Home!
+          // redirect it to populate the active page directly so the user sees the content immediately on their canvas!
           const isCurrentHome = env.currentPageSlug === "/" || !env.currentPageSlug;
           const currentHasBody = page.some((s) => s.type !== "header" && s.type !== "footer");
           const isLandingOrHomeRequest =
@@ -682,11 +688,49 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
             pageDraft.name.toLowerCase() === "landing page" ||
             pageDraft.name.toLowerCase() === "home";
 
-          if (isCurrentHome && !currentHasBody && isLandingOrHomeRequest) {
+          if (isCurrentActivePage || (isCurrentHome && !currentHasBody && isLandingOrHomeRequest)) {
             const kept = (type: string) => page.filter((section) => section.type === type);
             apply({ op: "replace_page", sections: [...kept("header"), ...(pageSections as SectionEnvelope[]), ...kept("footer")] });
             changedIds.push(...pageSections.map((item) => item.id));
             rebuild = true;
+
+            if (pageDraft.showInNav !== false) {
+              const currentMenu =
+                navigationPatch?.headerMenu ??
+                env.headerMenu ??
+                env.pages?.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug })) ??
+                [];
+              const matchingIdx = currentMenu.findIndex(
+                (m) => normalizeSlug(m.label) === normalizeSlug(pageDraft.name) || normalizeSlug(m.href) === normalizeSlug(slug),
+              );
+              if (matchingIdx >= 0 && currentMenu[matchingIdx]?.href !== slug) {
+                const nextMenu = [...currentMenu];
+                nextMenu[matchingIdx] = { ...nextMenu[matchingIdx]!, href: slug };
+                navigationPatch = { ...(navigationPatch ?? {}), headerMenu: nextMenu };
+              } else if (matchingIdx < 0) {
+                navigationPatch = {
+                  ...(navigationPatch ?? {}),
+                  headerMenu: [...currentMenu, { label: pageDraft.name.trim(), href: slug }],
+                };
+              }
+            }
+            break;
+          }
+
+          // If the slug or name matches an existing page that is not active, update that page instead of duplicating it
+          const existingPage = env.pages?.find(
+            (p) => normalizeSlug(p.slug) === normalizeSlug(slug) || normalizeSlug(p.name) === normalizeSlug(pageDraft.name),
+          );
+          if (existingPage) {
+            updatedPages.push({
+              pageId: existingPage.id,
+              name: pageDraft.name.trim(),
+              slug,
+              showInNav: pageDraft.showInNav ?? existingPage.showInNav,
+              seoTitle: pageDraft.seoTitle ?? null,
+              seoDescription: pageDraft.seoDescription ?? null,
+              sections: pageSections,
+            });
             break;
           }
 
@@ -704,6 +748,7 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
           if (pageDraft.showInNav !== false) {
             const currentMenu =
               navigationPatch?.headerMenu ??
+              env.headerMenu ??
               env.pages?.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug })) ??
               [];
             if (!currentMenu.some((m) => m.href === slug)) {

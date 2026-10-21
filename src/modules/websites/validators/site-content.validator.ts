@@ -37,6 +37,7 @@ import {
 export const SAFE_HREF = /^(https?:\/\/\S+|mailto:\S+|tel:[+0-9() -]+|\/(?!\/)\S*|#\S*)$/i;
 export const SAFE_IMAGE_URL =
   /^(https?:\/\/\S+|\/(?!\/)\S*|data:image\/(?:png|jpe?g|webp|gif|svg\+xml|avif)(?:;[a-z0-9=_-]+)*;?(?:base64)?,[\s\S]*)$/i;
+const SAFE_HREF_MESSAGE = "Enter a valid link, like /contact, https://example.com, #section, mailto: or tel:";
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 /** Only these hosts are embedded, and only via an iframe src the renderer builds itself. */
 export const SAFE_VIDEO_URL =
@@ -69,7 +70,7 @@ const link = Joi.object({
   href: text(2048)
     .pattern(SAFE_HREF)
     .required()
-    .messages({ "string.pattern.base": "Links must be http(s), mailto:, tel:, a /path or a #anchor" }),
+    .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
 }).meta(meta({ kind: "link" }));
 
 const subMenuItem = Joi.object({
@@ -77,7 +78,7 @@ const subMenuItem = Joi.object({
   href: text(2048)
     .pattern(SAFE_HREF)
     .required()
-    .messages({ "string.pattern.base": "Links must be http(s), mailto:, tel:, a /path or a #anchor" }),
+    .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
   description: optionalText(140),
   badge: optionalText(30),
   icon: optionalText(40),
@@ -88,7 +89,7 @@ const menuItem = Joi.object({
   href: text(2048)
     .pattern(SAFE_HREF)
     .required()
-    .messages({ "string.pattern.base": "Links must be http(s), mailto:, tel:, a /path or a #anchor" }),
+    .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
   badge: optionalText(30),
   icon: optionalText(40),
   children: Joi.array().items(subMenuItem).max(24).optional(),
@@ -178,7 +179,7 @@ const customBlockSchema = Joi.alternatives()
       href: text(2048)
         .pattern(SAFE_HREF)
         .required()
-        .messages({ "string.pattern.base": "Links must be http(s), mailto:, tel:, a /path or a #anchor" }),
+        .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
       tone: Joi.string().valid("primary", "secondary").optional(),
     }),
     Joi.object({
@@ -286,7 +287,7 @@ const authDataSchema = Joi.object({
           href: text(2048)
             .pattern(SAFE_HREF)
             .required()
-            .messages({ "string.pattern.base": "Links must be http(s), mailto:, tel:, a /path or a #anchor" }),
+            .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
         }),
       )
       .max(AUTH_SOCIAL_PROVIDERS.length)
@@ -395,7 +396,45 @@ export const themeSchema = Joi.object({
     .required(),
 });
 
+export const sectionSettingsSchema = Joi.object({
+  background: Joi.string()
+    .valid(...SECTION_BACKGROUNDS)
+    .required()
+    .description("Theme background preset. A custom color goes in customColors.background."),
+  hideOnMobile: Joi.boolean().required(),
+  hideOnDesktop: Joi.boolean().optional(),
+  spacing: Joi.string()
+    .valid(...SECTION_SPACINGS)
+    .optional(),
+  align: Joi.string()
+    .valid(...SECTION_ALIGNMENTS)
+    .optional(),
+  anchor: Joi.string()
+    .pattern(ANCHOR)
+    .allow("")
+    .optional()
+    .messages({ "string.pattern.base": "Anchors use lowercase letters, numbers and hyphens" }),
+  customColors: Joi.object({
+    background: color.optional().description("Section background color."),
+    text: color.optional().description("Text color."),
+    primary: color.optional().description("Buttons, links and accents."),
+    muted: color.optional().description("Secondary text."),
+    border: color.optional(),
+    gradientFrom: color
+      .optional()
+      .description("Start color of gradient text: the hero's highlightText, or its whole heading when nothing is highlighted."),
+    gradientTo: color.optional().description("End color of gradient text."),
+  }).optional(),
+  font: Joi.string()
+    .valid(...FONT_KEYS)
+    .optional(),
+});
+
+/** Style of the site-wide header/footer; the editor writes it from the shared header/footer section. */
+const chromeSettings = sectionSettingsSchema.optional().meta(locked);
+
 export const headerSchema = Joi.object({
+  settings: chromeSettings,
   design: flexibleVariant(HEADER_DESIGNS, "logo-left", {
     "logo_left": "logo-left",
     "center": "centered",
@@ -440,6 +479,7 @@ export const headerSchema = Joi.object({
 });
 
 export const footerSchema = Joi.object({
+  settings: chromeSettings,
   design: flexibleVariant(FOOTER_DESIGNS, "columns", {
     "col": "columns",
     "simple-footer": "simple",
@@ -1159,40 +1199,6 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
 
 /** Content schema of each section type; the single source for validation and the AI field catalog. */
 export const SECTION_DATA_SCHEMAS: Readonly<Record<SectionType, Joi.ObjectSchema>> = SECTION_DATA;
-
-export const sectionSettingsSchema = Joi.object({
-  background: Joi.string()
-    .valid(...SECTION_BACKGROUNDS)
-    .required()
-    .description("Theme background preset. A custom color goes in customColors.background."),
-  hideOnMobile: Joi.boolean().required(),
-  hideOnDesktop: Joi.boolean().optional(),
-  spacing: Joi.string()
-    .valid(...SECTION_SPACINGS)
-    .optional(),
-  align: Joi.string()
-    .valid(...SECTION_ALIGNMENTS)
-    .optional(),
-  anchor: Joi.string()
-    .pattern(ANCHOR)
-    .allow("")
-    .optional()
-    .messages({ "string.pattern.base": "Anchors use lowercase letters, numbers and hyphens" }),
-  customColors: Joi.object({
-    background: color.optional().description("Section background color."),
-    text: color.optional().description("Text color."),
-    primary: color.optional().description("Buttons, links and accents."),
-    muted: color.optional().description("Secondary text."),
-    border: color.optional(),
-    gradientFrom: color
-      .optional()
-      .description("Start color of gradient text: the hero's highlightText, or its whole heading when nothing is highlighted."),
-    gradientTo: color.optional().description("End color of gradient text."),
-  }).optional(),
-  font: Joi.string()
-    .valid(...FONT_KEYS)
-    .optional(),
-});
 
 export const sectionSchema = Joi.object({
   id: text(128).required(),

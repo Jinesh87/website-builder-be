@@ -230,7 +230,7 @@ export const SECTION_GUIDE = `Section JSON shapes (all text is plain text, no HT
 - pricing: { eyebrow, heading, intro, plans: [{ name, price, period, description, features: [string], featured: boolean, cta: {label, href} }] }
 - faq: { eyebrow, heading, intro, variant: "accordion-classic"|"two-column-grid", items: [{ question, answer }] } (4-6 items)
 - gallery: { heading, columns: 3, mobileColumns: 1, images: [IMAGE token, ...] }
-- contact: { eyebrow, heading, text, showForm: true, submitLabel, formHeading }
+- contact: { eyebrow, heading, text, showForm: true, submitLabel, formHeading } (there is no input form: showForm shows an "email us" mailto card, submitLabel is its button label such as "Email us")
 - cta: { variant: "centered-card"|"split-visual", eyebrow, heading, text, button: {label, href}, secondaryButton?: {label, href} }
 - text: { heading, body } (body uses blank lines between paragraphs)
 Icons are lowercase names such as: star, check, shield, zap, heart, users, globe, sparkles, rocket, layers, box, lock, cloud, code, phone, mail, clock, award.
@@ -664,16 +664,6 @@ function buildHeaderAndFooter(plan: Plan, facts: SiteFacts, logo: BriefImage | n
   return { header, footer };
 }
 
-function wrapperSection<T extends "header" | "footer">(type: T, data: T extends "header" ? HeaderData : FooterData): Section {
-  return {
-    id: randomUUID(),
-    type,
-    hidden: false,
-    settings: { background: "default", hideOnMobile: false },
-    data,
-  } as Section;
-}
-
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -703,7 +693,7 @@ export async function generateSite(options: GenerateSiteOptions): Promise<Genera
     return sections;
   });
 
-  // Pages render their own header/footer sections; the site-level copies are the fallback.
+  // Every page shows the site-wide header and footer, so pages hold only their own body sections.
   const pages = plan.pages.map((page, index): GeneratedPage => ({
     name: page.name,
     slug: page.slug,
@@ -711,7 +701,7 @@ export async function generateSite(options: GenerateSiteOptions): Promise<Genera
     showInNav: true,
     seoTitle: page.seoTitle || null,
     seoDescription: page.seoDescription || null,
-    sections: [wrapperSection("header", header), ...bodies[index]!, wrapperSection("footer", footer)],
+    sections: bodies[index]!,
   }));
 
   return { theme: plan.theme, header, footer, pages };

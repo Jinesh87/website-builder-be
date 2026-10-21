@@ -4,15 +4,25 @@ import { AppError } from "../../../common/errors/AppError.js";
 import crypto from "crypto";
 import {
   AI_PLAN_RESPONSE_FORMAT,
+  MAX_PAGES_PER_REQUEST,
   applyOps,
   parsePlan,
   previewLayout,
+  type AiPlan,
   type CanvasOp,
   type LayoutSlot,
   type PlannedOp,
   type SectionEnvelope,
 } from "../ai/ai-ops.js";
-import { PLANNER_SYSTEM_PROMPT, buildPlannerInput } from "../ai/ai-planner.js";
+import { PLANNER_SYSTEM_PROMPT, buildPlannerInput, type SitePlannerContext } from "../ai/ai-planner.js";
+import {
+  planNavigation,
+  readLink,
+  readMenu,
+  withNavigation,
+  type MenuItem,
+  type NavPage,
+} from "../ai/navigation.js";
 import { sanitizeCustomData } from "../ai/custom-section.js";
 import { repairSection } from "../ai/repair-section.js";
 import { CUSTOM_LIMITS, FEATURE_ICON_COLORS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
@@ -24,7 +34,7 @@ import {
   type ThemePatchEdit,
   type UpdatedPageEdit,
 } from "../ai/section-edits.js";
-import type { WebsiteDetail } from "../types/website.types.js";
+import type { PageView, WebsiteDetail } from "../types/website.types.js";
 import { isReasoningModel } from "../../../common/constants/ai-models.js";
 
 export type { SectionEnvelope };
@@ -588,6 +598,22 @@ export function sanitizeSectionData(
       ) {
         data.variant = data.backgroundImage ? "background-image" : "centered";
       }
+      if (
+        data.variant === "background-image" ||
+        data.imagePosition === "background"
+      ) {
+        const bg = data.backgroundImage as Record<string, unknown> | undefined;
+        const text = `${data.heading ?? ""} ${data.subheading ?? ""}`;
+        if (!bg || typeof bg.url !== "string" || !bg.url.trim() || bg.url.includes("example.com") || bg.url === "https://images.unsplash.com/...") {
+          const isFood = /\b(dine|dining|restaurant|food|gourmet|culinary|bistro|cafe|taste)\b/i.test(text);
+          data.backgroundImage = {
+            url: isFood
+              ? "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=2000&q=85"
+              : "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=2000&q=85",
+            alt: enrichImageAlt(bg?.alt, altContext, isFood ? "Restaurant interior and dining ambiance" : "Hero Background"),
+          };
+        }
+      }
       const validImagePositions = [
         "right",
         "left",
@@ -965,7 +991,7 @@ export function sanitizeSectionData(
       if (!data.heading) data.heading = "Get in touch with us";
       if (typeof data.showForm !== "boolean") data.showForm = true;
       if (!data.submitLabel || typeof data.submitLabel !== "string") {
-        data.submitLabel = "Send Message";
+        data.submitLabel = "Email us";
       }
       break;
     }
@@ -1121,12 +1147,18 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    { "type": "list", "items": ["..."] }
    Limits: at most ${CUSTOM_LIMITS.maxDepth} nesting levels, ${CUSTOM_LIMITS.maxBlocks} blocks in total and ${CUSTOM_LIMITS.maxChildren} children per container.
    Use "grid" for side-by-side columns (it collapses to one column on mobile), "stack" with direction "row" for button groups, and "card" for boxed content.
+14. "contact" (contact details only; it has NO input fields or forms: email and phone render as mailto:/tel: links):
+   data: { "variant": "split-form"|"cards-hub"|"minimal-editorial"|"floating-glass", "eyebrow": "...", "heading": "...", "text": "...", "email": "...", "phone": "...", "address": "...", "officeHours": "...", "responseTime": "...", "showForm": true, "formHeading": "Send us an email", "submitLabel": "Email us" }
+   "showForm": true adds an "email us" card with a mailto button. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one.
+   Never use "custom" blocks to imitate a contact or signup form.
 
 STOCK / DUMMY IMAGE GUIDELINES:
 - Tech / Dark Hero: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2000&q=80"
 - Modern Architecture / Living: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=2000&q=80"
 - Vibrant Gradient: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=2000&q=80"
 - SaaS Dashboard / Analytics: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80"
+- Restaurant / Fine Dining / Gourmet: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=2000&q=85"
+- Food & Culinary Presentation: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=2000&q=85"
 `;
 
 const SYSTEM_PROMPT_ADD_SECTION = `You are a world-class AI website copywriter and UI designer.
@@ -1134,7 +1166,7 @@ Your job is to generate a single brand new, pixel-perfect website section based 
 
 CRITICAL RULES:
 1. Always output ONLY valid JSON without Markdown code fences.
-2. Provide rich, highly converting, realistic copy. Never use placeholder text.
+2. Provide rich, highly converting, realistic copy. Never use placeholder text. When brand facts are given, use them exactly and never invent another brand name, email, phone number or address.
 ${SECTION_SCHEMAS_GUIDE}
 3. Output format must be:
 {
@@ -1175,9 +1207,10 @@ Your job is to generate a complete page as an ordered list of sections, matching
 CRITICAL RULES:
 1. Always output ONLY valid JSON without Markdown code fences.
 2. Provide rich, realistic, high-converting copy. Never use placeholder text.
-3. Keep the brand name, tone and visual style consistent across all sections.
+3. Keep the brand name, tone and visual style consistent across all sections. When brand facts are given, use them exactly and never invent another brand name, email, phone number or address.
+4. Write for the page named in the brief. A menu page lists real dishes with descriptions and prices, an about page tells the brand story, a contact page shows the real contact details. Never fill another page with generic home-page copy.
 ${SECTION_SCHEMAS_GUIDE}
-4. Output format must be:
+5. Output format must be:
 {
   "summary": "Brief 1-sentence summary of the page generated",
   "sections": [
@@ -1207,8 +1240,87 @@ type OpenAiCallOptions = {
 };
 
 const PLANNER_HISTORY_TURNS = 6;
+const PLANNER_MAX_TOKENS = 4000;
+/** One corrective retry when the planner's JSON is cut off or invalid. */
+const PLANNER_ATTEMPTS = 2;
+/** Pages generated at the same time; more risks OpenAI rate limits and timeouts. */
+const PAGE_CONCURRENCY = 3;
+/** Sections generated per page call, so long pages are not cut off by the token limit. */
+const PAGE_SECTION_CHUNK = 5;
 const FALLBACK_CLARIFY_REPLY =
-  "I couldn't match that to a section on this page. Which section do you mean?";
+  "I couldn't work out what to change. Tell me which section or page you mean, or describe the result you want.";
+
+const AI_TRUNCATED_CODE = "AI_TRUNCATED";
+const AI_TRUNCATED = () =>
+  new AppError(502, "The AI response was cut off before it finished.", AI_TRUNCATED_CODE);
+
+function trimmed(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizePath(value: string): string {
+  const path = `/${value.trim().replace(/^\/+|\/+$/g, "")}`.toLowerCase();
+  return path === "/" ? "/" : path;
+}
+
+/** Facts the copywriter must reuse verbatim, so every page keeps the same brand instead of inventing one. */
+export function describeBrand(website: WebsiteDetail | undefined): string {
+  if (!website) return "";
+  const { info, draft } = website;
+  const home = draft.pages.find((p) => p.pageType === "HOME" || p.slug === "/");
+  const hero = asRecord(home?.sections.find((s) => s.type === "hero")?.data);
+  const facts: Array<[string, string | undefined]> = [
+    ["Brand name", trimmed(info.businessName) ?? trimmed(draft.header.siteName)],
+    ["Business", [trimmed(info.industry), trimmed(info.websiteType)].filter(Boolean).join(" / ") || undefined],
+    ["About", trimmed(info.description)?.slice(0, 400)],
+    ["Home page headline", trimmed(hero.heading)],
+    ["Home page tagline", (trimmed(hero.subheading) ?? trimmed(hero.description))?.slice(0, 240)],
+    ["Email", trimmed(info.contactEmail)],
+    ["Phone", trimmed(info.contactPhone)],
+    ["Address", trimmed(info.address)],
+    ["Primary color", trimmed(draft.theme.colors.primary)],
+  ];
+  const lines = facts.flatMap(([label, value]) => (value ? [`- ${label}: ${value}`] : []));
+  if (lines.length === 0) return "";
+  return `Brand facts. Use the brand name and contact details exactly, never invent different ones, and leave out contact fields that are not listed. The home page lines show the existing tone; follow the brief when it asks for something new:\n${lines.join("\n")}`;
+}
+
+function inferPageType(name: string, slug: string): string {
+  const key = `${name} ${slug}`.toLowerCase();
+  if (/\babout\b/.test(key)) return "ABOUT";
+  if (/\bservices?\b/.test(key)) return "SERVICES";
+  if (/\bcontact\b/.test(key)) return "CONTACT";
+  if (/\b(blog|news)\b/.test(key)) return "BLOG";
+  return "CUSTOM";
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight; one failure does not cancel the others. */
+async function settleWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await fn(items[index]!) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -1230,6 +1342,13 @@ function parseJsonObject(raw: string): Record<string, unknown> {
 const UNUSABLE_AI_SECTION = () =>
   new AppError(502, "The AI returned content that couldn't be used. Try rephrasing your request.", "AI_INVALID_SECTION");
 
+/** AI-built sections never ship input boxes, so a newsletter footer becomes the standard columns footer. */
+function withoutInputForms(type: string, data: Record<string, unknown>): Record<string, unknown> {
+  if (type !== "footer") return data;
+  const { newsletter: _newsletter, ...rest } = data;
+  return rest.design === "newsletter" ? { ...rest, design: "columns" } : rest;
+}
+
 function buildSection(
   type: string,
   raw: Record<string, unknown>,
@@ -1240,7 +1359,7 @@ function buildSection(
     type,
     hidden: false,
     settings: sanitizeSectionSettings(asRecord(raw.settings)),
-    data: sanitizeSectionData(type, asRecord(raw.data)),
+    data: withoutInputForms(type, sanitizeSectionData(type, asRecord(raw.data))),
   };
 }
 
@@ -1249,6 +1368,54 @@ function focusSectionId(ops: readonly CanvasOp[]): string | undefined {
     if (op.op === "add" || op.op === "update") return op.section.id;
   }
   return undefined;
+}
+
+type CanvasPlanOp = Exclude<PlannedOp, { op: "create_page" } | { op: "update_navigation" }>;
+type CreatePageOp = Extract<PlannedOp, { op: "create_page" }>;
+type PageJob = { op: CreatePageOp; slug: string; existing?: PageView };
+/** What the copywriter needs to know about the page being written, beyond the planner's instruction. */
+type PageContext = { brand: string; page?: { name: string; slug: string } };
+
+function isChromeSection(section: SectionEnvelope): boolean {
+  return section.type === "header" || section.type === "footer";
+}
+
+function slugFor(op: CreatePageOp): string {
+  const raw =
+    op.slug?.trim() ||
+    `/${op.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "page"}`;
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+function findExistingPage(pages: readonly PageView[], op: CreatePageOp): PageView | undefined {
+  const slug = op.slug ? normalizePath(op.slug) : undefined;
+  const name = op.name.trim().toLowerCase();
+  return pages.find(
+    (p) => (slug !== undefined && normalizePath(p.slug) === slug) || p.name.trim().toLowerCase() === name,
+  );
+}
+
+function pageBrief(instruction: string, context: PageContext): string {
+  const parts: string[] = [];
+  if (context.page) {
+    parts.push(
+      context.page.slug === "/"
+        ? `Page: "${context.page.name}" (the home page).`
+        : `Page: "${context.page.name}" (${context.page.slug}). This is NOT the home page: every section must serve this page's own purpose, and must not reuse the home page headline or hero copy.`,
+    );
+  }
+  parts.push(`Brief: ${instruction}`);
+  if (context.brand) parts.push(context.brand);
+  return parts.join("\n\n");
+}
+
+/** The editor's history already ends with this request, which is sent separately with the page context. */
+function plannerHistory(history: readonly ChatHistoryMessage[], prompt: string): OpenAiMessage[] {
+  const turns = [...history];
+  const last = turns.at(-1);
+  const lastContent = last?.content.trim() ?? "";
+  if (last?.role === "user" && lastContent && prompt.trim().startsWith(lastContent)) turns.pop();
+  return turns.slice(-PLANNER_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
 }
 
 export class AiGeneratorService {
@@ -1431,7 +1598,7 @@ export class AiGeneratorService {
 
           const json = (await response.json()) as {
             model?: string;
-            choices?: Array<{ message?: { content?: string | null } }>;
+            choices?: Array<{ message?: { content?: string | null }; finish_reason?: string }>;
             usage?: {
               prompt_tokens?: number;
               completion_tokens?: number;
@@ -1439,7 +1606,11 @@ export class AiGeneratorService {
             };
           };
 
-          const content = json.choices?.[0]?.message?.content;
+          const choice = json.choices?.[0];
+          if (choice?.finish_reason === "length") {
+            throw AI_TRUNCATED();
+          }
+          const content = choice?.message?.content;
           if (!content) {
             throw new AppError(502, "OpenAI returned an empty response");
           }
@@ -1457,7 +1628,8 @@ export class AiGeneratorService {
             err instanceof AppError &&
             (err.statusCode === 401 ||
               err.statusCode === 429 ||
-              err.statusCode === 400)
+              err.statusCode === 400 ||
+              err.code === AI_TRUNCATED_CODE)
           ) {
             throw err;
           }
@@ -1494,7 +1666,10 @@ export class AiGeneratorService {
     } catch (primaryErr) {
       if (
         fallbackModel &&
-        !(primaryErr instanceof AppError && primaryErr.statusCode === 401)
+        !(
+          primaryErr instanceof AppError &&
+          (primaryErr.statusCode === 401 || primaryErr.code === AI_TRUNCATED_CODE)
+        )
       ) {
         logger.warn(
           { primaryErr, fallbackModel },
@@ -1559,15 +1734,35 @@ export class AiGeneratorService {
       await this.checkModeration(prompt, apiKey, signal);
     }
 
-    const siteContext = options.website
+    const website = options.website;
+    const brand = describeBrand(website);
+    const sitePages = website?.draft.pages ?? [];
+    const currentPage = sitePages.find((p) => p.id === options.pageId);
+    // The open page's own header section is what visitors see, so it is the menu to start from.
+    const headerData = currentSections.find((s) => s.type === "header")?.data;
+    const currentMenu: MenuItem[] =
+      readMenu(headerData?.menu) ??
+      readMenu(website?.draft.header.menu) ??
+      sitePages.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug }));
+    const currentCta = readLink(headerData?.cta) ?? readLink(website?.draft.header.cta);
+    const siteContext: SitePlannerContext | undefined = website
       ? {
-          pages: options.website.draft.pages.map((p) => ({
+          brand: {
+            name: trimmed(website.info.businessName) ?? trimmed(website.draft.header.siteName),
+            business:
+              [trimmed(website.info.industry), trimmed(website.info.websiteType)].filter(Boolean).join(" / ") ||
+              undefined,
+            description: trimmed(website.info.description)?.slice(0, 300),
+          },
+          ...(currentPage ? { currentPage: { name: currentPage.name, slug: currentPage.slug } } : {}),
+          pages: sitePages.map((p) => ({
             name: p.name,
             slug: p.slug,
             sectionSummary: p.sections.map((s) => s.type).join(", "),
           })),
-          headerMenu: options.website.draft.header.menu,
-          theme: { primaryColor: options.website.draft.theme.colors.primary },
+          headerMenu: currentMenu.map(({ label, href }) => ({ label, href })),
+          ...(currentCta ? { headerCta: currentCta } : {}),
+          theme: { primaryColor: website.draft.theme.colors.primary },
         }
       : undefined;
 
@@ -1610,16 +1805,35 @@ export class AiGeneratorService {
       };
     }
 
-    const createdPageOps = plan.ops.filter(
-      (op): op is Extract<PlannedOp, { op: "create_page" }> => op.op === "create_page",
-    );
     const navOps = plan.ops.filter(
       (op): op is Extract<PlannedOp, { op: "update_navigation" }> => op.op === "update_navigation",
     );
-    const canvasPlanOps = plan.ops.filter(
-      (op): op is Exclude<PlannedOp, { op: "create_page" } | { op: "update_navigation" }> =>
-        op.op !== "create_page" && op.op !== "update_navigation",
-    );
+
+    // A requested page that already exists is rebuilt in place: the open page on the canvas, others via updatedPages.
+    const rebuildCurrent: CanvasPlanOp[] = [];
+    const pageJobs: PageJob[] = [];
+    const plannedSlugs = new Set<string>();
+    for (const op of plan.ops) {
+      if (op.op !== "create_page") continue;
+      const existing = findExistingPage(sitePages, op);
+      if (existing && existing.id === currentPage?.id) {
+        if (rebuildCurrent.length === 0) {
+          rebuildCurrent.push({ op: "replace_page", sectionTypes: op.sectionTypes, instruction: op.instruction });
+        }
+        continue;
+      }
+      const slug = existing ? existing.slug : slugFor(op);
+      if (plannedSlugs.has(normalizePath(slug))) continue;
+      plannedSlugs.add(normalizePath(slug));
+      pageJobs.push({ op, slug, existing });
+    }
+
+    const canvasPlanOps: CanvasPlanOp[] = [
+      ...rebuildCurrent,
+      ...plan.ops.filter(
+        (op): op is CanvasPlanOp => op.op !== "create_page" && op.op !== "update_navigation",
+      ),
+    ];
 
     const addIds = canvasPlanOps.map((op) =>
       op.op === "add" ? crypto.randomUUID() : undefined,
@@ -1628,54 +1842,136 @@ export class AiGeneratorService {
       onPlan?.(previewLayout(currentSections, canvasPlanOps, addIds));
     }
 
-    const canvasOps = await Promise.all(
-      canvasPlanOps.map((op, i) =>
-        this.materialize(op, currentSections, logging, addIds[i], signal),
+    const pageContext = (job: PageJob): PageContext => ({
+      brand,
+      page: { name: job.existing?.name ?? job.op.name, slug: job.slug },
+    });
+    const currentPageContext: PageContext = {
+      brand,
+      ...(currentPage ? { page: { name: currentPage.name, slug: currentPage.slug } } : {}),
+    };
+
+    const [canvasOps, pageResults] = await Promise.all([
+      Promise.all(
+        canvasPlanOps.map((op, i) =>
+          this.materialize(op, currentSections, logging, currentPageContext, addIds[i], signal),
+        ),
       ),
-    );
-
-    const createdPages: CreatedPageEdit[] = await Promise.all(
-      createdPageOps.map(async (op) => {
-        const sections = await this.createPage(
-          op.sectionTypes,
-          op.instruction,
-          [],
-          logging,
-          signal,
-        );
-        const rawSlug =
-          op.slug?.trim() ||
-          `/${op.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "page"}`;
-        const slug = rawSlug.startsWith("/") ? rawSlug : `/${rawSlug}`;
-        return {
-          id: crypto.randomUUID(),
-          name: op.name,
-          slug,
-          pageType: "CUSTOM",
-          showInNav: op.showInNav ?? true,
-          sections,
-        };
-      }),
-    );
-
-    let navigationPatch: NavigationPatchEdit | undefined = undefined;
-    if (navOps.length > 0 || createdPages.some((p) => p.showInNav)) {
-      const currentMenu =
-        options.website?.draft.header.menu ??
-        options.website?.draft.pages.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug })) ??
-        [];
-      const newItems = createdPages
-        .filter((p) => p.showInNav && !currentMenu.some((m) => m.href === p.slug))
-        .map((p) => ({ label: p.name, href: p.slug }));
-      if (newItems.length > 0) {
-        navigationPatch = { headerMenu: [...currentMenu, ...newItems] };
-      }
+      // Other pages show the site-wide header and footer, so only their body sections are built.
+      settleWithConcurrency(pageJobs, PAGE_CONCURRENCY, async (job) =>
+        (
+          await this.createPage(
+            job.op.sectionTypes.filter((type) => type !== "header" && type !== "footer"),
+            job.op.instruction,
+            [],
+            logging,
+            pageContext(job),
+            signal,
+          )
+        ).filter((section) => !isChromeSection(section)),
+      ),
+    ]);
+    if (signal?.aborted) {
+      throw new AppError(499, "AI generation was cancelled.");
     }
 
-    const summary = plan.reply || (createdPages.length > 0 ? `Created ${createdPages[0]?.name} page` : "Updated the page");
+    const createdPages: CreatedPageEdit[] = [];
+    const updatedPages: UpdatedPageEdit[] = [];
+    const failedPages: string[] = [];
+    pageResults.forEach((result, i) => {
+      const job = pageJobs[i]!;
+      if (result.status === "rejected") {
+        logger.warn({ err: result.reason, page: job.op.name }, "AI page generation failed");
+        failedPages.push(job.op.name);
+        return;
+      }
+      if (job.existing) {
+        updatedPages.push({ pageId: job.existing.id, sections: result.value });
+        return;
+      }
+      createdPages.push({
+        id: crypto.randomUUID(),
+        name: job.op.name,
+        slug: job.slug,
+        pageType: inferPageType(job.op.name, job.slug),
+        showInNav: job.op.showInNav ?? true,
+        sections: result.value,
+      });
+    });
 
-    const hasCrossPage = createdPages.length > 0 || Boolean(navigationPatch);
-    const afterSections = canvasOps.length > 0 ? applyOps(currentSections, canvasOps) : currentSections;
+    const firstFailure = pageResults.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (firstFailure && failedPages.length === pageJobs.length && canvasOps.length === 0) {
+      throw firstFailure.reason;
+    }
+
+    // A menu edited directly on the header section is a navigation change too, so it reaches every page.
+    const editedHeader = canvasOps
+      .flatMap((op) => (op.op === "update" && op.section.type === "header" ? [op.section] : []))
+      .at(-1);
+    const plannedMenu =
+      navOps.flatMap((op) => (op.headerMenu ? [op.headerMenu] : [])).at(-1) ??
+      (editedHeader ? readMenu(editedHeader.data.menu) : undefined) ??
+      null;
+    const plannedCta =
+      navOps.flatMap((op) => (op.headerCta ? [op.headerCta] : [])).at(-1) ??
+      (editedHeader ? readLink(editedHeader.data.cta) : undefined) ??
+      null;
+    const toNavPage = (p: { name: string; slug: string }): NavPage => ({ name: p.name, slug: p.slug });
+    const nav = planNavigation({
+      currentMenu,
+      currentCta,
+      plannedMenu,
+      plannedCta,
+      newNavPages: createdPages.filter((p) => p.showInNav).map(toNavPage),
+      pages: [...sitePages.map(toNavPage), ...createdPages.map(toNavPage)],
+    });
+    const navigationPatch: NavigationPatchEdit | undefined =
+      nav.headerMenu || nav.headerCta
+        ? {
+            ...(nav.headerMenu ? { headerMenu: nav.headerMenu } : {}),
+            ...(nav.headerCta ? { headerCta: nav.headerCta } : {}),
+          }
+        : undefined;
+    const syncHeaders = (sections: SectionEnvelope[]): SectionEnvelope[] =>
+      navigationPatch ? sections.map((s) => withNavigation(s, nav)) : sections;
+
+    const unresolvedNote =
+      nav.unresolved.length > 0
+        ? `I couldn't find a page for ${nav.unresolved.join(", ")}, so I left that link out. Create the page first or tell me which page it should open.`
+        : "";
+
+    const changed =
+      canvasOps.length > 0 || createdPages.length > 0 || updatedPages.length > 0 || Boolean(navigationPatch);
+    if (!changed) {
+      const labels = currentMenu.map((m) => m.label).join(", ");
+      const reply =
+        unresolvedNote ||
+        (navOps.length > 0
+          ? `The header menu already has ${labels || "no links"}, so nothing needed to change. Tell me what to add, rename or remove.`
+          : FALLBACK_CLARIFY_REPLY);
+      return {
+        id: crypto.randomUUID(),
+        prompt,
+        summary: reply,
+        chatReply: reply,
+        target: { scope: "chat" },
+        before: [],
+        after: [],
+      };
+    }
+
+    const notes = [
+      failedPages.length > 0 ? `I couldn't build ${failedPages.join(", ")} this time; ask me again to retry.` : "",
+      plan.deferredPages?.length ? `Ask me to continue to build ${plan.deferredPages.join(", ")}.` : "",
+      unresolvedNote,
+    ].filter(Boolean);
+    const baseSummary =
+      plan.reply ||
+      (createdPages.length > 0 ? `Created ${createdPages.map((p) => p.name).join(", ")}` : "Updated the page");
+    const summary = [baseSummary, ...notes].join(" ");
+
+    const hasCrossPage = createdPages.length > 0 || updatedPages.length > 0 || Boolean(navigationPatch);
+    const afterSections = syncHeaders(canvasOps.length > 0 ? applyOps(currentSections, canvasOps) : currentSections);
 
     const [onlyOp] = canvasOps;
     if (!hasCrossPage && canvasOps.length === 1 && onlyOp?.op === "update") {
@@ -1698,7 +1994,7 @@ export class AiGeneratorService {
         ? {
             scope: "site",
             createdPageIds: createdPages.map((p) => p.id),
-            affectedPageIds: [options.pageId ?? ""].filter(Boolean),
+            affectedPageIds: [options.pageId ?? "", ...updatedPages.map((p) => p.pageId)].filter(Boolean),
           }
         : {
             scope: "page",
@@ -1708,6 +2004,7 @@ export class AiGeneratorService {
       before: currentSections,
       after: afterSections,
       createdPages: createdPages.length > 0 ? createdPages : undefined,
+      updatedPages: updatedPages.length > 0 ? updatedPages : undefined,
       navigationPatch,
     };
   }
@@ -1719,43 +2016,59 @@ export class AiGeneratorService {
     history: ChatHistoryMessage[],
     logging: LoggingContext,
     signal?: AbortSignal,
-    siteContext?: import("../ai/ai-planner.js").SitePlannerContext,
-  ) {
+    siteContext?: SitePlannerContext,
+  ): Promise<AiPlan> {
     const messages: OpenAiMessage[] = [
       { role: "system", content: PLANNER_SYSTEM_PROMPT },
-      ...history
-        .slice(-PLANNER_HISTORY_TURNS)
-        .map((m) => ({ role: m.role, content: m.content })),
+      ...plannerHistory(history, prompt),
       {
         role: "user",
         content: buildPlannerInput(prompt, sections, selectedSectionId, siteContext),
       },
     ];
 
-    const raw = await this.callOpenAi(messages, {
-      scope: "plan",
-      logging,
-      temperature: 0,
-      maxTokens: 1200,
-      responseFormat: AI_PLAN_RESPONSE_FORMAT,
-      signal,
-    });
-
-    try {
-      return parsePlan(JSON.parse(raw), sections);
-    } catch (err) {
-      logger.warn({ err }, "Rejected invalid AI plan");
-      throw new AppError(
-        502,
-        "AI could not understand that request. Please try rephrasing it.",
-      );
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= PLANNER_ATTEMPTS; attempt++) {
+      let raw: string | undefined;
+      try {
+        raw = await this.callOpenAi(messages, {
+          scope: "plan",
+          logging,
+          temperature: 0,
+          maxTokens: PLANNER_MAX_TOKENS,
+          responseFormat: AI_PLAN_RESPONSE_FORMAT,
+          signal,
+        });
+        return parsePlan(JSON.parse(raw), sections);
+      } catch (err) {
+        const truncated = err instanceof AppError && err.code === AI_TRUNCATED_CODE;
+        if (err instanceof AppError && !truncated) throw err;
+        lastError = err;
+        logger.warn({ err, attempt, raw: raw?.slice(0, 2000) }, "Rejected invalid AI plan");
+        messages.push(
+          ...(raw ? [{ role: "assistant" as const, content: raw.slice(0, 4000) }] : []),
+          {
+            role: "user",
+            content: truncated
+              ? `Your plan was cut off because it was too long. Return the complete plan again as valid JSON, keeping every "instruction" under 300 characters and at most ${MAX_PAGES_PER_REQUEST} create_page operations.`
+              : `Your plan was rejected: ${(err as Error).message.slice(0, 500)}. Return a corrected, complete plan as valid JSON that follows the schema and rules.`,
+          },
+        );
+      }
     }
+
+    logger.error({ err: lastError }, "AI planner failed after retries");
+    throw new AppError(
+      502,
+      "AI couldn't plan that request. Try asking for fewer changes at once, or describe one page or section at a time.",
+    );
   }
 
   private async materialize(
-    op: Exclude<PlannedOp, { op: "create_page" } | { op: "update_navigation" }>,
+    op: CanvasPlanOp,
     sections: SectionEnvelope[],
     logging: LoggingContext,
+    pageContext: PageContext,
     reservedId?: string,
     signal?: AbortSignal,
   ): Promise<CanvasOp> {
@@ -1768,6 +2081,7 @@ export class AiGeneratorService {
             op.sectionType,
             op.instruction,
             logging,
+            pageContext,
             reservedId,
             signal,
           ),
@@ -1797,6 +2111,7 @@ export class AiGeneratorService {
             op.instruction,
             sections,
             logging,
+            pageContext,
             signal,
           ),
         };
@@ -1811,6 +2126,7 @@ export class AiGeneratorService {
     type: string,
     instruction: string,
     logging: LoggingContext,
+    context: PageContext,
     id?: string,
     signal?: AbortSignal,
   ): Promise<SectionEnvelope> {
@@ -1819,7 +2135,7 @@ export class AiGeneratorService {
         { role: "system", content: SYSTEM_PROMPT_ADD_SECTION },
         {
           role: "user",
-          content: `Section type to create: "${type}"\nBrief: ${instruction}\n\nReturn the complete section JSON.`,
+          content: `Section type to create: "${type}"\n${pageBrief(instruction, context)}\n\nReturn the complete section JSON.`,
         },
       ],
       { scope: "section_add", logging, signal },
@@ -1876,38 +2192,43 @@ Return the updated section JSON. If changing color/background, use a valid 6-dig
     return repaired;
   }
 
-  /** Existing header/footer are reused so a page redesign keeps the site's branding and navigation. */
+  /** Existing header/footer are reused and always kept, so every page shares the site's branding and navigation. */
   private async createPage(
     types: string[],
     instruction: string,
     existing: SectionEnvelope[],
     logging: LoggingContext,
+    context: PageContext,
     signal?: AbortSignal,
   ): Promise<SectionEnvelope[]> {
     const reusable = new Map(
-      existing
-        .filter((s) => s.type === "header" || s.type === "footer")
-        .map((s) => [s.type, s] as const),
+      existing.filter(isChromeSection).map((s) => [s.type, s] as const),
     );
-    const toGenerate = types.filter((type) => !reusable.has(type));
+    const ordered = [
+      ...(reusable.has("header") && !types.includes("header") ? ["header"] : []),
+      ...types,
+      ...(reusable.has("footer") && !types.includes("footer") ? ["footer"] : []),
+    ];
+    const toGenerate = ordered.filter((type) => !reusable.has(type));
+    const brief = pageBrief(instruction, context);
 
-    let generated: Record<string, unknown>[] = [];
-    if (toGenerate.length > 0) {
-      const raw = await this.callOpenAi(
-        [
-          { role: "system", content: SYSTEM_PROMPT_PAGE },
-          {
-            role: "user",
-            content: `Section types in order: ${JSON.stringify(toGenerate)}\nBrief: ${instruction}`,
-          },
-        ],
-        { scope: "page", logging, maxTokens: 6000, signal },
-      );
-      const sections = parseJsonObject(raw).sections;
-      generated = Array.isArray(sections) ? sections.map(asRecord) : [];
-    }
+    const parts = chunk(toGenerate, PAGE_SECTION_CHUNK);
+    const generated = (
+      await Promise.all(
+        parts.map((part, i) =>
+          this.generatePageSections(
+            part,
+            parts.length > 1
+              ? `This is part ${i + 1} of ${parts.length} of one page whose full section order is ${JSON.stringify(toGenerate)}. The other parts are written separately: keep the same voice and do not repeat their topics.\n${brief}`
+              : brief,
+            logging,
+            signal,
+          ),
+        ),
+      )
+    ).flat();
 
-    const page = types.flatMap((type): SectionEnvelope[] => {
+    const page = ordered.flatMap((type): SectionEnvelope[] => {
       const reused = reusable.get(type);
       if (reused) return [reused];
       const index = generated.findIndex((s) => s.type === type);
@@ -1924,6 +2245,26 @@ Return the updated section JSON. If changing color/background, use a valid 6-dig
       );
     }
     return page;
+  }
+
+  private async generatePageSections(
+    types: string[],
+    brief: string,
+    logging: LoggingContext,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>[]> {
+    const raw = await this.callOpenAi(
+      [
+        { role: "system", content: SYSTEM_PROMPT_PAGE },
+        {
+          role: "user",
+          content: `Section types in order: ${JSON.stringify(types)}\n${brief}`,
+        },
+      ],
+      { scope: "page", logging, maxTokens: 6000, signal },
+    );
+    const sections = parseJsonObject(raw).sections;
+    return Array.isArray(sections) ? sections.map(asRecord) : [];
   }
 }
 
