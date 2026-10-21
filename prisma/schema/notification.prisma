@@ -1,0 +1,25 @@
+/// In-app notification. CLIENT ones belong to one client workspace; ADMIN ones are shared by every Super Admin.
+model Notification {
+  id        String               @id @default(uuid()) @db.Uuid
+  audience  NotificationAudience
+  /// The client it is for (CLIENT) or about (ADMIN).
+  clientId  String?              @db.Uuid
+  kind      String               @db.VarChar(50)
+  title     String               @db.VarChar(200)
+  body      String               @db.VarChar(1000)
+  /// In-app path, e.g. "/websites/<id>?tab=hosting".
+  link      String?              @db.VarChar(300)
+  readAt    DateTime?            @db.Timestamptz(6)
+  createdAt DateTime             @default(now()) @db.Timestamptz(6)
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([audience, clientId, createdAt])
+  @@index([audience, readAt])
+  @@map("notifications")
+}
+
+enum NotificationAudience {
+  CLIENT
+  ADMIN
+}

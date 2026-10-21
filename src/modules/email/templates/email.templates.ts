@@ -114,6 +114,34 @@ export function clientInviteEmail(params: {
   };
 }
 
+/** Hosting billing notices: renewal reminders, expiry, site offline, renewed. */
+export function hostingNoticeEmail(params: {
+  brand: string;
+  fullName: string;
+  subject: string;
+  heading: string;
+  lines: string[];
+  actionLabel: string;
+  actionLink: string;
+}): RenderedEmail {
+  const name = escapeHtml(params.fullName);
+  const link = escapeHtml(params.actionLink);
+  const paragraphs = params.lines
+    .map((line) => `<p style="margin:0 0 12px;line-height:1.5;color:#4b5160;">${escapeHtml(line)}</p>`)
+    .join("");
+  return {
+    subject: params.subject,
+    html: layout(
+      params.brand,
+      `<h1 style="margin:0 0 12px;font-size:20px;">${escapeHtml(params.heading)}</h1>
+       <p style="margin:0 0 12px;line-height:1.5;color:#4b5160;">Hi ${name},</p>
+       ${paragraphs}
+       <p style="margin:8px 0 0;"><a href="${link}" style="display:inline-block;background:#2447c7;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold;">${escapeHtml(params.actionLabel)}</a></p>`,
+    ),
+    text: `Hi ${params.fullName},\n\n${params.lines.join("\n")}\n\n${params.actionLabel}: ${params.actionLink}`,
+  };
+}
+
 export function testEmail(params: { brand: string }): RenderedEmail {
   return {
     subject: "Test email",

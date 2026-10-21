@@ -8,6 +8,7 @@ import {
   clientInviteEmail,
   contactFormLeadEmail,
   emailChangeCodeEmail,
+  hostingNoticeEmail,
   passwordResetEmail,
   testEmail,
   verificationCodeEmail,
@@ -107,6 +108,18 @@ export class EmailService {
 
   async sendClientInvite(params: { to: string; fullName: string; inviteLink: string; expiresInHours: number }) {
     await this.send(params.to, (brand) => clientInviteEmail({ brand, ...params }));
+  }
+
+  async sendHostingNotice(params: {
+    to: string;
+    fullName: string;
+    subject: string;
+    heading: string;
+    lines: string[];
+    actionLabel: string;
+    actionLink: string;
+  }) {
+    await this.send(params.to, (brand) => hostingNoticeEmail({ brand, ...params }));
   }
 
   /** Sends regardless of the "enabled" flag so the Super Admin can verify settings before enabling. */

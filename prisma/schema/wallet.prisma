@@ -27,9 +27,10 @@ model WalletTransaction {
   userId         String?                 @db.Uuid
   createdAt      DateTime                @default(now()) @db.Timestamptz(6)
 
-  wallet       Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
-  user         User?         @relation("WalletTransactionUser", fields: [userId], references: [id], onDelete: SetNull)
+  wallet         Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  paymentOrder   PaymentOrder?   @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  user           User?           @relation("WalletTransactionUser", fields: [userId], references: [id], onDelete: SetNull)
+  hostingPayment HostingPayment?
 
   @@index([walletId, createdAt])
   @@map("wallet_transactions")
@@ -105,6 +106,7 @@ enum WalletTransactionSource {
   TOPUP
   AI_USAGE
   ADJUSTMENT
+  HOSTING
 }
 
 enum PaymentOrderStatus {

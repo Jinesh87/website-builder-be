@@ -96,7 +96,7 @@ const adminListQuery = {
 const adminTransactionsQuerySchema = Joi.object({
   ...adminListQuery,
   type: Joi.string().valid("CREDIT", "DEBIT").allow("").optional(),
-  source: Joi.string().valid("TOPUP", "AI_USAGE", "ADJUSTMENT").allow("").optional(),
+  source: Joi.string().valid("TOPUP", "AI_USAGE", "ADJUSTMENT", "HOSTING").allow("").optional(),
 });
 const adminPaymentsQuerySchema = Joi.object({
   ...adminListQuery,

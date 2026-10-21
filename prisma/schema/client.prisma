@@ -11,17 +11,21 @@ model Client {
   createdAt    DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
 
-  users         User[]
-  websites      Website[]
-  mediaFolders  MediaFolder[]
-  mediaFiles    MediaFile[]
-  savedSections SavedSection[]
-  templates     WebsiteTemplate[]
-  aiUsageLogs   AiUsageLog[]
-  wallet        Wallet?
-  paymentOrders PaymentOrder[]
-  aiModelPrices ClientAiModelPrice[]
-  emailConfig   ClientEmailConfig?
+  users                User[]
+  websites             Website[]
+  mediaFolders         MediaFolder[]
+  mediaFiles           MediaFile[]
+  savedSections        SavedSection[]
+  templates            WebsiteTemplate[]
+  aiUsageLogs          AiUsageLog[]
+  wallet               Wallet?
+  paymentOrders        PaymentOrder[]
+  aiModelPrices        ClientAiModelPrice[]
+  emailConfig          ClientEmailConfig?
+  hostingPrice         ClientHostingPrice?
+  hostingSubscriptions HostingSubscription[]
+  hostingPayments      HostingPayment[]
+  notifications        Notification[]
 
   @@map("clients")
 }

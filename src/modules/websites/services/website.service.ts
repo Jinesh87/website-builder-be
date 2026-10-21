@@ -7,10 +7,12 @@ import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import {
   Prisma,
+  WebsiteOfflineReason,
   type SavedSection,
   type WebsiteGeneration,
   type WebsiteTemplate,
 } from "../../../generated/prisma/client.js";
+import { hostingService } from "../../hosting/services/hosting.service.js";
 import { THEME_SEEDS } from "../../../seeder/design-library/themes.js";
 import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
 import type { FooterData, HeaderData, LinkRef, Section, ThemeSettings } from "../types/site-content.types.js";
@@ -135,6 +137,7 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
     pageCount: website._count.pages,
     generationStatus: website.generation?.status ?? null,
     hasUnpublishedChanges: website.publishedAt !== null && website.draftUpdatedAt > website.publishedAt,
+    seoToolsEnabled: website.seoToolsEnabled,
     publishedAt: website.publishedAt?.toISOString() ?? null,
     createdAt: website.createdAt.toISOString(),
     updatedAt: website.updatedAt.toISOString(),
@@ -656,6 +659,7 @@ export class WebsiteService {
 
     const data: Prisma.WebsiteUpdateInput = {};
     if (input.name !== undefined) data.name = input.name.trim();
+    if (input.seoToolsEnabled !== undefined) data.seoToolsEnabled = input.seoToolsEnabled;
     const infoKeys = [
       "businessName",
       "websiteType",
@@ -807,6 +811,7 @@ export class WebsiteService {
     if (new Date(input.expectedDraftUpdatedAt).getTime() !== website.draftUpdatedAt.getTime()) {
       throw DRAFT_CONFLICT();
     }
+    await hostingService.assertCanPublish(website.id);
 
     const now = new Date();
     const previousVersion = website.liveVersionId
@@ -840,7 +845,7 @@ export class WebsiteService {
         });
         const claimed = await tx.website.updateMany({
           where: { id: website.id, draftUpdatedAt: website.draftUpdatedAt },
-          data: { liveVersionId: version.id, publishedAt: now, status: WebsiteStatus.PUBLISHED },
+          data: { liveVersionId: version.id, publishedAt: now, status: WebsiteStatus.PUBLISHED, offlineReason: null },
         });
         if (claimed.count === 0) throw DRAFT_CONFLICT();
       });
@@ -865,7 +870,10 @@ export class WebsiteService {
       throw new AppError(409, "This website isn't published.", "WEBSITE_NOT_PUBLISHED");
     }
 
-    await prisma.website.update({ where: { id: website.id }, data: { status: WebsiteStatus.UNPUBLISHED } });
+    await prisma.website.update({
+      where: { id: website.id },
+      data: { status: WebsiteStatus.UNPUBLISHED, offlineReason: WebsiteOfflineReason.MANUAL },
+    });
     logger.info({ websiteId: website.id, actorId: actor.id }, "Website unpublished");
     const hostnames = (website.domains || []).map((d) => d.hostname);
     liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);

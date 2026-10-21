@@ -1,0 +1,176 @@
+/// Singleton (id = "default"): platform-wide hosting prices and billing rules, managed by the Super Admin.
+model HostingConfig {
+  id             String   @id @default("default") @db.VarChar(50)
+  /// Off: publishing needs no plan and the billing worker does nothing.
+  enabled        Boolean  @default(false)
+  /// Connects per period.
+  quarterlyPrice Int      @default(0)
+  yearlyPrice    Int      @default(0)
+  /// Days before a period ends that the renewal reminder goes out.
+  reminderDays   Int      @default(3)
+  /// Days an unpaid site stays live after its period ends.
+  graceDays      Int      @default(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("hosting_config")
+}
+
+/// A client's own hosting prices; a null price falls back to HostingConfig.
+model ClientHostingPrice {
+  clientId       String   @id @db.Uuid
+  quarterlyPrice Int?
+  yearlyPrice    Int?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_hosting_prices")
+}
+
+/// Hosting plan of one website. Each website renews on its own dates.
+model HostingSubscription {
+  id                 String        @id @default(uuid()) @db.Uuid
+  websiteId          String        @unique @db.Uuid
+  clientId           String        @db.Uuid
+  /// Applies from the next payment; changing it never alters the current period.
+  cycle              BillingCycle
+  /// Connects per period for this website only; null = client price, then global price. 0 = free.
+  quarterlyPrice     Int?
+  yearlyPrice        Int?
+  status             HostingStatus @default(AWAITING_PAYMENT)
+  /// Renew from the client's wallet when the period ends.
+  autoRenew          Boolean       @default(true)
+  currentPeriodStart DateTime?     @db.Timestamptz(6)
+  currentPeriodEnd   DateTime?     @db.Timestamptz(6)
+  /// Set while in GRACE: the site goes offline at this time unless paid.
+  graceEndsAt        DateTime?     @db.Timestamptz(6)
+  suspendedAt        DateTime?     @db.Timestamptz(6)
+  createdById        String?       @db.Uuid
+  createdAt          DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime      @updatedAt @db.Timestamptz(6)
+
+  website   Website          @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  client    Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User?            @relation("HostingSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  payments  HostingPayment[]
+  notices   HostingNotice[]
+
+  /// Required by the (websiteId, clientId) foreign key, which keeps clientId equal to the website's client.
+  @@unique([websiteId, clientId])
+  @@index([status, currentPeriodEnd])
+  @@index([status, graceEndsAt])
+  @@index([clientId])
+  @@map("hosting_subscriptions")
+}
+
+/// One paid hosting period. Kept when the website is deleted, for the report.
+model HostingPayment {
+  id                  String               @id @default(uuid()) @db.Uuid
+  subscriptionId      String?              @db.Uuid
+  clientId            String               @db.Uuid
+  websiteId           String?              @db.Uuid
+  /// Snapshot, so the report still reads well after the website is renamed or deleted.
+  websiteName         String               @db.VarChar(120)
+  cycle               BillingCycle
+  /// Connects charged for the period.
+  amount              Int
+  periodStart         DateTime             @db.Timestamptz(6)
+  periodEnd           DateTime             @db.Timestamptz(6)
+  paidBy              HostingPayer
+  method              HostingPaymentMethod
+  /// Money the admin collected offline, in paise. Null for wallet payments.
+  collectedPaise      Int?
+  reference           String?              @db.VarChar(120)
+  note                String?              @db.VarChar(500)
+  walletTransactionId String?              @unique @db.Uuid
+  recordedById        String?              @db.Uuid
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+
+  subscription      HostingSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  walletTransaction WalletTransaction?   @relation(fields: [walletTransactionId], references: [id], onDelete: SetNull)
+  recordedBy        User?                @relation("HostingPaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  /// A period can be paid once, however many people (or the worker) try at the same time.
+  @@unique([subscriptionId, periodStart])
+  @@index([clientId, createdAt])
+  @@index([createdAt])
+  @@map("hosting_payments")
+}
+
+/// Billing emails already sent, so each goes out once per period.
+model HostingNotice {
+  id             String            @id @default(uuid()) @db.Uuid
+  subscriptionId String            @db.Uuid
+  kind           HostingNoticeKind
+  periodEnd      DateTime          @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+
+  subscription HostingSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, kind, periodEnd])
+  @@map("hosting_notices")
+}
+
+/// Audit log of hosting price changes.
+model HostingPriceChange {
+  id                String            @id @default(uuid()) @db.Uuid
+  scope             HostingPriceScope
+  clientId          String?           @db.Uuid
+  websiteId         String?           @db.Uuid
+  /// Name of the client or website at the time of the change.
+  label             String            @db.VarChar(160)
+  oldQuarterlyPrice Int?
+  newQuarterlyPrice Int?
+  oldYearlyPrice    Int?
+  newYearlyPrice    Int?
+  changedById       String?           @db.Uuid
+  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+
+  changedBy User? @relation("HostingPriceChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([clientId, createdAt])
+  @@map("hosting_price_changes")
+}
+
+enum BillingCycle {
+  QUARTERLY
+  YEARLY
+}
+
+enum HostingStatus {
+  /// Plan set up, first period not paid yet. The site can't be published.
+  AWAITING_PAYMENT
+  ACTIVE
+  /// Period ended unpaid; the site stays live until graceEndsAt.
+  GRACE
+  /// Grace ended unpaid; the site was taken offline.
+  SUSPENDED
+}
+
+enum HostingPayer {
+  CLIENT
+  ADMIN
+  /// Auto-renewal by the billing worker.
+  SYSTEM
+}
+
+enum HostingPaymentMethod {
+  WALLET
+  CASH
+  UPI
+  BANK_TRANSFER
+}
+
+enum HostingNoticeKind {
+  RENEWAL_REMINDER
+  EXPIRED
+  SUSPENDED
+}
+
+enum HostingPriceScope {
+  GLOBAL
+  CLIENT
+  WEBSITE
+}
