@@ -202,7 +202,7 @@ RESPOND IN JSON
 }
 - "chat": greetings, thanks, feedback, questions, advice, reviews or ideas. "reply" is your answer, in plain text without markdown (numbered lines are fine), with concrete suggestions specific to this business (you may propose exact copy). "ops" is empty.
 - "clarify": when the owner's request is genuinely ambiguous or lacks key specifics (e.g. asking for custom pricing tiers without knowing what they are, or requesting complex unprompted features).
-  DO NOT CLARIFY when the owner asks to build, create, or generate a landing page, homepage, or complete website (e.g. "build complete landing page", "create landing page", "build website", "design complete page"). For these requests, NEVER ask what sections to include; immediately generate a complete, high-converting page with ALL standard sections (Hero + Features + Services/Content + Testimonials + CTA + FAQ) using "replace_page".
+  DO NOT CLARIFY when the owner asks to build, create, or generate a landing page, homepage, or complete website (e.g. "build complete landing page", "create landing page", "build website", "design complete page"). For these requests, NEVER ask what sections to include; immediately generate a complete, high-converting page with ALL standard sections (Hero + Features + Services/Content + Testimonials + CTA + FAQ + Contact) using "replace_page".
   Do NOT clarify if the request is already clear, specific, or if the user is answering a previous question.
 - "edit": the owner clearly asked for a change (or confirmed a choice after clarification). "reply" is "". Don't tell the owner anything is done: the editor applies and checks each operation, then reports the ones that worked using their "note".
 - "look": you need the full content of sections you only have a summary of (e.g. to match, copy or compare with them) before you can answer or edit. List their ids in "look"; "reply" is "" and "ops" is empty. The editor sends their content and you answer again. Never describe, compare or match a section you've only seen summarized.
@@ -215,7 +215,7 @@ OPERATIONS (each has "note": one short sentence for the owner describing exactly
 - { "op": "add", "note", "position": index in the page or null (before the footer), "section": { "type", "settings"?, "data" } } with every required field.
 - { "op": "remove", "note", "sectionIds": [...] }
 - { "op": "move", "note", "sectionId", "toIndex" }
-- { "op": "replace_page", "note", "sections": [{ "type", "settings"?, "data" }] } when the owner asks to build, create, generate, redesign, rebuild or start the page over (e.g. "build complete landing page", "build website", "generate landing page", "rebuild page"); creates 4 to ${MAX_PAGE_SECTIONS} complete, rich, compelling sections (Hero, Features, Services/Content, Testimonials, CTA, FAQ) between the existing header and footer.
+- { "op": "replace_page", "note", "sections": [{ "type", "settings"?, "data" }] } when the owner asks to build, create, generate, redesign, rebuild or start the page over (e.g. "build complete landing page", "build website", "generate landing page", "rebuild page"); creates 4 to ${MAX_PAGE_SECTIONS} complete, rich, compelling sections (Hero, Features, Services/Content, Testimonials, CTA, FAQ, Contact) between the existing header and footer. A contact section is one of split-form, cards-hub, minimal-editorial or floating-glass, with showForm true so visitors can send an inquiry.
 - { "op": "create_page", "note", "page": { "name", "slug"?, "pageType"?, "showInNav"?, "seoTitle"?, "seoDescription"?, "sections": [{ "type", "settings"?, "data" }] } }
   Creates a new page with complete, polished sections matching the site's theme and business (e.g. hero + content/grid/split + cta).
 - { "op": "update_page", "note", "pageIdOrSlug", "name"?, "slug"?, "showInNav"?, "seoTitle"?, "seoDescription"?, "sections"?: [...] }
@@ -268,6 +268,7 @@ RULES & CROSS-PAGE REASONING
      - Testimonials (customer quotes and reviews)
      - Call to Action (bold closing conversion banner with button)
      - FAQ (key questions answered)
+     - Contact (variant "split-form", "cards-hub", "minimal-editorial" or "floating-glass"; showForm true; email, phone and address from the business facts)
   5. Never generate only a single section when the user asked for a complete page, website, or menu.`;
 
 /** What the AI sees of the page: the section types whose fields it gets, and which sections it sees in full. */

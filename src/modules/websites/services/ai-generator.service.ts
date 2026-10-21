@@ -994,6 +994,25 @@ export function sanitizeSectionData(
       if (!data.submitLabel || typeof data.submitLabel !== "string") {
         data.submitLabel = "Send message";
       }
+      const channelIcons = new Set(["mail", "phone", "chat", "user"]);
+      if (Array.isArray(data.channels)) {
+        data.channels = data.channels.flatMap((channel) => {
+          if (!channel || typeof channel !== "object") return [];
+          const item = channel as Record<string, unknown>;
+          if (typeof item.label !== "string" || typeof item.value !== "string") return [];
+          return [
+            {
+              label: item.label,
+              value: item.value,
+              ...(typeof item.description === "string" ? { description: item.description } : {}),
+              ...(typeof item.icon === "string" && channelIcons.has(item.icon) ? { icon: item.icon } : {}),
+            },
+          ];
+        }).slice(0, 6);
+      }
+      if (Array.isArray(data.serviceOptions)) {
+        data.serviceOptions = data.serviceOptions.filter((option) => typeof option === "string").slice(0, 8);
+      }
       break;
     }
 
@@ -1148,9 +1167,10 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    { "type": "list", "items": ["..."] }
    Limits: at most ${CUSTOM_LIMITS.maxDepth} nesting levels, ${CUSTOM_LIMITS.maxBlocks} blocks in total and ${CUSTOM_LIMITS.maxChildren} children per container.
    Use "grid" for side-by-side columns (it collapses to one column on mobile), "stack" with direction "row" for button groups, and "card" for boxed content.
-14. "contact" (contact details plus an inquiry form; email and phone also render as mailto:/tel: links):
-   data: { "variant": "split-form"|"cards-hub"|"minimal-editorial"|"floating-glass", "eyebrow": "...", "heading": "...", "text": "...", "email": "...", "phone": "...", "address": "...", "officeHours": "...", "responseTime": "...", "showForm": true, "formHeading": "Send us a message", "submitLabel": "Send message" }
-   "showForm": true adds name, email and message fields. Submissions are emailed to the site owner. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one.
+14. "contact" (a real inquiry form plus contact details; email and phone also render as mailto:/tel: links):
+   data: { "variant": "split-form"|"cards-hub"|"minimal-editorial"|"floating-glass", "eyebrow": "...", "heading": "...", "text": "...", "email": "...", "phone": "...", "address": "...", "officeHours": "...", "responseTime": "...", "showForm": true, "formHeading": "Send us a message", "submitLabel": "Send message", "serviceOptions": ["..."], "channels": [{ "label": "Sales", "value": "<business email or phone>", "description": "...", "icon": "mail"|"phone"|"chat"|"user" }], "cardStyle": "default"|"bordered"|"flat"|"glass"|"elevated"|"contrast", "align": "left"|"center" }
+   Pick a variant: "split-form" is the side-by-side inquiry form, "cards-hub" is department cards plus the form, "minimal-editorial" is a typographic split, "floating-glass" is a framed glass card.
+   "showForm": true adds name, email and message fields. Submissions are emailed to the site owner. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one. Channel values must be that same email or phone.
    Never use "custom" blocks to imitate a contact or signup form.
 
 STOCK / DUMMY IMAGE GUIDELINES:
