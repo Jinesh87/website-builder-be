@@ -90,10 +90,8 @@ export type UpdatePlanInput = {
 
 export type CollectInput = {
   cycle: BillingCycle;
-  /** WALLET charges the client's existing connects; the rest record money collected offline. */
+  /** WALLET charges the client's existing connects; the rest record the plan's price collected offline. */
   method: HostingPaymentMethod;
-  /** Rupees collected offline; credited as connects before the hosting charge. */
-  amountRupees?: number;
   reference?: string;
   note?: string;
 };

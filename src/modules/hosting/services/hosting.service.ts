@@ -19,7 +19,7 @@ import {
   type HostingPayment,
   type HostingSubscription,
 } from "../../../generated/prisma/client.js";
-import { applyLedgerEntry, CONNECTS_PER_RUPEE, formatConnects } from "../../wallet/services/wallet.service.js";
+import { applyLedgerEntry, CONNECTS_PER_RUPEE, formatConnects, priceInPaise } from "../../wallet/services/wallet.service.js";
 import { liveSiteEngineService } from "../../websites/services/live-site-engine.service.js";
 import type {
   CollectInput,
@@ -37,7 +37,6 @@ import {
   formatPeriod,
   isHostingLive,
   nextPeriod,
-  offlineCredit,
   renewalOpensAt,
   resolvePrice,
 } from "./hosting-period.js";
@@ -165,8 +164,8 @@ type SettleRequest = {
   payer: HostingPayer;
   method: HostingPaymentMethod;
   actorId: string | null;
-  /** Money an admin collected outside the platform, credited to the wallet before the charge. */
-  offline?: { collectedPaise: number; description: string };
+  /** The admin collected the plan's price outside the platform; it is credited to the wallet, then charged. */
+  collectedOffline?: boolean;
   reference?: string | null;
   note?: string | null;
   now?: Date;
@@ -208,12 +207,14 @@ export class HostingService {
         const price = resolvePrice(cycle, { website: subscription, client: clientPrices, global: rules }).amount;
         const period = nextPeriod(subscription, cycle, now);
 
-        if (request.offline) {
+        const collectedPaise = request.collectedOffline ? priceInPaise(price) : null;
+        if (request.collectedOffline && price > 0) {
+          const reference = request.reference?.trim();
           await applyLedgerEntry(tx, website.clientId, {
             type: WalletTransactionType.CREDIT,
             source: WalletTransactionSource.ADJUSTMENT,
-            amount: offlineCredit(request.offline.collectedPaise, price, CONNECTS_PER_RUPEE),
-            description: request.offline.description,
+            amount: price,
+            description: `Hosting payment collected · ${METHOD_LABELS[request.method]}${reference ? ` · ref ${reference}` : ""} · ${formatRupees(collectedPaise!)}`,
             userId: request.actorId,
           });
         }
@@ -222,7 +223,8 @@ export class HostingService {
         if (price > 0) {
           const wallet = await tx.wallet.findUnique({ where: { clientId: website.clientId }, select: { balance: true } });
           const balance = Number(wallet?.balance ?? 0);
-          if (balance < price) {
+          // Money collected offline covers the price exactly, even if AI usage left the wallet below zero.
+          if (!request.collectedOffline && balance < price) {
             throw new AppError(
               402,
               `Hosting costs ${formatConnects(price)}, but the balance is ${formatConnects(balance)}. Add connects to continue.`,
@@ -236,6 +238,7 @@ export class HostingService {
             amount: price,
             description: `Hosting · ${website.name} · ${CYCLE_LABELS[cycle]} · ${formatPeriod(period.start, period.end)}`,
             userId: request.actorId,
+            allowNegative: request.collectedOffline,
           });
           walletTransactionId = entry.id;
         }
@@ -275,7 +278,7 @@ export class HostingService {
             periodEnd: period.end,
             paidBy: request.payer,
             method: request.method,
-            collectedPaise: request.offline?.collectedPaise ?? null,
+            collectedPaise,
             reference: request.reference?.trim() || null,
             note: request.note?.trim() || null,
             walletTransactionId,
@@ -432,32 +435,20 @@ export class HostingService {
     return this.getForWebsite(websiteId, actor);
   }
 
-  /** Super Admin records a payment: money collected offline, or a charge to the client's existing connects. */
+  /**
+   * Super Admin records a payment: the plan's price collected offline (cash, UPI, bank), or a charge to the
+   * client's existing connects.
+   */
   async adminCollect(websiteId: string, input: CollectInput, actor: AuthUser): Promise<WebsiteHostingView> {
     await this.assertAccess(websiteId, actor);
-    const reference = input.reference?.trim() || null;
-    let offline: SettleRequest["offline"];
-    if (input.method !== HostingPaymentMethod.WALLET) {
-      const rupees = input.amountRupees ?? 0;
-      if (!(rupees > 0)) {
-        throw new AppError(400, "Enter the amount you collected.", "VALIDATION_ERROR", [
-          { message: "Enter the amount you collected.", path: ["amountRupees"] },
-        ]);
-      }
-      const collectedPaise = Math.round(rupees * 100);
-      offline = {
-        collectedPaise,
-        description: `Hosting payment collected · ${METHOD_LABELS[input.method]}${reference ? ` · ref ${reference}` : ""} · ${formatRupees(collectedPaise)}`,
-      };
-    }
     await this.settle({
       websiteId,
       cycle: input.cycle,
       payer: HostingPayer.ADMIN,
       method: input.method,
       actorId: actor.id,
-      offline,
-      reference,
+      collectedOffline: input.method !== HostingPaymentMethod.WALLET,
+      reference: input.reference,
       note: input.note,
     });
     return this.getForWebsite(websiteId, actor);

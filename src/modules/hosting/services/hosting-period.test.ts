@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addCycle, isHostingLive, nextPeriod, offlineCredit, renewalOpensAt, resolvePrice } from "./hosting-period.js";
+import { addCycle, isHostingLive, nextPeriod, renewalOpensAt, resolvePrice } from "./hosting-period.js";
 
 /** A time in India (UTC+5:30), as the billing dates are read there. */
 function ist(isoLocal: string): Date {
@@ -66,18 +66,6 @@ test("only paid or grace plans keep a site live", () => {
   assert.equal(isHostingLive("SUSPENDED"), false);
   assert.equal(isHostingLive("AWAITING_PAYMENT"), false);
   assert.equal(isHostingLive(null), false);
-});
-
-test("collecting exactly the plan's rupee price credits exactly the price", () => {
-  assert.equal(offlineCredit(6667, 200, 3), 200);
-  assert.equal(offlineCredit(3333, 100, 3), 100);
-  assert.equal(offlineCredit(50000, 1500, 3), 1500);
-});
-
-test("other collected amounts convert at the connects rate", () => {
-  assert.equal(offlineCredit(10000, 200, 3), 300);
-  assert.equal(offlineCredit(6666, 200, 3), 199.98);
-  assert.equal(offlineCredit(6667, 0, 3), 200.01);
 });
 
 test("website price beats client price beats global price, per cycle", () => {

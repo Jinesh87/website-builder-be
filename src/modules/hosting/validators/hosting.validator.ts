@@ -28,11 +28,6 @@ export const updatePlanSchema = Joi.object({
 export const collectHostingSchema = Joi.object({
   cycle: cycle.required(),
   method: Joi.string().valid("WALLET", "CASH", "UPI", "BANK_TRANSFER").required(),
-  amountRupees: Joi.when("method", {
-    is: "WALLET",
-    then: Joi.forbidden(),
-    otherwise: Joi.number().positive().max(10_000_000).precision(2).required(),
-  }),
   reference: Joi.string().trim().max(120).allow("").optional(),
   note: Joi.string().trim().max(500).allow("").optional(),
 });

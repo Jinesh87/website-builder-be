@@ -71,16 +71,6 @@ export function resolvePrice(
   return { amount: priceFor(sources.global, cycle) ?? 0, source: "GLOBAL" };
 }
 
-/**
- * Connects credited for money collected offline. Collecting exactly the plan's rupee price (₹66.67 for
- * 200 connects at 3 per rupee) credits exactly the price, so paise rounding never leaves 0.01 connect over.
- * The rupee price uses the wallet's rounding: nearest paisa.
- */
-export function offlineCredit(collectedPaise: number, price: number, connectsPerRupee: number): number {
-  if (price > 0 && collectedPaise === Math.round((price * 100) / connectsPerRupee)) return price;
-  return Math.round(collectedPaise * connectsPerRupee * 10) / 1000;
-}
-
 const DATE_FORMAT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 export function formatBillingDate(date: Date): string {
