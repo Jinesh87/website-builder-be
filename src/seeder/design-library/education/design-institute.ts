@@ -11,7 +11,7 @@ const header: HeaderData = {
   logoDisplay: "logo_only",
   menu: [
     { label: "Studios", href: "/courses" },
-    { label: "Faculty", href: "/about" },
+    { label: "Faculty", href: "/#methodology" },
     { label: "Exhibitions", href: "/courses" },
     { label: "Admissions", href: "/admissions" },
     { label: "Contact", href: "/contact" },
@@ -44,16 +44,16 @@ const footer: FooterData = {
         { label: "Portfolio Guidelines", href: "/admissions" },
         { label: "Tuition & Fellowships", href: "/admissions" },
         { label: "International Visas", href: "/admissions" },
-        { label: "Visiting Critic Program", href: "/about" },
+        { label: "Visiting Critic Program", href: "/#methodology" },
       ],
     },
     {
       title: "Institute",
       links: [
-        { label: "Faculty & Masters", href: "/about" },
+        { label: "Faculty & Masters", href: "/#methodology" },
         { label: "Student Thesis Archive", href: "/courses" },
-        { label: "Public Lecture Series", href: "/about" },
-        { label: "Press & Publications", href: "/about" },
+        { label: "Public Lecture Series", href: "/#exhibitions" },
+        { label: "Press & Publications", href: "/#endorsements" },
       ],
     },
   ],
@@ -185,7 +185,7 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
               photo("1600585154340-be6161a56a0c", "Minimalist Monolithic Residence Interior Form"),
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "exhibitions" },
         ),
         section(
           "features",
@@ -223,7 +223,7 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "methodology" },
         ),
         section(
           "testimonials",
@@ -247,7 +247,7 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "endorsements" },
         ),
         section(
           "pricing",

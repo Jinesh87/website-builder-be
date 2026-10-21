@@ -12,7 +12,7 @@ const header: HeaderData = {
   menu: [
     { label: "Curriculum", href: "/courses" },
     { label: "Admissions", href: "/admissions" },
-    { label: "Mentors", href: "/about" },
+    { label: "Mentors", href: "/#mentors" },
     { label: "Contact", href: "/contact" },
   ],
   cta: { label: "Apply for Fellowship", href: "/admissions" },
@@ -49,8 +49,8 @@ const footer: FooterData = {
       links: [
         { label: "Admissions & Tuition", href: "/admissions" },
         { label: "Scholarships & ISAs", href: "/admissions" },
-        { label: "Mentor Network", href: "/about" },
-        { label: "Alumni Outcomes", href: "/about" },
+        { label: "Mentor Network", href: "/#mentors" },
+        { label: "Alumni Outcomes", href: "/#outcomes" },
       ],
     },
   ],
@@ -215,7 +215,7 @@ export const TECH_ACADEMY: BusinessTemplate = businessTemplate({
               { value: "4.95 / 5", label: "Fellow Satisfaction Rating" },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "outcomes" },
         ),
         section(
           "features",
@@ -299,7 +299,7 @@ export const TECH_ACADEMY: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "mentors" },
         ),
         section(
           "pricing",

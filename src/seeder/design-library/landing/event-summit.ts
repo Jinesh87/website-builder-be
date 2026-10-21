@@ -218,7 +218,7 @@ export const EVENT_SUMMIT: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "speakers" },
         ),
 
         // 4. Summit Tracks & Experience
@@ -261,7 +261,7 @@ export const EVENT_SUMMIT: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "tracks" },
         ),
 
         // 5. Summit Schedule Highlight
@@ -281,7 +281,7 @@ export const EVENT_SUMMIT: BusinessTemplate = businessTemplate({
             ],
             cta: { label: "Download Full PDF Schedule", href: "/#passes" },
           },
-          { background: "default" },
+          { background: "default", anchor: "schedule" },
         ),
 
         // 6. Pass Tiers & Ticketing (Pricing)
@@ -341,7 +341,7 @@ export const EVENT_SUMMIT: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "passes" },
         ),
 
         // 7. Global Sponsors & Partners
@@ -402,7 +402,7 @@ export const EVENT_SUMMIT: BusinessTemplate = businessTemplate({
             heading: "Don't miss the defining technology and design moment of 2026",
             text: "Only 120 in-person passes remain before the summit officially closes registration.",
             button: { label: "Secure Your Pass Now", href: "/#passes" },
-            secondaryButton: { label: "Apply for Media Accreditation", href: "/contact" },
+            secondaryButton: { label: "Apply for Media Accreditation", href: "mailto:concierge@apexsummit.org" },
             trustBadges: ["Instant digital ticket delivery", "100% transferrable", "Corporate invoice ready"],
           },
           { background: "default" },

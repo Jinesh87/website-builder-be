@@ -177,7 +177,7 @@ export const MOBILE_APP: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface", spacing: "relaxed" },
+          { background: "surface", spacing: "relaxed", anchor: "features" },
         ),
 
         // 3. App Feature Services Grid
@@ -242,7 +242,7 @@ export const MOBILE_APP: BusinessTemplate = businessTemplate({
             ],
             cta: { label: "Claim Your Titanium Card", href: "/#download" },
           },
-          { background: "surface" },
+          { background: "surface", anchor: "card" },
         ),
 
         // 5. Growth Metrics
@@ -258,7 +258,7 @@ export const MOBILE_APP: BusinessTemplate = businessTemplate({
               { value: "< 2 min", label: "Account Setup Time" },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "vaults" },
         ),
 
         // 6. Verified User Testimonials
@@ -319,7 +319,7 @@ export const MOBILE_APP: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "security" },
         ),
 
         // 8. Download Conversion CTA
@@ -335,7 +335,7 @@ export const MOBILE_APP: BusinessTemplate = businessTemplate({
             secondaryButton: { label: "Get it on Google Play", href: "/#download" },
             trustBadges: ["Free account creation", "No impact on credit score", "Setup in under 120 seconds"],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "download" },
         ),
       ],
     },
