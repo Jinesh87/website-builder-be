@@ -51,6 +51,26 @@ export function verificationCodeEmail(params: {
   };
 }
 
+export function emailChangeCodeEmail(params: {
+  brand: string;
+  fullName: string;
+  code: string;
+  expiresInMinutes: number;
+}): RenderedEmail {
+  const name = escapeHtml(params.fullName);
+  return {
+    subject: `Confirm your new email: ${params.code}`,
+    html: layout(
+      params.brand,
+      `<h1 style="margin:0 0 12px;font-size:20px;">Confirm your new email</h1>
+       <p style="margin:0 0 16px;line-height:1.5;color:#4b5160;">Hi ${name}, use this code to add this email address to your account:</p>
+       <p style="margin:0 0 16px;font-size:30px;letter-spacing:8px;font-weight:bold;color:#2447c7;">${params.code}</p>
+       <p style="margin:0;line-height:1.5;color:#7a8090;font-size:13px;">The code expires in ${params.expiresInMinutes} minutes. If you didn't ask for this, you can ignore this email.</p>`,
+    ),
+    text: `Hi ${params.fullName}, your code to confirm your new email is ${params.code}. It expires in ${params.expiresInMinutes} minutes.`,
+  };
+}
+
 export function passwordResetEmail(params: {
   brand: string;
   fullName: string;

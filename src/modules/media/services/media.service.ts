@@ -226,7 +226,7 @@ export class MediaService {
       if (!website) throw new AppError(404, "Website not found", "WEBSITE_NOT_FOUND");
     }
 
-    const { apiKey } = await aiSettingsService.getCredentials(clientId);
+    const { apiKey } = await aiSettingsService.getCredentials(clientId, actor.id);
     if (!apiKey) {
       throw new AppError(503, "AI image generation isn't available yet. Ask the administrator to set it up.", "AI_NOT_CONFIGURED");
     }

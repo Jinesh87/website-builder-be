@@ -61,8 +61,9 @@ function sideCostSql(side: "input" | "output", pricing: readonly ModelPrice[]): 
   return Prisma.sql`COALESCE(${clientRate} * ${column} / 1000000.0, ${platform})`;
 }
 
-function usageCostSql(pricing: readonly ModelPrice[]): Prisma.Sql {
-  return Prisma.sql`(${sideCostSql("input", pricing)} + ${sideCostSql("output", pricing)})`;
+/** The cost stored when the call was billed; calls from before billing are re-priced at current rates. */
+function billedCostSql(pricing: readonly ModelPrice[]): Prisma.Sql {
+  return Prisma.sql`COALESCE(l."costUsd"::float8, ${sideCostSql("input", pricing)} + ${sideCostSql("output", pricing)})`;
 }
 
 /** UTC bounds for a whole year, or one month of it. */
@@ -108,6 +109,16 @@ export class AiUsageService {
           ? Prisma.sql`"totalRequests" ASC, "businessName" ASC`
           : Prisma.sql`"totalRequests" DESC, "businessName" ASC`;
         break;
+      case "connectsUsed":
+        orderSql = isAsc
+          ? Prisma.sql`"connectsUsed" ASC, "businessName" ASC`
+          : Prisma.sql`"connectsUsed" DESC, "businessName" ASC`;
+        break;
+      case "connectsLeft":
+        orderSql = isAsc
+          ? Prisma.sql`"connectsLeft" ASC, "businessName" ASC`
+          : Prisma.sql`"connectsLeft" DESC, "businessName" ASC`;
+        break;
       case "businessName":
         orderSql = isAsc
           ? Prisma.sql`"businessName" ASC`
@@ -126,7 +137,7 @@ export class AiUsageService {
         break;
     }
 
-    const costSql = usageCostSql(await aiPricingService.pricing());
+    const costSql = billedCostSql(await aiPricingService.pricing());
     const offset = (query.page - 1) * query.pageSize;
     const limit = query.pageSize;
 
@@ -139,6 +150,7 @@ export class AiUsageService {
           COALESCE(SUM(l."completionTokens"), 0)::int AS "completionTokens",
           COALESCE(SUM(l."totalTokens"), 0)::int AS "totalTokens",
           COALESCE(SUM(${costSql}), 0)::float AS "estimatedCost",
+          COALESCE(SUM(l."connectsCharged"), 0)::float AS "connectsUsed",
           MAX(l."createdAt") AS "lastUsedAt",
           MODE() WITHIN GROUP (ORDER BY l.model) AS "topModel"
         FROM "ai_usage_logs" l
@@ -167,11 +179,14 @@ export class AiUsageService {
           COALESCE(ua."completionTokens", 0)::int AS "completionTokens",
           COALESCE(ua."totalTokens", 0)::int AS "totalTokens",
           COALESCE(ua."estimatedCost", 0)::float AS "estimatedCost",
+          COALESCE(ua."connectsUsed", 0)::float AS "connectsUsed",
+          COALESCE(wa.balance, 0)::float AS "connectsLeft",
           ua."lastUsedAt",
           ua."topModel"
         FROM clients c
         LEFT JOIN client_owners co ON co."clientId" = c.id
         LEFT JOIN usage_agg ua ON ua."clientId" = c.id
+        LEFT JOIN wallets wa ON wa."clientId" = c.id
         WHERE 1=1
         ${searchCondition}
       )
@@ -190,6 +205,8 @@ export class AiUsageService {
           completionTokens: number;
           totalTokens: number;
           estimatedCost: number;
+          connectsUsed: number;
+          connectsLeft: number;
           lastUsedAt: Date | null;
           topModel: string | null;
         }>
@@ -207,6 +224,7 @@ export class AiUsageService {
           completionTokens: number | bigint;
           totalTokens: number | bigint;
           totalEstimatedCost: number;
+          totalConnectsUsed: number;
           activeClientsCount: number | bigint;
         }>
       >(Prisma.sql`
@@ -218,6 +236,7 @@ export class AiUsageService {
           COALESCE(SUM("completionTokens"), 0)::bigint AS "completionTokens",
           COALESCE(SUM("totalTokens"), 0)::bigint AS "totalTokens",
           COALESCE(SUM("estimatedCost"), 0)::float AS "totalEstimatedCost",
+          COALESCE(SUM("connectsUsed"), 0)::float AS "totalConnectsUsed",
           COUNT(CASE WHEN "totalRequests" > 0 THEN 1 END)::bigint AS "activeClientsCount"
         FROM matched_clients
       `),
@@ -231,6 +250,7 @@ export class AiUsageService {
       completionTokens: Number(summaryRow?.completionTokens ?? 0),
       totalTokens: Number(summaryRow?.totalTokens ?? 0),
       totalEstimatedCost: Number(summaryRow?.totalEstimatedCost ?? 0),
+      totalConnectsUsed: Number(summaryRow?.totalConnectsUsed ?? 0),
       activeClientsCount: Number(summaryRow?.activeClientsCount ?? 0),
     };
 
@@ -249,6 +269,8 @@ export class AiUsageService {
       completionTokens: Number(r.completionTokens || 0),
       totalTokens: Number(r.totalTokens || 0),
       estimatedCost: Number(r.estimatedCost || 0),
+      connectsUsed: Number(r.connectsUsed || 0),
+      connectsLeft: Number(r.connectsLeft || 0),
       topModel: r.topModel || null,
       lastUsedAt: r.lastUsedAt ? new Date(r.lastUsedAt).toISOString() : null,
     }));
@@ -264,7 +286,7 @@ export class AiUsageService {
     };
   }
 
-  /** Every logged AI call for one client in the period, newest first, with its cost split into input and output. */
+  /** Every logged AI call for one client in the period, newest first, with its cost, input/output split and connects charged. */
   async listClientCalls(clientId: string, query: ClientAiCallsQuery): Promise<ClientAiCallsResult> {
     const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, businessName: true } });
     if (!client) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
@@ -273,9 +295,10 @@ export class AiUsageService {
     const pricing = await aiPricingService.pricing();
     const inputCost = sideCostSql("input", pricing);
     const outputCost = sideCostSql("output", pricing);
+    const billedCost = billedCostSql(pricing);
     const where = Prisma.sql`l."clientId" = ${clientId}::uuid AND l."createdAt" >= ${startDate} AND l."createdAt" < ${endDate}`;
 
-    const [calls, byFeature] = await Promise.all([
+    const [calls, byFeature, wallet] = await Promise.all([
       prisma.$queryRaw<
         Array<{
           id: string;
@@ -291,11 +314,14 @@ export class AiUsageService {
           durationMs: number | null;
           inputCost: number;
           outputCost: number;
+          cost: number;
+          connectsCharged: number | null;
         }>
       >(Prisma.sql`
         SELECT l.id, l."createdAt", l.scope, l.model, l."websiteId", w.name AS "websiteName", u."fullName" AS "userName",
           l."promptTokens", l."completionTokens", l."totalTokens", l."durationMs",
-          (${inputCost})::float AS "inputCost", (${outputCost})::float AS "outputCost"
+          (${inputCost})::float AS "inputCost", (${outputCost})::float AS "outputCost",
+          (${billedCost})::float AS cost, l."connectsCharged"::float AS "connectsCharged"
         FROM ai_usage_logs l
         LEFT JOIN websites w ON w.id = l."websiteId"
         LEFT JOIN users u ON u.id = l."userId"
@@ -303,14 +329,16 @@ export class AiUsageService {
         ORDER BY l."createdAt" DESC
         LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}
       `),
-      prisma.$queryRaw<Array<{ scope: string; calls: number; totalTokens: number; cost: number }>>(Prisma.sql`
+      prisma.$queryRaw<Array<{ scope: string; calls: number; totalTokens: number; cost: number; connects: number }>>(Prisma.sql`
         SELECT l.scope, COUNT(*)::int AS calls, COALESCE(SUM(l."totalTokens"), 0)::int AS "totalTokens",
-          COALESCE(SUM(${inputCost} + ${outputCost}), 0)::float AS cost
+          COALESCE(SUM(${billedCost}), 0)::float AS cost,
+          COALESCE(SUM(l."connectsCharged"), 0)::float AS connects
         FROM ai_usage_logs l
         WHERE ${where}
         GROUP BY l.scope
         ORDER BY cost DESC
       `),
+      prisma.wallet.findUnique({ where: { clientId }, select: { balance: true } }),
     ]);
 
     return {
@@ -319,11 +347,12 @@ export class AiUsageService {
         ...call,
         createdAt: new Date(call.createdAt).toISOString(),
         durationMs: call.durationMs ?? 0,
-        cost: call.inputCost + call.outputCost,
       })),
       byFeature,
       total: byFeature.reduce((sum, feature) => sum + feature.calls, 0),
       totalCost: byFeature.reduce((sum, feature) => sum + feature.cost, 0),
+      totalConnects: Math.round(byFeature.reduce((sum, feature) => sum + feature.connects, 0) * 1000) / 1000,
+      connectsLeft: Number(wallet?.balance ?? 0),
       page: query.page,
       pageSize: query.pageSize,
     };

@@ -1,14 +1,17 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { DESIGN_INSTITUTE_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "classical",
   siteName: NAME,
+  logo: DESIGN_INSTITUTE_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Studios", href: "/courses" },
-    { label: "Faculty", href: "/about" },
+    { label: "Faculty", href: "/#methodology" },
     { label: "Exhibitions", href: "/courses" },
     { label: "Admissions", href: "/admissions" },
     { label: "Contact", href: "/contact" },
@@ -22,6 +25,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: DESIGN_INSTITUTE_LOGO,
   description:
     "Atelier Institute of Visual Arts & Architecture is an independent European-inspired design academy cultivating the vanguard of spatial environments, editorial craft, and generative aesthetics.",
   columns: [
@@ -40,16 +44,16 @@ const footer: FooterData = {
         { label: "Portfolio Guidelines", href: "/admissions" },
         { label: "Tuition & Fellowships", href: "/admissions" },
         { label: "International Visas", href: "/admissions" },
-        { label: "Visiting Critic Program", href: "/about" },
+        { label: "Visiting Critic Program", href: "/#methodology" },
       ],
     },
     {
       title: "Institute",
       links: [
-        { label: "Faculty & Masters", href: "/about" },
+        { label: "Faculty & Masters", href: "/#methodology" },
         { label: "Student Thesis Archive", href: "/courses" },
-        { label: "Public Lecture Series", href: "/about" },
-        { label: "Press & Publications", href: "/about" },
+        { label: "Public Lecture Series", href: "/#exhibitions" },
+        { label: "Press & Publications", href: "/#endorsements" },
       ],
     },
   ],
@@ -181,7 +185,7 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
               photo("1600585154340-be6161a56a0c", "Minimalist Monolithic Residence Interior Form"),
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "exhibitions" },
         ),
         section(
           "features",
@@ -219,7 +223,7 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "methodology" },
         ),
         section(
           "testimonials",
@@ -243,7 +247,7 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "endorsements" },
         ),
         section(
           "pricing",

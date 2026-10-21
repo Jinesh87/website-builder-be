@@ -409,7 +409,6 @@ Sitemap: ${domain}/sitemap.xml
       targetPage.name,
       targetPage.slug,
       availableSlugs,
-      identifier,
       {
         contactEmail,
         contactPhone,
@@ -676,7 +675,6 @@ Sitemap: ${domain}/sitemap.xml
     pageName: string,
     pageSlug: string,
     availableSlugs: Set<string>,
-    identifier: string,
     contactInfo?: {
       contactEmail?: string;
       contactPhone?: string;
@@ -1030,6 +1028,12 @@ Sitemap: ${domain}/sitemap.xml
           const effectiveHeading = heading || "Get In Touch";
           const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
           const introParagraph = text || subheading;
+          const ownText = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
+          const email = ownText(d.email) ?? contactInfo?.contactEmail;
+          const phone = ownText(d.phone) ?? contactInfo?.contactPhone;
+          const address = ownText(d.address) ?? contactInfo?.address;
+          const emailLabel = ownText(d.submitLabel) ?? "Email us";
+          const emailHeading = ownText(d.formHeading) ?? "Send us an email";
 
           sectionParts.push(`
           <section class="section-contact" id="contact" style="background: var(--color-surface); border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06);">
@@ -1039,96 +1043,21 @@ Sitemap: ${domain}/sitemap.xml
                 <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
                 ${introParagraph ? `<p class="subtitle">${escapeHtml(introParagraph)}</p>` : ""}
                 <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 1.25rem;">
-                  ${contactInfo?.contactEmail ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(contactInfo.contactEmail)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactEmail)}</a></div>` : ""}
-                  ${contactInfo?.contactPhone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(contactInfo.contactPhone)}" style="color: var(--color-primary);">${escapeHtml(contactInfo.contactPhone)}</a></div>` : ""}
-                  ${contactInfo?.address ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Address</strong><p style="color: var(--color-muted); font-size: 0.95rem;">${escapeHtml(contactInfo.address)}</p></div>` : ""}
+                  ${email ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(email)}" style="color: var(--color-primary);">${escapeHtml(email)}</a></div>` : ""}
+                  ${phone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(phone.replace(/\s+/g, ""))}" style="color: var(--color-primary);">${escapeHtml(phone)}</a></div>` : ""}
+                  ${address ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Address</strong><p style="color: var(--color-muted); font-size: 0.95rem;">${escapeHtml(address)}</p></div>` : ""}
                 </div>
               </div>
-              <div class="card" style="background: #ffffff; border-radius: 1rem; padding: 2rem;">
-                <h3 class="card-title" style="margin-bottom: 0.25rem;">Send a message</h3>
-                <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">We usually reply within 24 hours.</p>
-                
-                <div id="wb-form-feedback" style="display:none; padding: 0.85rem 1rem; border-radius: 0.5rem; margin-bottom: 1.25rem; font-size: 0.9rem;"></div>
-                
-                <form id="wb-contact-form" style="display: flex; flex-direction: column; gap: 1rem;">
-                  <div>
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Your Name *</label>
-                    <input type="text" name="name" required class="contact-input" placeholder="e.g. John Doe" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Email Address *</label>
-                    <input type="email" name="email" required class="contact-input" placeholder="john@example.com" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Phone Number</label>
-                    <input type="tel" name="phone" class="contact-input" placeholder="+1 (555) 000-0000" />
-                  </div>
-                  <div>
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--color-text);">Message *</label>
-                    <textarea name="message" rows="4" required class="contact-input" placeholder="How can we help you?" style="resize: vertical;"></textarea>
-                  </div>
-                  <button type="submit" id="wb-form-submit-btn" class="btn-cta" style="width: 100%; padding: 0.85rem; font-size: 0.95rem; margin-top: 0.5rem;">
-                    Send Message
-                  </button>
-                </form>
-
-                <script>
-                  document.addEventListener('DOMContentLoaded', function() {
-                    var form = document.getElementById('wb-contact-form');
-                    if (!form) return;
-                    form.addEventListener('submit', async function(e) {
-                      e.preventDefault();
-                      var btn = document.getElementById('wb-form-submit-btn');
-                      var feedback = document.getElementById('wb-form-feedback');
-                      var name = form.elements['name'] ? form.elements['name'].value : '';
-                      var email = form.elements['email'] ? form.elements['email'].value : '';
-                      var phone = form.elements['phone'] ? form.elements['phone'].value : '';
-                      var message = form.elements['message'] ? form.elements['message'].value : '';
-
-                      if (btn) {
-                        btn.disabled = true;
-                        btn.innerText = 'Sending message...';
-                      }
-                      if (feedback) feedback.style.display = 'none';
-
-                      try {
-                        var targetUrl = '/api/public/site/' + encodeURIComponent(${JSON.stringify(identifier)}) + '/contact';
-                        var res = await fetch(targetUrl, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ name: name, email: email, phone: phone, message: message })
-                        });
-                        var data = await res.json();
-                        if (res.ok) {
-                          if (feedback) {
-                            feedback.style.display = 'block';
-                            feedback.style.background = '#ecfdf5';
-                            feedback.style.color = '#065f46';
-                            feedback.style.border = '1px solid #a7f3d0';
-                            feedback.innerText = data.message || "Thank you! Your message has been sent successfully.";
-                          }
-                          form.reset();
-                        } else {
-                          throw new Error(data.error || 'Failed to send message. Please try again.');
-                        }
-                      } catch (err) {
-                        if (feedback) {
-                          feedback.style.display = 'block';
-                          feedback.style.background = '#fef2f2';
-                          feedback.style.color = '#991b1b';
-                          feedback.style.border = '1px solid #fecaca';
-                          feedback.innerText = err.message || 'Network error. Please try again.';
-                        }
-                      } finally {
-                        if (btn) {
-                          btn.disabled = false;
-                          btn.innerText = 'Send Message';
-                        }
-                      }
-                    });
-                  });
-                </script>
-              </div>
+              ${
+                email
+                  ? `<div class="card" style="background: #ffffff; border-radius: 1rem; padding: 2rem; align-self: start;">
+                <h3 class="card-title" style="margin-bottom: 0.25rem;">${escapeHtml(emailHeading)}</h3>
+                <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">Write to us directly. We usually reply within one business day.</p>
+                <a href="mailto:${escapeHtml(email)}?subject=${encodeURIComponent("Inquiry from Website")}" class="btn-cta" style="display: block; text-align: center; width: 100%; padding: 0.85rem; font-size: 0.95rem;">${escapeHtml(emailLabel)}</a>
+                <p style="color: var(--color-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">${escapeHtml(email)}</p>
+              </div>`
+                  : ""
+              }
             </div>
           </section>`);
           break;

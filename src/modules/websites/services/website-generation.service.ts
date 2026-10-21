@@ -76,7 +76,7 @@ export class WebsiteGenerationService {
   /** Creates the website (one blank page) plus a PENDING job, and wakes the worker. */
   async createWithAi(input: CreateAiWebsiteInput, actor: AuthUser): Promise<WebsiteDetail> {
     const clientId = resolveClientId(input, actor);
-    const { apiKey } = await aiSettingsService.getCredentials(clientId);
+    const { apiKey } = await aiSettingsService.getCredentials(clientId, actor.id);
     if (!apiKey) {
       throw new AppError(503, "AI website building isn't available yet. Ask the administrator to set it up.", "AI_NOT_CONFIGURED");
     }
@@ -220,7 +220,7 @@ export class WebsiteGenerationService {
     const brief = generation.input as unknown as GenerationBrief;
     const startedFrom = website.draftUpdatedAt;
 
-    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId);
+    const { apiKey, model } = await aiSettingsService.getCredentials(website.clientId, generation.requestedById);
     if (!apiKey) throw new AppError(503, "AI website building isn't configured.", "AI_NOT_CONFIGURED");
 
     const [images, logoImages, themeRows] = await Promise.all([

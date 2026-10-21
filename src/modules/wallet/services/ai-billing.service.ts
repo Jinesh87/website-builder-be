@@ -1,4 +1,5 @@
 import { DEFAULT_AI_MODEL, type ModelPrice } from "../../../common/constants/ai-models.js";
+import { UserRole } from "../../../common/constants/roles.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
@@ -21,6 +22,7 @@ const FEATURE_LABELS: Record<string, string> = {
   section: "Section edit",
   section_add: "Add section",
   page_seo: "SEO",
+  page_seo_audit: "SEO audit",
 };
 
 export type AiUsageRecord = {
@@ -47,6 +49,15 @@ export type BillingSettingsView = {
   connectsPerUsd: number;
   /** Connects required before an AI request can start. 0 means any balance above zero. */
   minAiBalance: number;
+};
+
+export type AiUsageSummary = {
+  year: number;
+  /** 1-12, or null for the whole year. */
+  month: number | null;
+  connects: number;
+  calls: number;
+  byFeature: Array<{ scope: string; label: string; calls: number; connects: number }>;
 };
 
 let configCache: { margin: number; minAiBalance: number; loadedAt: number } | null = null;
@@ -102,6 +113,17 @@ export class AiBillingService {
     return this.settings();
   }
 
+  /**
+   * AI started by a Super Admin (e.g. building a site for a client) is on the platform:
+   * it's still logged with its real cost, but never charged to or blocked by the client's wallet.
+   * Unknown or missing users are billed, which keeps the default behaviour for clients.
+   */
+  async isBillable(userId: string | null | undefined): Promise<boolean> {
+    if (!userId) return true;
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    return user?.role !== UserRole.SUPER_ADMIN;
+  }
+
   /** Called before any AI request. The balance must be above zero and at least the platform minimum. */
   async assertCanUseAi(clientId: string): Promise<void> {
     const [wallet, { minAiBalance }] = await Promise.all([
@@ -120,18 +142,51 @@ export class AiBillingService {
     }
   }
 
+  /** Connects a client spent on AI in a month (or a whole year), by feature. Free calls are left out. */
+  async usageSummary(clientId: string, year: number, month: number | null): Promise<AiUsageSummary> {
+    const createdAt =
+      month !== null
+        ? { gte: new Date(Date.UTC(year, month - 1, 1)), lt: new Date(Date.UTC(year, month, 1)) }
+        : { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) };
+    const groups = await prisma.aiUsageLog.groupBy({
+      by: ["scope"],
+      where: { clientId, createdAt, connectsCharged: { gt: 0 } },
+      _sum: { connectsCharged: true },
+      _count: { _all: true },
+    });
+    const byFeature = groups
+      .map((group) => ({
+        scope: group.scope,
+        label: featureLabel(group.scope),
+        calls: group._count._all,
+        connects: Number(group._sum.connectsCharged ?? 0),
+      }))
+      .sort((a, b) => b.connects - a.connects);
+    return {
+      year,
+      month,
+      connects: Math.round(byFeature.reduce((sum, feature) => sum + feature.connects, 0) * 1000) / 1000,
+      calls: byFeature.reduce((sum, feature) => sum + feature.calls, 0),
+      byFeature,
+    };
+  }
+
   /**
-   * Logs one AI call and charges the client for it at today's rate plus margin.
+   * Logs one AI call and charges the client for it at today's rate plus margin (nothing for Super Admin calls).
    * The call has already happened, so the charge goes through even if it takes the balance below zero.
    * Never throws: a billing problem must not fail the user's request.
    */
   async recordUsage(usage: AiUsageRecord): Promise<void> {
     try {
-      const [pricing, billing] = await Promise.all([aiPricingService.pricingFor(usage.clientId), this.settings()]);
+      const [pricing, billing, billable] = await Promise.all([
+        aiPricingService.pricingFor(usage.clientId),
+        this.settings(),
+        this.isBillable(usage.userId),
+      ]);
       const price = priceFor(usage.model, pricing);
       const costUsd = (usage.promptTokens * price.inputPerMillion + usage.completionTokens * price.outputPerMillion) / 1_000_000;
       // Rounded up to the thousandth of a connect the ledger stores.
-      const connects = Math.ceil(costUsd * billing.connectsPerUsd * 1000 - 1e-9) / 1000;
+      const connects = billable ? Math.ceil(costUsd * billing.connectsPerUsd * 1000 - 1e-9) / 1000 : 0;
 
       await prisma.$transaction(async (tx) => {
         await tx.aiUsageLog.create({

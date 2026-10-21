@@ -5,7 +5,7 @@ import { AppError } from "../errors/AppError.js";
 
 export type AccessTokenPayload = {
   sub: string;
-  email: string;
+  email: string | null;
   role: UserRole;
   clientId: string | null;
   type: "access";

@@ -18,7 +18,7 @@ export type AdminTransactionQuery = AdminListQuery & { type?: WalletTransactionT
 export type AdminPaymentQuery = AdminListQuery & { status?: PaymentOrderStatus | "" };
 
 type ClientRef = { id: string; businessName: string };
-type UserRef = { id: string; fullName: string; email: string } | null;
+type UserRef = { id: string; fullName: string; email: string | null } | null;
 
 /** Month within a year, the whole year, or all time when no year is given. */
 function period(query: AdminListQuery): { gte: Date; lt: Date } | undefined {

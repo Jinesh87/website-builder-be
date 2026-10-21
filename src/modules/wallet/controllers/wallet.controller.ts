@@ -30,6 +30,22 @@ export class WalletController {
     }
   };
 
+  /** Defaults to the current month. */
+  usage = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { year, month } = req.query as unknown as { year?: number; month?: number | null };
+      const now = new Date();
+      const usage = await aiBillingService.usageSummary(
+        requireClient(req).clientId,
+        year ?? now.getUTCFullYear(),
+        year === undefined ? now.getUTCMonth() + 1 : (month ?? null),
+      );
+      res.json({ usage });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   createTopup = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { clientId, userId } = requireClient(req);

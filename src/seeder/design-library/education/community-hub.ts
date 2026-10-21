@@ -1,19 +1,22 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { COMMUNITY_HUB_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "floating",
   siteName: NAME,
+  logo: COMMUNITY_HUB_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Initiatives", href: "/courses" },
     { label: "Chapters", href: "/about" },
     { label: "Community", href: "/about" },
-    { label: "Membership", href: "/admissions" },
+    { label: "Membership", href: "/#membership" },
     { label: "Contact", href: "/contact" },
   ],
-  cta: { label: "Join Collective", href: "/admissions" },
+  cta: { label: "Join Collective", href: "/#membership" },
   announcement: "2026 Global Community Impact Summit — Hybrid Registration Open",
   position: "sticky",
   sticky: true,
@@ -22,6 +25,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "mega",
   siteName: NAME,
+  logo: COMMUNITY_HUB_LOGO,
   tagline: "Regenerating neighborhoods, building food security, and empowering grassroots civic resilience worldwide.",
   description:
     "Solaria Civic Collective is a decentralised, community-owned nonprofit network mobilizing 28,000+ neighbors across 140 municipal chapters.",
@@ -39,8 +43,8 @@ const footer: FooterData = {
       title: "Participate",
       links: [
         { label: "Find Your Local Chapter", href: "/about" },
-        { label: "Become a Volunteer", href: "/admissions" },
-        { label: "Apply for a Micro-Grant", href: "/admissions" },
+        { label: "Become a Volunteer", href: "/contact" },
+        { label: "Apply for a Micro-Grant", href: "/contact" },
         { label: "Community Forum & Discord", href: "/about" },
       ],
     },
@@ -114,7 +118,7 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
           subheading:
             "Join 28,000+ neighbors organizing local food forests, neighborhood microgrid cooperatives, circular repair cafes, and intergenerational civic workshops.",
           primaryCta: { label: "Explore Local Programs", href: "/courses" },
-          secondaryCta: { label: "Join Your Chapter", href: "/admissions" },
+          secondaryCta: { label: "Join Your Chapter", href: "/#membership" },
           rating: {
             stars: 5,
             text: "Over 140+ active municipal chapters in 18 countries",
@@ -314,7 +318,7 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
                   "Access to community Discord & forum",
                 ],
                 featured: false,
-                cta: { label: "Join for Free", href: "/admissions" },
+                cta: { label: "Join for Free", href: "/contact" },
               },
               {
                 name: "Active Sustainer",
@@ -330,7 +334,7 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
                   "Sponsor one youth fellow workshop seat",
                 ],
                 featured: true,
-                cta: { label: "Become Sustainer", href: "/admissions" },
+                cta: { label: "Become Sustainer", href: "/contact" },
               },
               {
                 name: "Circle Steward",
@@ -345,11 +349,11 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
                   "Special recognition in annual impact report",
                 ],
                 featured: false,
-                cta: { label: "Join as Steward", href: "/admissions" },
+                cta: { label: "Join as Steward", href: "/contact" },
               },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "membership" },
         ),
         section(
           "faq",
@@ -411,7 +415,7 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
           heading: "Six Grassroots Programs Transforming Neighborhoods",
           subheading: "Explore each initiative's blueprints, open-source toolkits, and how your neighborhood can implement them.",
           primaryCta: { label: "Download Community Playbook", href: "/contact" },
-          secondaryCta: { label: "Join a Project Team", href: "/admissions" },
+          secondaryCta: { label: "Join a Project Team", href: "/contact" },
         }),
         section(
           "services",

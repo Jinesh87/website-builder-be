@@ -7,7 +7,7 @@ export const listAiUsageQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(20),
   sortBy: Joi.string()
-    .valid("totalTokens", "estimatedCost", "totalRequests", "businessName", "lastUsedAt")
+    .valid("totalTokens", "estimatedCost", "totalRequests", "connectsUsed", "connectsLeft", "businessName", "lastUsedAt")
     .default("totalTokens"),
   sortOrder: Joi.string().valid("asc", "desc").default("desc"),
 });

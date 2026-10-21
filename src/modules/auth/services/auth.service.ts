@@ -12,9 +12,11 @@ import { Prisma, type User } from "../../../generated/prisma/client.js";
 import { emailService } from "../../email/services/email.service.js";
 import type {
   AuthResult,
+  ChangePasswordInput,
   LoginInput,
   PublicUser,
   SignupInput,
+  UpdateProfileInput,
   VerificationDispatch,
 } from "../types/auth.types.js";
 import { clearLoginLockout, getLoginLockStatus, recordFailedLoginAttempt } from "../utils/login-lockout.js";
@@ -24,14 +26,18 @@ import {
   getPasswordResetUserId,
   INVITE_TOKEN_TTL_SECONDS,
   RESET_TOKEN_TTL_SECONDS,
+  revokePasswordResetToken,
 } from "../utils/password-reset.js";
+import { clearPendingEmail, getPendingEmail, storePendingEmail } from "../utils/pending-email.js";
 import {
   checkVerificationCode,
+  clearVerificationCode,
   generateVerificationCode,
   getResendCooldownSeconds,
   RESEND_COOLDOWN_SECONDS,
   storeVerificationCode,
   VERIFICATION_CODE_TTL_SECONDS,
+  type VerifyCodeResult,
 } from "../utils/verification-code.js";
 
 type UserWithClient = User & { client: { id: string; businessName: string } | null };
@@ -42,7 +48,7 @@ const clientSelect = { select: { id: true, businessName: true } } as const;
 const dummyPasswordHash = hashPassword(randomUUID());
 
 const INVALID_CREDENTIALS = () =>
-  new AppError(401, "Email or password is incorrect.", "INVALID_CREDENTIALS");
+  new AppError(401, "Email/username or password is incorrect.", "INVALID_CREDENTIALS");
 const INVALID_RESET_LINK = () =>
   new AppError(400, "This reset link is invalid or has expired.", "INVALID_RESET_TOKEN");
 const INVALID_REFRESH = () =>
@@ -52,6 +58,7 @@ function toPublicUser(user: UserWithClient): PublicUser {
   return {
     id: user.id,
     email: user.email,
+    username: user.username,
     fullName: user.fullName,
     phone: user.phone,
     role: user.role,
@@ -65,6 +72,32 @@ function toPublicUser(user: UserWithClient): PublicUser {
 /** Suspended accounts can't use password links; pending ones can (it verifies their email). */
 function canUsePasswordLink(status: UserStatus): boolean {
   return status === UserStatus.ACTIVE || status === UserStatus.PENDING_VERIFICATION;
+}
+
+/** Usernames can't contain "@", so anything with one is treated as an email. */
+function identifierWhere(identifier: string): Prisma.UserWhereUniqueInput {
+  return identifier.includes("@") ? { email: identifier } : { username: identifier };
+}
+
+/** Prefixed so a typed identifier can never collide with a known account's user-id key. */
+function userLockoutKey(userId: string): string {
+  return `user:${userId}`;
+}
+
+function lockoutKey(user: { id: string } | null, identifier: string): string {
+  return user ? userLockoutKey(user.id) : `identifier:${identifier}`;
+}
+
+function assertCodeAccepted(result: VerifyCodeResult): void {
+  if (result === "expired") {
+    throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
+  }
+  if (result === "too_many_attempts") {
+    throw new AppError(429, "Too many incorrect attempts. Request a new code.", "CODE_ATTEMPTS_EXCEEDED");
+  }
+  if (result === "invalid") {
+    throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
+  }
 }
 
 function lockedError(lockedUntil: Date) {
@@ -105,7 +138,7 @@ export class AuthService {
     }
 
     logger.info({ userId: user.id, clientId: user.clientId }, "Client signed up");
-    return this.dispatchVerificationCode(user);
+    return this.dispatchVerificationCode({ id: user.id, email, fullName: user.fullName });
   }
 
   async resendVerification(rawEmail: string): Promise<VerificationDispatch> {
@@ -123,7 +156,7 @@ export class AuthService {
         retryAfterSeconds: cooldown,
       });
     }
-    return this.dispatchVerificationCode(user);
+    return this.dispatchVerificationCode({ id: user.id, email, fullName: user.fullName });
   }
 
   async verifyEmail(rawEmail: string, code: string): Promise<AuthResult> {
@@ -137,16 +170,7 @@ export class AuthService {
       throw new AppError(409, "This email is already verified. Please log in.", "ALREADY_VERIFIED");
     }
 
-    const result = await checkVerificationCode(user.id, code);
-    if (result === "expired") {
-      throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
-    }
-    if (result === "too_many_attempts") {
-      throw new AppError(429, "Too many incorrect attempts. Request a new code.", "CODE_ATTEMPTS_EXCEEDED");
-    }
-    if (result === "invalid") {
-      throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
-    }
+    assertCodeAccepted(await checkVerificationCode(user.id, code));
 
     const verified = await prisma.user.update({
       where: { id: user.id },
@@ -159,16 +183,20 @@ export class AuthService {
   }
 
   async login(input: LoginInput): Promise<AuthResult> {
-    const email = input.email.toLowerCase();
+    const identifier = input.identifier.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: identifierWhere(identifier),
+      include: { client: clientSelect },
+    });
+    const lockKey = lockoutKey(user, identifier);
 
-    const lock = await getLoginLockStatus(email);
+    const lock = await getLoginLockStatus(lockKey);
     if (lock.locked) throw lockedError(lock.lockedUntil);
 
-    const user = await prisma.user.findUnique({ where: { email }, include: { client: clientSelect } });
     const passwordOk = await verifyPassword(input.password, user?.passwordHash ?? (await dummyPasswordHash));
 
     if (!user || !passwordOk) {
-      const afterFail = await recordFailedLoginAttempt(email);
+      const afterFail = await recordFailedLoginAttempt(lockKey);
       if (afterFail.locked) throw lockedError(afterFail.lockedUntil);
       throw INVALID_CREDENTIALS();
     }
@@ -181,7 +209,7 @@ export class AuthService {
       throw new AppError(403, "Please verify your email first.", "EMAIL_NOT_VERIFIED", { email: user.email });
     }
 
-    await clearLoginLockout(email);
+    await clearLoginLockout(lockKey);
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: { lastSignedInAt: new Date() },
@@ -267,7 +295,7 @@ export class AuthService {
     const resetLink = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
     try {
       await emailService.sendPasswordReset({
-        to: user.email,
+        to: email,
         fullName: user.fullName,
         resetLink,
         expiresInMinutes: RESET_TOKEN_TTL_SECONDS / 60,
@@ -285,7 +313,7 @@ export class AuthService {
     const userId = await getPasswordResetUserId(token);
     if (!userId) throw INVALID_RESET_LINK();
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, status: true } });
-    if (!user || !canUsePasswordLink(user.status)) throw INVALID_RESET_LINK();
+    if (!user?.email || !canUsePasswordLink(user.status)) throw INVALID_RESET_LINK();
     return { email: user.email, isInvite: user.status === UserStatus.PENDING_VERIFICATION };
   }
 
@@ -308,10 +336,149 @@ export class AuthService {
       include: { client: clientSelect },
     });
     await this.revokeAllSessions(user.id);
-    await clearLoginLockout(user.email);
+    await clearLoginLockout(userLockoutKey(user.id));
     logger.info({ userId: user.id, activated: activating }, "Password set from emailed link");
 
     return this.createSession(user, false);
+  }
+
+  /** Signed-in password change; every session is replaced by a fresh one for the current device. */
+  async changePassword(userId: string, input: ChangePasswordInput, remember: boolean): Promise<AuthResult> {
+    const existing = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true, status: true } });
+    if (!existing || existing.status !== UserStatus.ACTIVE) {
+      throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    }
+    if (await verifyPassword(input.newPassword, existing.passwordHash)) {
+      throw new AppError(400, "Choose a password different from your current one.", "PASSWORD_UNCHANGED");
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await hashPassword(input.newPassword) },
+      include: { client: clientSelect },
+    });
+    await this.revokeAllSessions(user.id);
+    logger.info({ userId: user.id }, "Password changed");
+
+    return this.createSession(user, remember);
+  }
+
+  /** Sets a password chosen by a Super Admin and signs the user out everywhere. */
+  async setPasswordByAdmin(userId: string, newPassword: string): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } });
+    await this.revokeAllSessions(userId);
+    await clearLoginLockout(userLockoutKey(userId));
+  }
+
+  /** Phone is contact info only, so it's saved without verification. */
+  async updateProfile(userId: string, input: UpdateProfileInput): Promise<PublicUser> {
+    await this.findActiveUser(userId);
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { phone: input.phone.trim() || null },
+      include: { client: clientSelect },
+    });
+    return toPublicUser(user);
+  }
+
+  /** Step 1 of adding or changing an email: the address is only saved once the emailed code is confirmed. */
+  async requestEmailChange(userId: string, rawEmail: string): Promise<VerificationDispatch> {
+    const email = rawEmail.trim().toLowerCase();
+    const user = await this.findActiveUser(userId);
+    if (email === user.email) {
+      throw new AppError(400, "This is already your email address.", "EMAIL_UNCHANGED");
+    }
+    const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (taken) {
+      throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
+    }
+
+    const cooldown = await getResendCooldownSeconds(user.id, "email-change");
+    if (cooldown > 0) {
+      throw new AppError(429, `Please wait ${cooldown}s before requesting another code.`, "RESEND_COOLDOWN", {
+        retryAfterSeconds: cooldown,
+      });
+    }
+
+    const code = generateVerificationCode();
+    await storeVerificationCode(user.id, code, "email-change");
+    await storePendingEmail(user.id, email);
+
+    let emailSent = true;
+    try {
+      await emailService.sendEmailChangeCode({
+        to: email,
+        fullName: user.fullName,
+        code,
+        expiresInMinutes: VERIFICATION_CODE_TTL_SECONDS / 60,
+      });
+    } catch (error) {
+      emailSent = false;
+      logger.error({ err: error, userId: user.id }, "Failed to send email change code");
+      if (!isProduction) {
+        logger.warn({ email, code }, "Email change code (development fallback)");
+      }
+    }
+
+    return { email, emailSent, resendAvailableInSeconds: RESEND_COOLDOWN_SECONDS };
+  }
+
+  /** Step 2: the code proves the user owns the new address, so it's saved as verified. */
+  async confirmEmailChange(userId: string, code: string): Promise<PublicUser> {
+    await this.findActiveUser(userId);
+    const email = await getPendingEmail(userId);
+    if (!email) {
+      throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
+    }
+    assertCodeAccepted(await checkVerificationCode(userId, code, "email-change"));
+    await clearPendingEmail(userId);
+
+    let user: UserWithClient;
+    try {
+      user = await prisma.user.update({
+        where: { id: userId },
+        data: { email, emailVerifiedAt: new Date() },
+        include: { client: clientSelect },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
+      }
+      throw error;
+    }
+    // Reset links point at the old address, so they stop working.
+    await revokePasswordResetToken(userId);
+    logger.info({ userId }, "Email changed");
+    return toPublicUser(user);
+  }
+
+  /** Only accounts that log in with a username can go without an email. */
+  async removeEmail(userId: string): Promise<PublicUser> {
+    const existing = await this.findActiveUser(userId);
+    if (!existing.username) {
+      throw new AppError(400, "You log in with your email, so it can't be removed.", "EMAIL_REQUIRED");
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { email: null, emailVerifiedAt: null },
+      include: { client: clientSelect },
+    });
+    await Promise.all([
+      revokePasswordResetToken(userId),
+      clearPendingEmail(userId),
+      clearVerificationCode(userId, "email-change"),
+    ]);
+    logger.info({ userId }, "Email removed");
+    return toPublicUser(user);
+  }
+
+  private async findActiveUser(userId: string): Promise<User> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    }
+    return user;
   }
 
   /** Emails an admin-created client a link to set their password. Returns whether the email was sent. */
@@ -335,7 +502,11 @@ export class AuthService {
     }
   }
 
-  private async dispatchVerificationCode(user: UserWithClient): Promise<VerificationDispatch> {
+  private async dispatchVerificationCode(user: {
+    id: string;
+    email: string;
+    fullName: string;
+  }): Promise<VerificationDispatch> {
     const code = generateVerificationCode();
     await storeVerificationCode(user.id, code);
 

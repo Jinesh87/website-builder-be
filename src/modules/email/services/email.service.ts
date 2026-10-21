@@ -7,6 +7,7 @@ import type { MessagingConfig } from "../../../generated/prisma/client.js";
 import {
   clientInviteEmail,
   contactFormLeadEmail,
+  emailChangeCodeEmail,
   passwordResetEmail,
   testEmail,
   verificationCodeEmail,
@@ -94,6 +95,10 @@ export class EmailService {
 
   async sendVerificationCode(params: { to: string; fullName: string; code: string; expiresInMinutes: number }) {
     await this.send(params.to, (brand) => verificationCodeEmail({ brand, ...params }));
+  }
+
+  async sendEmailChangeCode(params: { to: string; fullName: string; code: string; expiresInMinutes: number }) {
+    await this.send(params.to, (brand) => emailChangeCodeEmail({ brand, ...params }));
   }
 
   async sendPasswordReset(params: { to: string; fullName: string; resetLink: string; expiresInMinutes: number }) {

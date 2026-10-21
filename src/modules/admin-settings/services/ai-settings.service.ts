@@ -116,11 +116,12 @@ export class AiSettingsService {
 
   /**
    * Pass the client id to apply that client's own model choice.
-   * Every AI feature calls this first, so it also refuses clients that are out of connects.
+   * Every AI feature calls this first, so it also refuses clients that are out of connects;
+   * `userId` is who starts the request, and Super Admins are never blocked by a client's balance.
    */
-  async getCredentials(clientId?: string | null): Promise<{ apiKey: string; model: string }> {
+  async getCredentials(clientId?: string | null, userId?: string | null): Promise<{ apiKey: string; model: string }> {
     await this.ensureTable();
-    if (clientId) await aiBillingService.assertCanUseAi(clientId);
+    if (clientId && (await aiBillingService.isBillable(userId))) await aiBillingService.assertCanUseAi(clientId);
     const [config, client] = await Promise.all([
       prisma.aiConfig.findUnique({ where: { id: CONFIG_ID } }).catch(() => null),
       clientId ? prisma.client.findUnique({ where: { id: clientId }, select: { aiModel: true } }) : null,

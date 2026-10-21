@@ -255,6 +255,24 @@ export const BRAND_DISPLAY_MODES = [
 
 export type BrandDisplayMode = (typeof BRAND_DISPLAY_MODES)[number];
 
+/** Icon badge colours of feature cards; "default" follows the theme. */
+export const FEATURE_ICON_COLORS = [
+  "orange",
+  "green",
+  "blue",
+  "yellow",
+  "purple",
+  "pink",
+  "cyan",
+  "indigo",
+  "red",
+  "gray",
+  "none",
+  "default",
+] as const;
+
+export type FeatureIconColor = (typeof FEATURE_ICON_COLORS)[number];
+
 export type HeaderMenuItem = {
   label: string;
   href: string;
@@ -265,6 +283,8 @@ export type HeaderMenuItem = {
 };
 
 export type HeaderData = {
+  /** Style of the site-wide header, edited through the shared header section. */
+  settings?: SectionSettings;
   design: (typeof HEADER_DESIGNS)[number];
   siteName: string;
   logo?: ImageRef;
@@ -331,6 +351,8 @@ export type FooterContact = {
 };
 
 export type FooterData = {
+  /** Style of the site-wide footer, edited through the shared footer section. */
+  settings?: SectionSettings;
   design: (typeof FOOTER_DESIGNS)[number];
   siteName: string;
   logo?: ImageRef;
@@ -476,7 +498,7 @@ export type SectionDataMap = {
     mobileColumns: GridColumns;
     items: {
       icon?: IconName;
-      iconColor?: "orange" | "green" | "blue" | "yellow" | "purple" | "pink" | "cyan" | "indigo" | "red" | "gray" | "none" | "default";
+      iconColor?: FeatureIconColor;
       title: string;
       description: string;
     }[];

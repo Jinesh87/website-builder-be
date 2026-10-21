@@ -1,11 +1,36 @@
-import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
+import type { FooterData, HeaderData, ImageRef } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "./build.js";
 
 const NAME = "{{businessName}}";
 
+export const NORTHWIND_LOGO: ImageRef = {
+  url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 40" width="220" height="40" fill="none">` +
+      `<defs>` +
+      `<linearGradient id="nw-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">` +
+      `<stop offset="0%" stop-color="#2448C8"/>` +
+      `<stop offset="100%" stop-color="#1A3699"/>` +
+      `</linearGradient>` +
+      `<linearGradient id="nw-accent" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0%" stop-color="#38BDF8"/>` +
+      `<stop offset="100%" stop-color="#0284C7"/>` +
+      `</linearGradient>` +
+      `</defs>` +
+      `<rect x="2" y="2" width="36" height="36" rx="9" fill="url(#nw-grad)"/>` +
+      `<path d="M12 28V12L20 23V12H24V28L16 17V28H12Z" fill="#FFFFFF"/>` +
+      `<circle cx="28" cy="12" r="3" fill="url(#nw-accent)"/>` +
+      `<text x="46" y="21" font-family="'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="800" fill="#14213D" letter-spacing="-0.3">NORTHWIND</text>` +
+      `<text x="47" y="32" font-family="'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="8.5" font-weight="700" fill="#2448C8" letter-spacing="2.4">ACCOUNTING</text>` +
+      `</svg>`,
+  )}`,
+  alt: "Northwind Accounting Logo",
+};
+
 const header: HeaderData = {
   design: "logo-left",
   siteName: NAME,
+  logo: NORTHWIND_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },
@@ -22,11 +47,14 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "columns",
   siteName: NAME,
+  logo: NORTHWIND_LOGO,
+  logoDisplay: "logo_only",
   description: "Bookkeeping, payroll and tax for small businesses and the people who run them.",
   columns: [
     {
       title: "Company",
       links: [
+        { label: "Home", href: "/" },
         { label: "About us", href: "/about" },
         { label: "Services", href: "/services" },
         { label: "Contact", href: "/contact" },
@@ -42,6 +70,12 @@ const footer: FooterData = {
       ],
     },
   ],
+  menu: [
+    { label: "Home", href: "/" },
+    { label: "About us", href: "/about" },
+    { label: "Services", href: "/services" },
+    { label: "Contact", href: "/contact" },
+  ],
   contact: {
     email: "hello@northwindaccounting.com",
     phone: "+1 (555) 214-3300",
@@ -53,8 +87,8 @@ const footer: FooterData = {
     { label: "Facebook", href: "https://www.facebook.com" },
   ],
   legalLinks: [
-    { label: "Privacy", href: "/privacy" },
-    { label: "Terms", href: "/terms" },
+    { label: "Privacy Policy", href: "/contact" },
+    { label: "Terms of Service", href: "/contact" },
   ],
   copyright: `© 2026 ${NAME}. All rights reserved.`,
 };

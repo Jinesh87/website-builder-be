@@ -40,6 +40,7 @@ export type PageView = {
   seoTitle: string | null;
   seoDescription: string | null;
   seoKeywords: string[];
+  templateKey?: string | null;
   sections: Section[];
 };
 

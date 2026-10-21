@@ -1,11 +1,14 @@
 import type { FooterData, HeaderData } from "../../../modules/websites/types/site-content.types.js";
 import { businessTemplate, photo, section, type BusinessTemplate } from "../business/build.js";
+import { PHOTOGRAPHER_LOGO } from "../logos.js";
 
 const NAME = "{{businessName}}";
 
 const header: HeaderData = {
   design: "minimalist",
   siteName: NAME,
+  logo: PHOTOGRAPHER_LOGO,
+  logoDisplay: "logo_only",
   menu: [
     { label: "Home", href: "/" },
     { label: "Selected Work", href: "/portfolio" },
@@ -20,6 +23,7 @@ const header: HeaderData = {
 const footer: FooterData = {
   design: "split",
   siteName: NAME,
+  logo: PHOTOGRAPHER_LOGO,
   tagline: "Fine Art & Editorial Photography",
   description: "Documenting spatial volume, human stillness, and natural light. Working internationally from Paris, Zurich, and Tokyo.",
   columns: [

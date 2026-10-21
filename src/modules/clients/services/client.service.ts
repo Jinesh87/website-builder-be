@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { AppError } from "../../../common/errors/AppError.js";
 import { ClientSource, UserRole, UserStatus } from "../../../common/constants/roles.js";
 import { hashPassword } from "../../../common/utils/hash.js";
@@ -28,6 +27,7 @@ const clientInclude = {
 type ClientWithOwner = Prisma.ClientGetPayload<{ include: typeof clientInclude }>;
 
 const EMAIL_TAKEN = () => new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
+const USERNAME_TAKEN = () => new AppError(409, "This username is already taken.", "USERNAME_TAKEN");
 const NOT_FOUND = () => new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
 
 function isUniqueViolation(error: unknown): boolean {
@@ -48,6 +48,7 @@ function toView(client: ClientWithOwner): ClientView {
           id: owner.id,
           fullName: owner.fullName,
           email: owner.email,
+          username: owner.username,
           phone: owner.phone,
           status: owner.status,
           emailVerified: owner.emailVerifiedAt !== null,
@@ -78,6 +79,7 @@ export class ClientService {
             OR: [
               { businessName: { contains: search, mode: "insensitive" } },
               { users: { some: { ...userFilter, email: { contains: search, mode: "insensitive" } } } },
+              { users: { some: { ...userFilter, username: { contains: search, mode: "insensitive" } } } },
               { users: { some: { ...userFilter, fullName: { contains: search, mode: "insensitive" } } } },
             ],
           }
@@ -102,10 +104,11 @@ export class ClientService {
     return toView(await this.findOrThrow(id));
   }
 
+  /** The admin chooses the login, so the account is active immediately: no invite and no verification. */
   async create(input: CreateClientInput, actorId: string): Promise<CreateClientResult> {
-    const email = input.email.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-    if (existing) throw EMAIL_TAKEN();
+    const email = emptyToNull(input.email)?.toLowerCase() ?? null;
+    const username = input.username.trim().toLowerCase();
+    await this.assertLoginAvailable({ email, username });
 
     let client: ClientWithOwner;
     try {
@@ -117,36 +120,41 @@ export class ClientService {
           users: {
             create: {
               email,
-              // Unusable random password until the client sets their own from the invite link.
-              passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
+              username,
+              passwordHash: await hashPassword(input.password),
               fullName: input.fullName.trim(),
               phone: emptyToNull(input.phone),
               role: UserRole.CLIENT,
-              status: UserStatus.PENDING_VERIFICATION,
+              status: UserStatus.ACTIVE,
             },
           },
         },
         include: clientInclude,
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw EMAIL_TAKEN();
+      if (isUniqueViolation(error)) await this.throwLoginConflict({ email, username });
       throw error;
     }
     logger.info({ clientId: client.id, actorId }, "Client created by Super Admin");
 
-    const owner = client.users[0];
-    const inviteSent = input.sendInvite && owner ? await authService.sendInvite(owner) : null;
-    return { client: toView(client), inviteSent };
+    return { client: toView(client) };
   }
 
   async update(id: string, input: ClientDetailsInput, actorId: string): Promise<ClientView> {
     const client = await this.findOrThrow(id);
     const owner = client.users[0];
-    const email = input.email.toLowerCase();
+    const email = emptyToNull(input.email)?.toLowerCase() ?? null;
+    const username = input.username?.trim().toLowerCase() || null;
 
-    if (owner && email !== owner.email) {
-      const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-      if (taken) throw EMAIL_TAKEN();
+    if (owner) {
+      // Accounts without a username log in with their email, so it can't be removed or replaced by a username.
+      if (username && !owner.username) {
+        throw new AppError(400, "This client logs in with their email, so a username can't be added.", "USERNAME_NOT_ALLOWED");
+      }
+      if (!email && !owner.username) {
+        throw new AppError(400, "Email is required for clients who log in with their email.", "EMAIL_REQUIRED");
+      }
+      await this.assertLoginAvailable({ email, username }, owner.id);
     }
 
     try {
@@ -159,18 +167,38 @@ export class ClientService {
           ? [
               prisma.user.update({
                 where: { id: owner.id },
-                data: { fullName: input.fullName.trim(), email, phone: emptyToNull(input.phone) },
+                data: {
+                  fullName: input.fullName.trim(),
+                  email,
+                  phone: emptyToNull(input.phone),
+                  ...(username ? { username } : {}),
+                },
               }),
             ]
           : []),
       ]);
     } catch (error) {
-      if (isUniqueViolation(error)) throw EMAIL_TAKEN();
+      if (isUniqueViolation(error)) await this.throwLoginConflict({ email, username }, owner?.id);
       throw error;
     }
     const emailChanged = owner !== undefined && email !== owner.email;
     if (emailChanged) await revokePasswordResetToken(owner.id);
     logger.info({ clientId: id, actorId, emailChanged }, "Client updated");
+    return this.get(id);
+  }
+
+  /** Only for clients whose login the admin created; others reset their own password by email. */
+  async setPassword(id: string, password: string, actorId: string): Promise<ClientView> {
+    const owner = this.requireOwner(await this.findOrThrow(id));
+    if (!owner.username) {
+      throw new AppError(
+        409,
+        "This client manages their own password. Ask them to use “Forgot password”.",
+        "PASSWORD_MANAGED_BY_CLIENT",
+      );
+    }
+    await authService.setPasswordByAdmin(owner.id, password);
+    logger.info({ clientId: id, actorId }, "Client password set by Super Admin");
     return this.get(id);
   }
 
@@ -186,15 +214,19 @@ export class ClientService {
     return this.get(id);
   }
 
-  /** Restores access; clients who never verified their email go back to pending verification. */
+  /**
+   * Restores access. Clients with admin-issued credentials never need verification;
+   * others who never verified their email go back to pending verification.
+   */
   async reactivate(id: string, actorId: string): Promise<ClientView> {
     const owner = this.requireOwner(await this.findOrThrow(id));
     if (owner.status !== UserStatus.SUSPENDED) {
       throw new AppError(409, "This client is not suspended.", "NOT_SUSPENDED");
     }
+    const canLogIn = owner.username !== null || owner.emailVerifiedAt !== null;
     await prisma.user.update({
       where: { id: owner.id },
-      data: { status: owner.emailVerifiedAt ? UserStatus.ACTIVE : UserStatus.PENDING_VERIFICATION },
+      data: { status: canLogIn ? UserStatus.ACTIVE : UserStatus.PENDING_VERIFICATION },
     });
     logger.info({ clientId: id, actorId }, "Client reactivated");
     return this.get(id);
@@ -210,9 +242,12 @@ export class ClientService {
     if (owner.status !== UserStatus.PENDING_VERIFICATION) {
       throw new AppError(409, "This client has already verified their email.", "ALREADY_VERIFIED");
     }
+    if (!owner.email) {
+      throw new AppError(409, "This client has no email address.", "CLIENT_HAS_NO_EMAIL");
+    }
 
     if (client.source === ClientSource.ADMIN_CREATED) {
-      return { emailSent: await authService.sendInvite(owner) };
+      return { emailSent: await authService.sendInvite({ id: owner.id, email: owner.email, fullName: owner.fullName }) };
     }
     const dispatch = await authService.resendVerification(owner.email);
     return { emailSent: dispatch.emailSent };
@@ -222,6 +257,28 @@ export class ClientService {
     const client = await prisma.client.findUnique({ where: { id }, include: clientInclude });
     if (!client) throw NOT_FOUND();
     return client;
+  }
+
+  /** `exceptUserId` lets an account keep its own email/username when editing. */
+  private async assertLoginAvailable(
+    login: { email: string | null; username: string | null },
+    exceptUserId?: string,
+  ): Promise<void> {
+    const [emailOwner, usernameOwner] = await Promise.all([
+      login.email ? prisma.user.findUnique({ where: { email: login.email }, select: { id: true } }) : null,
+      login.username ? prisma.user.findUnique({ where: { username: login.username }, select: { id: true } }) : null,
+    ]);
+    if (emailOwner && emailOwner.id !== exceptUserId) throw EMAIL_TAKEN();
+    if (usernameOwner && usernameOwner.id !== exceptUserId) throw USERNAME_TAKEN();
+  }
+
+  /** A unique violation means another request claimed the login between the check and the write. */
+  private async throwLoginConflict(
+    login: { email: string | null; username: string | null },
+    exceptUserId?: string,
+  ): Promise<never> {
+    await this.assertLoginAvailable(login, exceptUserId);
+    throw new AppError(409, "This email or username is already in use.", "LOGIN_TAKEN");
   }
 
   private requireOwner(client: ClientWithOwner) {
