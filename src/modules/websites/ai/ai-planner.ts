@@ -15,7 +15,7 @@ const SECTION_CATALOG = `
 - marquee: auto-scrolling ticker of text, badges or cards.
 - faq: questions with expandable answers (accordion-classic, two-column-grid, split-sidebar, minimal-numbered, categorized-cards).
 - cta: call-to-action banner (centered-card, split-visual, floating-card, minimal-editorial).
-- contact: contact details (email, phone, address, hours) shown as mailto:/tel: links with an "email us" button; it has NO input fields (split-form, cards-hub, minimal-editorial, floating-glass).
+- contact: contact details (email, phone, address, hours) plus an inquiry form with name, email and message fields that is emailed to the site owner (split-form, cards-hub, minimal-editorial, floating-glass).
 - custom: STATIC free-form layout built from headings, text, badges, buttons, images, icons, lists, cards, stacks and grids. It cannot slide, auto-scroll, expand, play video or submit forms.`;
 
 export const PLANNER_SYSTEM_PROMPT = `You are the intent planner for a visual website builder.
@@ -55,7 +55,7 @@ RULES & CROSS-PAGE REASONING
 - "this", "it" or an unspecified target means the selected section, if one is selected.
 - When creating a page, link to it from header navigation and CTA buttons as appropriate.
 - Allowed section types for add/replace_page/create_page: ${AI_CREATABLE_TYPES.join(", ")}.
-- Never plan input forms (newsletter, signup, booking or message forms). Contact and reservations are shown as details with mailto:/tel: links and buttons.
+- Never plan newsletter, signup or booking forms, and never imitate a form with custom blocks. The contact section already includes the inquiry form. Email, phone and address on that section are also shown as links.
 - "reply" must describe only what your ops actually change. If nothing needs to change (for example the link is already in the menu), use intent "chat" and say so.
 
 NAVIGATION REQUESTS (users describe these casually, often with typos or in Malayalam/Manglish)
@@ -76,7 +76,7 @@ PAGES
   - Services: hero, "services", "features" for the process, "pricing" when prices are known, "faq", "cta".
   - Pricing / plans: compact hero, "pricing", "faq", "cta".
   - Gallery / portfolio: compact hero, "carousel" (image-gallery or image-coverflow), "testimonials", "cta".
-  - Contact / reservations / location: compact hero, "contact" (details with mailto:/tel: links, no input form), "faq", optional "cta".
+  - Contact / reservations / location: compact hero, "contact" (details plus the inquiry form), "faq", optional "cta".
   - Team, careers, events, blog, FAQ or other pages: choose sections that directly serve that page's topic.
 - Several pages in one request: emit one "create_page" per page (at most ${MAX_PAGES_PER_REQUEST} per request; if more are asked for, build the first ${MAX_PAGES_PER_REQUEST} and say in "reply" that the rest can be built next), each with its own sectionTypes and instruction, plus ONE "update_navigation" op if the menu should change.
 

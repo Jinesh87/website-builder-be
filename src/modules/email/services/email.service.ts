@@ -122,13 +122,13 @@ export class EmailService {
     senderPhone?: string;
     message: string;
   }) {
-    await this.send(params.to, () => contactFormLeadEmail(params));
+    await this.send(params.to, () => contactFormLeadEmail(params), { replyTo: params.senderEmail });
   }
 
   private async send(
     to: string,
     render: (brand: string) => RenderedEmail,
-    options: { ignoreDisabled?: boolean } = {},
+    options: { ignoreDisabled?: boolean; replyTo?: string } = {},
   ): Promise<void> {
     const config = await prisma.messagingConfig.findUnique({ where: { id: CONFIG_ID } });
     if (!config) {
@@ -150,6 +150,7 @@ export class EmailService {
     const { data, error } = await new Resend(apiKey).emails.send({
       from: `${config.fromName} <${config.fromEmail}>`,
       to,
+      replyTo: options.replyTo,
       subject: email.subject,
       html: email.html,
       text: email.text,

@@ -11,3 +11,25 @@ model MessagingConfig {
 
   @@map("messaging_config")
 }
+
+enum EmailProvider {
+  RESEND
+  BREVO
+}
+
+/// One email account per client, used to deliver messages from their published websites.
+model ClientEmailConfig {
+  clientId     String        @id @db.Uuid
+  provider     EmailProvider
+  /// AES-256-GCM encrypted with APP_ENCRYPTION_KEY.
+  apiKeyCipher String        @db.Text
+  fromEmail    String        @db.VarChar(255)
+  fromName     String        @db.VarChar(255)
+  enabled      Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_email_config")
+}
