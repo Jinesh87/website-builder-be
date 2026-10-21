@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { AppError } from "../../../common/errors/AppError.js";
 import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
@@ -186,13 +187,11 @@ export class PublicSiteController {
           const sentByClient = await clientEmailService.sendWebsiteLead(website.clientId, lead);
           if (!sentByClient) await emailService.sendContactFormLead(lead);
         } catch (mailErr) {
-          logger.warn(
-            { err: mailErr, websiteId: website.id },
-            "Failed to dispatch contact form notification email, but lead was logged safely.",
-          );
+          logger.warn({ err: mailErr, websiteId: website.id }, "Failed to dispatch contact form notification email");
+          return next(mailErr);
         }
       } else {
-        logger.warn({ websiteId: website.id }, "Contact lead has no recipient; set a contact email on the website");
+        return next(new AppError(422, "This site has no contact email yet. Add one in the website settings.", "CONTACT_EMAIL_MISSING"));
       }
 
       return res.status(200).json({

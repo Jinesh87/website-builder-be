@@ -992,7 +992,7 @@ export function sanitizeSectionData(
       if (!data.heading) data.heading = "Get in touch with us";
       if (typeof data.showForm !== "boolean") data.showForm = true;
       if (!data.submitLabel || typeof data.submitLabel !== "string") {
-        data.submitLabel = "Email us";
+        data.submitLabel = "Send message";
       }
       break;
     }
@@ -1148,9 +1148,9 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    { "type": "list", "items": ["..."] }
    Limits: at most ${CUSTOM_LIMITS.maxDepth} nesting levels, ${CUSTOM_LIMITS.maxBlocks} blocks in total and ${CUSTOM_LIMITS.maxChildren} children per container.
    Use "grid" for side-by-side columns (it collapses to one column on mobile), "stack" with direction "row" for button groups, and "card" for boxed content.
-14. "contact" (contact details only; it has NO input fields or forms: email and phone render as mailto:/tel: links):
-   data: { "variant": "split-form"|"cards-hub"|"minimal-editorial"|"floating-glass", "eyebrow": "...", "heading": "...", "text": "...", "email": "...", "phone": "...", "address": "...", "officeHours": "...", "responseTime": "...", "showForm": true, "formHeading": "Send us an email", "submitLabel": "Email us" }
-   "showForm": true adds an "email us" card with a mailto button. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one.
+14. "contact" (contact details plus an inquiry form; email and phone also render as mailto:/tel: links):
+   data: { "variant": "split-form"|"cards-hub"|"minimal-editorial"|"floating-glass", "eyebrow": "...", "heading": "...", "text": "...", "email": "...", "phone": "...", "address": "...", "officeHours": "...", "responseTime": "...", "showForm": true, "formHeading": "Send us a message", "submitLabel": "Send message" }
+   "showForm": true adds name, email and message fields. Submissions are emailed to the site owner. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one.
    Never use "custom" blocks to imitate a contact or signup form.
 
 STOCK / DUMMY IMAGE GUIDELINES:

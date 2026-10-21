@@ -648,8 +648,52 @@ Sitemap: ${domain}/sitemap.xml
       }
     </style>
   </head>
-  <body>
+  <body data-wb-contact="${escapeHtml(`${basePath}/contact`)}">
     ${bodyContent}
+    <script>
+      document.addEventListener("submit", async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.classList.contains("wb-contact-form")) return;
+        event.preventDefault();
+        const url = document.body.getAttribute("data-wb-contact");
+        if (!url) return;
+        const data = new FormData(form);
+        const button = form.querySelector('[type="submit"]');
+        if (button) button.disabled = true;
+        let status = form.querySelector(".wb-form-status");
+        if (!status) {
+          status = document.createElement("p");
+          status.className = "wb-form-status";
+          status.setAttribute("role", "status");
+          status.style.margin = "0";
+          status.style.fontSize = "0.9rem";
+          status.style.fontWeight = "600";
+          form.append(status);
+        }
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: String(data.get("name") || "").trim(),
+              email: String(data.get("email") || "").trim(),
+              message: String(data.get("message") || "").trim(),
+            }),
+          });
+          const result = await response.json().catch(() => ({}));
+          const reason = typeof result.error === "string" ? result.error : result.error && result.error.message;
+          if (!response.ok) throw new Error(reason || "Your message couldn't be sent. Please try again.");
+          form.reset();
+          status.style.color = "#047857";
+          status.textContent = result.message || "Thank you! Your message has been received.";
+        } catch (error) {
+          status.style.color = "#b91c1c";
+          status.textContent = error instanceof Error ? error.message : "Your message couldn't be sent. Please try again.";
+        } finally {
+          if (button) button.disabled = false;
+        }
+      });
+    </script>
   </body>
 </html>`;
 
@@ -1032,8 +1076,9 @@ Sitemap: ${domain}/sitemap.xml
           const email = ownText(d.email) ?? contactInfo?.contactEmail;
           const phone = ownText(d.phone) ?? contactInfo?.contactPhone;
           const address = ownText(d.address) ?? contactInfo?.address;
-          const emailLabel = ownText(d.submitLabel) ?? "Email us";
-          const emailHeading = ownText(d.formHeading) ?? "Send us an email";
+          const showForm = d.showForm !== false;
+          const submitLabel = ownText(d.submitLabel) ?? "Send message";
+          const formHeading = ownText(d.formHeading) ?? "Send a message";
 
           sectionParts.push(`
           <section class="section-contact" id="contact" style="background: var(--color-surface); border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06);">
@@ -1049,13 +1094,15 @@ Sitemap: ${domain}/sitemap.xml
                 </div>
               </div>
               ${
-                email
-                  ? `<div class="card" style="background: #ffffff; border-radius: 1rem; padding: 2rem; align-self: start;">
-                <h3 class="card-title" style="margin-bottom: 0.25rem;">${escapeHtml(emailHeading)}</h3>
-                <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">Write to us directly. We usually reply within one business day.</p>
-                <a href="mailto:${escapeHtml(email)}?subject=${encodeURIComponent("Inquiry from Website")}" class="btn-cta" style="display: block; text-align: center; width: 100%; padding: 0.85rem; font-size: 0.95rem;">${escapeHtml(emailLabel)}</a>
-                <p style="color: var(--color-muted); font-size: 0.85rem; margin-top: 0.75rem; text-align: center;">${escapeHtml(email)}</p>
-              </div>`
+                showForm
+                  ? `<form class="wb-contact-form card" style="background: #ffffff; border-radius: 1rem; padding: 2rem; align-self: start; display: flex; flex-direction: column; gap: 0.75rem;">
+                <h3 class="card-title" style="margin-bottom: 0.25rem;">${escapeHtml(formHeading)}</h3>
+                <p style="color: var(--color-muted); font-size: 0.9rem;">Tell us what you need. We usually reply within one business day.</p>
+                <label style="display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem;">Name<input name="name" required autocomplete="name" style="padding: 0.7rem 0.8rem; border: 1px solid rgba(0,0,0,0.15); border-radius: 0.5rem; font: inherit;" /></label>
+                <label style="display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem;">Email<input name="email" type="email" required autocomplete="email" style="padding: 0.7rem 0.8rem; border: 1px solid rgba(0,0,0,0.15); border-radius: 0.5rem; font: inherit;" /></label>
+                <label style="display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.875rem;">Message<textarea name="message" required rows="4" style="padding: 0.7rem 0.8rem; border: 1px solid rgba(0,0,0,0.15); border-radius: 0.5rem; font: inherit; resize: vertical;"></textarea></label>
+                <button type="submit" class="btn-cta" style="width: 100%; padding: 0.85rem; font-size: 0.95rem; border: 0; cursor: pointer;">${escapeHtml(submitLabel)}</button>
+              </form>`
                   : ""
               }
             </div>
