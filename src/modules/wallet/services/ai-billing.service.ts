@@ -22,6 +22,7 @@ const FEATURE_LABELS: Record<string, string> = {
   section: "Section edit",
   section_add: "Add section",
   page_seo: "SEO",
+  page_seo_audit: "SEO audit",
 };
 
 export type AiUsageRecord = {
@@ -48,6 +49,15 @@ export type BillingSettingsView = {
   connectsPerUsd: number;
   /** Connects required before an AI request can start. 0 means any balance above zero. */
   minAiBalance: number;
+};
+
+export type AiUsageSummary = {
+  year: number;
+  /** 1-12, or null for the whole year. */
+  month: number | null;
+  connects: number;
+  calls: number;
+  byFeature: Array<{ scope: string; label: string; calls: number; connects: number }>;
 };
 
 let configCache: { margin: number; minAiBalance: number; loadedAt: number } | null = null;
@@ -130,6 +140,35 @@ export class AiBillingService {
         "INSUFFICIENT_BALANCE",
       );
     }
+  }
+
+  /** Connects a client spent on AI in a month (or a whole year), by feature. Free calls are left out. */
+  async usageSummary(clientId: string, year: number, month: number | null): Promise<AiUsageSummary> {
+    const createdAt =
+      month !== null
+        ? { gte: new Date(Date.UTC(year, month - 1, 1)), lt: new Date(Date.UTC(year, month, 1)) }
+        : { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) };
+    const groups = await prisma.aiUsageLog.groupBy({
+      by: ["scope"],
+      where: { clientId, createdAt, connectsCharged: { gt: 0 } },
+      _sum: { connectsCharged: true },
+      _count: { _all: true },
+    });
+    const byFeature = groups
+      .map((group) => ({
+        scope: group.scope,
+        label: featureLabel(group.scope),
+        calls: group._count._all,
+        connects: Number(group._sum.connectsCharged ?? 0),
+      }))
+      .sort((a, b) => b.connects - a.connects);
+    return {
+      year,
+      month,
+      connects: Math.round(byFeature.reduce((sum, feature) => sum + feature.connects, 0) * 1000) / 1000,
+      calls: byFeature.reduce((sum, feature) => sum + feature.calls, 0),
+      byFeature,
+    };
   }
 
   /**

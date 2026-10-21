@@ -27,6 +27,7 @@ import { sanitizeCustomData } from "../ai/custom-section.js";
 import { repairSection } from "../ai/repair-section.js";
 import { CUSTOM_LIMITS, FEATURE_ICON_COLORS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
+import { aiBillingService } from "../../wallet/services/ai-billing.service.js";
 import {
   type AiClarification,
   type CreatedPageEdit,
@@ -1682,26 +1683,17 @@ export class AiGeneratorService {
     }
 
     if (logging.clientId) {
-      prisma.aiUsageLog
-        .create({
-          data: {
-            clientId: logging.clientId,
-            websiteId: logging.websiteId || null,
-            userId: logging.userId || null,
-            model: callResult.modelUsed,
-            scope,
-            promptTokens: callResult.usage?.prompt_tokens ?? 0,
-            completionTokens: callResult.usage?.completion_tokens ?? 0,
-            totalTokens: callResult.usage?.total_tokens ?? 0,
-            durationMs: Date.now() - startMs,
-          },
-        })
-        .catch((err) => {
-          logger.error(
-            { err, clientId: logging.clientId },
-            "Failed to record AI usage log",
-          );
-        });
+      await aiBillingService.recordUsage({
+        clientId: logging.clientId,
+        websiteId: logging.websiteId || null,
+        userId: logging.userId || null,
+        model: callResult.modelUsed,
+        scope,
+        promptTokens: callResult.usage?.prompt_tokens ?? 0,
+        completionTokens: callResult.usage?.completion_tokens ?? 0,
+        totalTokens: callResult.usage?.total_tokens ?? 0,
+        durationMs: Date.now() - startMs,
+      });
     }
 
     return callResult.content;
