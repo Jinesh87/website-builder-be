@@ -15,7 +15,7 @@ const header: HeaderData = {
     { label: "Benchmarks", href: "/#benchmarks" },
     { label: "Pricing", href: "/#pricing" },
   ],
-  cta: { label: "Deploy Cluster", href: "/contact" },
+  cta: { label: "Deploy Cluster", href: "/#pricing" },
   announcement: "Nexus v4.2 Live — Sub-10ms Global Distributed Agent Routing",
   position: "sticky",
   sticky: true,
@@ -114,7 +114,7 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
             highlightText: "mission-critical workloads",
             subheading:
               "Deploy high-throughput multi-agent swarms with deterministic guardrails, sub-millisecond neural routing, and unified memory pipelines across 180+ global edge locations.",
-            primaryCta: { label: "Start Free Sandbox", href: "/contact" },
+            primaryCta: { label: "Start Free Sandbox", href: "/#pricing" },
             secondaryCta: { label: "Explore Architecture", href: "/#architecture" },
             image: photo("1551288049-bebda4e38f71", "Nexus AI Real-time Telemetry Dashboard", 1200),
             imageStyle: "glow",
@@ -177,7 +177,7 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface", spacing: "relaxed" },
+          { background: "surface", spacing: "relaxed", anchor: "features" },
         ),
 
         // 3. Trusted Enterprise Partners (Logos)
@@ -257,7 +257,7 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
               },
             ],
           },
-          { background: "surface" },
+          { background: "surface", anchor: "architecture" },
         ),
 
         // 5. Global Benchmarks Split Section
@@ -277,7 +277,7 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
             ],
             cta: { label: "Read Architecture Whitepaper", href: "/#architecture" },
           },
-          { background: "default" },
+          { background: "default", anchor: "benchmarks" },
         ),
 
         // 6. Hard Numbers: Stats Section
@@ -317,7 +317,7 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
                   "Full TypeScript & Python SDKs",
                   "Standard latency routing",
                 ],
-                cta: { label: "Start Free", href: "/contact" },
+                cta: { label: "Start Free", href: "mailto:enterprise@nexusai.io" },
               },
               {
                 name: "Production Growth",
@@ -334,7 +334,7 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
                   "Continuous CI/CD eval suite",
                   "Priority Slack engineering channel",
                 ],
-                cta: { label: "Deploy Cluster", href: "/contact" },
+                cta: { label: "Deploy Cluster", href: "mailto:enterprise@nexusai.io" },
               },
               {
                 name: "Enterprise Dedicated",
@@ -350,11 +350,11 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
                   "24/7 dedicated solutions architect",
                   "Custom model fine-tuning adapters",
                 ],
-                cta: { label: "Schedule Architecture Review", href: "/contact" },
+                cta: { label: "Schedule Architecture Review", href: "mailto:enterprise@nexusai.io" },
               },
             ],
           },
-          { background: "default" },
+          { background: "default", anchor: "pricing" },
         ),
 
         // 8. Social Proof: Testimonials
@@ -427,8 +427,8 @@ export const SAAS_PLATFORM: BusinessTemplate = businessTemplate({
             eyebrow: "Instant Setup",
             heading: "Ready to deploy your first production agent in 3 minutes?",
             text: "Join over 2,400 engineering teams building high-reliability autonomous systems on Nexus AI.",
-            button: { label: "Create Free Sandbox Cluster", href: "/contact" },
-            secondaryButton: { label: "Schedule 1-on-1 Demo", href: "/contact" },
+            button: { label: "Create Free Sandbox Cluster", href: "/#pricing" },
+            secondaryButton: { label: "Schedule 1-on-1 Demo", href: "mailto:enterprise@nexusai.io" },
             trustBadges: ["No credit card required", "Instant API key generation", "Free $100 compute credit"],
           },
           { background: "surface" },

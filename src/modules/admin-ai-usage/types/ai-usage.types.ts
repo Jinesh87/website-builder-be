@@ -1,4 +1,11 @@
-export type AiUsageSortBy = "totalTokens" | "estimatedCost" | "totalRequests" | "businessName" | "lastUsedAt";
+export type AiUsageSortBy =
+  | "totalTokens"
+  | "estimatedCost"
+  | "totalRequests"
+  | "connectsUsed"
+  | "connectsLeft"
+  | "businessName"
+  | "lastUsedAt";
 export type SortOrder = "asc" | "desc";
 
 export type AiUsageListQuery = {
@@ -23,7 +30,12 @@ export type ClientAiUsageSummary = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** USD; what was billed, re-priced at current rates only for calls logged before billing. */
   estimatedCost: number;
+  /** Charged to the wallet in the period. */
+  connectsUsed: number;
+  /** Current wallet balance; can be negative. */
+  connectsLeft: number;
   topModel: string | null;
   lastUsedAt: string | null;
 };
@@ -34,6 +46,7 @@ export type AiUsageTotals = {
   promptTokens: number;
   completionTokens: number;
   totalEstimatedCost: number;
+  totalConnectsUsed: number;
   activeClientsCount: number;
 };
 
@@ -60,14 +73,19 @@ export type AiCallDetail = {
   inputCost: number;
   outputCost: number;
   cost: number;
+  /** Null for calls logged before billing existed. */
+  connectsCharged: number | null;
 };
 
 export type ClientAiCallsResult = {
   client: { id: string; businessName: string };
   calls: AiCallDetail[];
-  byFeature: Array<{ scope: string; calls: number; totalTokens: number; cost: number }>;
+  byFeature: Array<{ scope: string; calls: number; totalTokens: number; cost: number; connects: number }>;
   total: number;
   totalCost: number;
+  totalConnects: number;
+  /** Current wallet balance; can be negative. */
+  connectsLeft: number;
   page: number;
   pageSize: number;
 };

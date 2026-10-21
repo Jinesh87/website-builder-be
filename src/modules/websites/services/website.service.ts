@@ -42,6 +42,7 @@ import type { GenerationView } from "../types/website-generation.types.js";
 import { SUBDOMAIN_PATTERN } from "../validators/website.validator.js";
 import { liveSiteEngineService } from "./live-site-engine.service.js";
 import { buildPublishSnapshot } from "./publish-snapshot.js";
+import { liftSiteChrome } from "./site-chrome.js";
 
 
 const summaryInclude = {
@@ -227,6 +228,8 @@ function toDetail(website: WebsiteWithPages): WebsiteDetail {
     }));
   }
 
+  ({ header, footer, pages } = liftSiteChrome({ header, footer, pages }));
+
   return {
     ...toSummary(website),
     customDomain: website.domains[0]?.hostname ?? null,
@@ -313,11 +316,7 @@ function buildTemplateContent(
     }),
   }));
 
-  return {
-    pages: syncedPages,
-    header: finalHeader,
-    footer: finalFooter,
-  };
+  return liftSiteChrome({ pages: syncedPages, header: finalHeader, footer: finalFooter });
 }
 
 function templateTheme(template: TemplateWithTheme | null): Prisma.JsonValue {

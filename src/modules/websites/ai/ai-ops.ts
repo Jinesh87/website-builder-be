@@ -46,7 +46,16 @@ export type PlannedOp =
       instruction: string;
       showInNav?: boolean;
     }
-  | { op: "update_navigation"; instruction: string };
+  | {
+      op: "update_navigation";
+      instruction: string;
+      /** The complete header menu after the change, in order; null leaves the menu as it is. */
+      headerMenu: PlannedLink[] | null;
+      /** The header call-to-action button after the change; null leaves it as it is. */
+      headerCta: PlannedLink | null;
+    };
+
+export type PlannedLink = { label: string; href: string };
 
 export type AiPlan = {
   intent: "chat" | "edit" | "clarify";
@@ -57,6 +66,8 @@ export type AiPlan = {
     allowCustomInput: boolean;
   } | null;
   ops: PlannedOp[];
+  /** Names of requested pages beyond MAX_PAGES_PER_REQUEST, left for a follow-up request. */
+  deferredPages?: string[];
 };
 
 /** Planned ops after content generation; this is what gets applied to the canvas. */
@@ -68,7 +79,13 @@ export type CanvasOp =
   | { op: "replace_page"; sections: SectionEnvelope[] }
   | { op: "clear" };
 
-const MAX_OPS = 12;
+const MAX_OPS = 20;
+/** Sections one planned page may have; extra types are trimmed instead of rejecting the plan. */
+export const MAX_PLAN_SECTIONS = 16;
+/** New pages built per request; the rest are deferred to a follow-up request. */
+export const MAX_PAGES_PER_REQUEST = 8;
+const MAX_INSTRUCTION_CHARS = 2000;
+const MAX_REPLY_CHARS = 3000;
 
 function opVariant(op: string, properties: Record<string, unknown>) {
   return {
@@ -80,6 +97,13 @@ function opVariant(op: string, properties: Record<string, unknown>) {
 }
 
 const creatableTypeSchema = { type: "string", enum: [...AI_CREATABLE_TYPES] };
+
+const linkSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["label", "href"],
+  properties: { label: { type: "string" }, href: { type: "string" } },
+};
 
 /** OpenAI Structured Outputs schema (strict mode: every property required, no extras). */
 export const AI_PLAN_RESPONSE_FORMAT = {
@@ -135,6 +159,8 @@ export const AI_PLAN_RESPONSE_FORMAT = {
               }),
               opVariant("update_navigation", {
                 instruction: { type: "string" },
+                headerMenu: { anyOf: [{ type: "array", items: linkSchema }, { type: "null" }] },
+                headerCta: { anyOf: [linkSchema, { type: "null" }] },
               }),
             ],
           },
@@ -144,76 +170,184 @@ export const AI_PLAN_RESPONSE_FORMAT = {
   },
 } as const;
 
-const instruction = Joi.string().trim().min(1).max(2000).required();
+const instruction = Joi.string().trim().min(1).max(MAX_INSTRUCTION_CHARS).required();
 const sectionId = Joi.string().trim().min(1).max(128).required();
 const creatableType = Joi.string().valid(...AI_CREATABLE_TYPES).required();
+const sectionTypes = Joi.array().items(creatableType).min(1).max(MAX_PLAN_SECTIONS).required();
+const plannedLink = Joi.object({
+  label: Joi.string().trim().min(1).max(60).required(),
+  href: Joi.string().trim().allow("").max(500).required(),
+});
 
-const opName = (name: PlannedOp["op"]) => Joi.string().valid(name).required();
-
-const plannedOpSchema = Joi.alternatives().try(
-  Joi.object({
-    op: opName("add"),
+const opSchemas: Record<PlannedOp["op"], Joi.ObjectSchema> = {
+  add: Joi.object({
+    op: Joi.string().required(),
     sectionType: creatableType,
     position: Joi.number().integer().min(0).allow(null).required(),
     instruction,
   }),
-  Joi.object({ op: opName("update"), sectionId, instruction }),
-  Joi.object({ op: opName("remove"), sectionIds: Joi.array().items(sectionId).min(1).max(60).required() }),
-  Joi.object({ op: opName("move"), sectionId, toIndex: Joi.number().integer().min(0).required() }),
-  Joi.object({
-    op: opName("replace_page"),
-    sectionTypes: Joi.array().items(creatableType).min(1).max(12).required(),
-    instruction,
+  update: Joi.object({ op: Joi.string().required(), sectionId, instruction }),
+  remove: Joi.object({
+    op: Joi.string().required(),
+    sectionIds: Joi.array().items(sectionId).min(1).max(60).required(),
   }),
-  Joi.object({ op: opName("clear") }),
-  Joi.object({
-    op: opName("create_page"),
+  move: Joi.object({ op: Joi.string().required(), sectionId, toIndex: Joi.number().integer().min(0).required() }),
+  replace_page: Joi.object({ op: Joi.string().required(), sectionTypes, instruction }),
+  clear: Joi.object({ op: Joi.string().required() }),
+  create_page: Joi.object({
+    op: Joi.string().required(),
     name: Joi.string().trim().min(1).max(120).required(),
     slug: Joi.string().trim().max(160).allow(null).optional(),
-    sectionTypes: Joi.array().items(creatableType).min(1).max(12).required(),
+    sectionTypes,
     instruction,
     showInNav: Joi.boolean().default(true),
   }),
-  Joi.object({ op: opName("update_navigation"), instruction }),
-);
+  update_navigation: Joi.object({
+    op: Joi.string().required(),
+    instruction,
+    headerMenu: Joi.array().items(plannedLink).max(24).allow(null).default(null),
+    headerCta: plannedLink.allow(null).default(null),
+  }),
+};
 
-const aiPlanSchema = Joi.object({
+const planHeadSchema = Joi.object({
   intent: Joi.string().valid("chat", "edit", "clarify").required(),
-  reply: Joi.string().allow("").max(3000).required(),
-  clarification: Joi.object({
-    question: Joi.string().trim().min(1).max(500).required(),
-    options: Joi.array().items(Joi.string().trim().min(1).max(200)).min(2).max(6).required(),
-    allowCustomInput: Joi.boolean().default(true),
-  })
-    .allow(null)
-    .optional(),
-  ops: Joi.array().items(plannedOpSchema).max(MAX_OPS).required(),
+  reply: Joi.string().allow("").max(MAX_REPLY_CHARS).required(),
 });
 
-/** Validates the planner's JSON and drops ops that reference sections not on the canvas. */
-export function parsePlan(raw: unknown, sections: readonly SectionEnvelope[]): AiPlan {
-  const { value, error } = aiPlanSchema.validate(raw, { stripUnknown: true });
-  if (error) {
-    throw new Error(`Invalid AI plan: ${error.message}`);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function clip(value: unknown, max: number): unknown {
+  return typeof value === "string" ? value.trim().slice(0, max) : value;
+}
+
+function isCreatableType(value: unknown): value is AiCreatableType {
+  return typeof value === "string" && (AI_CREATABLE_TYPES as readonly string[]).includes(value);
+}
+
+/** Fixes recoverable model slips (overlong text, too many sections, negative indexes) before validation. */
+function normalizeOp(raw: Record<string, unknown>): Record<string, unknown> {
+  const op: Record<string, unknown> = { ...raw };
+  if ("instruction" in op) op.instruction = clip(op.instruction, MAX_INSTRUCTION_CHARS);
+  if ("name" in op) op.name = clip(op.name, 120);
+  if (typeof op.slug === "string") op.slug = op.slug.trim().slice(0, 160) || null;
+  if (Array.isArray(op.sectionTypes)) {
+    op.sectionTypes = op.sectionTypes.filter(isCreatableType).slice(0, MAX_PLAN_SECTIONS);
   }
-  const plan = value as AiPlan;
-  const ids = new Set(sections.map((s) => s.id));
+  for (const key of ["position", "toIndex"] as const) {
+    const value = op[key];
+    if (typeof value === "number" && Number.isFinite(value)) op[key] = Math.max(0, Math.trunc(value));
+  }
+  if (Array.isArray(op.headerMenu)) {
+    op.headerMenu = op.headerMenu.filter(isRecord).map(clipLink);
+  }
+  if (isRecord(op.headerCta)) op.headerCta = clipLink(op.headerCta);
+  return op;
+}
 
-  const ops = plan.ops.flatMap((op): PlannedOp[] => {
-    switch (op.op) {
-      case "update":
-      case "move":
-        return ids.has(op.sectionId) ? [op] : [];
-      case "remove": {
-        const sectionIds = [...new Set(op.sectionIds)].filter((id) => ids.has(id));
-        return sectionIds.length > 0 ? [{ op: "remove", sectionIds }] : [];
-      }
-      default:
-        return [op];
-    }
+function clipLink(link: Record<string, unknown>): Record<string, unknown> {
+  return { ...link, label: clip(link.label, 60), href: clip(link.href, 500) };
+}
+
+function parseOp(raw: unknown): { op: PlannedOp } | { error: string } {
+  if (!isRecord(raw) || typeof raw.op !== "string" || !(raw.op in opSchemas)) {
+    return { error: `unknown operation ${JSON.stringify(isRecord(raw) ? raw.op : raw)}` };
+  }
+  const name = raw.op as PlannedOp["op"];
+  const { value, error } = opSchemas[name].validate(normalizeOp(raw), { stripUnknown: true });
+  return error ? { error: `${name}: ${error.message}` } : { op: value as PlannedOp };
+}
+
+function parseClarification(raw: unknown): AiPlan["clarification"] {
+  if (!isRecord(raw)) return null;
+  const question = typeof raw.question === "string" ? raw.question.trim().slice(0, 500) : "";
+  const options = Array.isArray(raw.options)
+    ? [
+        ...new Set(
+          raw.options
+            .filter((option): option is string => typeof option === "string")
+            .map((option) => option.trim().slice(0, 200))
+            .filter(Boolean),
+        ),
+      ].slice(0, 6)
+    : [];
+  if (!question || options.length < 2) return null;
+  return { question, options, allowCustomInput: raw.allowCustomInput !== false };
+}
+
+/**
+ * Validates the planner's JSON. Recoverable slips are repaired, invalid single ops are dropped, ops that
+ * reference sections not on the canvas are dropped, and pages beyond the per-request cap are deferred.
+ * Throws only when nothing usable remains, so the caller can ask the model to correct itself.
+ */
+export function parsePlan(raw: unknown, sections: readonly SectionEnvelope[]): AiPlan {
+  if (!isRecord(raw)) throw new Error("Invalid AI plan: expected a JSON object");
+
+  const { value: head, error } = planHeadSchema.validate({
+    intent: raw.intent,
+    reply: clip(typeof raw.reply === "string" ? raw.reply : "", MAX_REPLY_CHARS),
   });
+  if (error) throw new Error(`Invalid AI plan: ${error.message}`);
 
-  return { ...plan, ops };
+  let intent = head.intent as AiPlan["intent"];
+  let reply = head.reply as string;
+  const clarification = intent === "clarify" ? parseClarification(raw.clarification) : null;
+  if (intent === "clarify" && !clarification) {
+    intent = "chat";
+    const question = isRecord(raw.clarification) ? clip(raw.clarification.question, 500) : "";
+    reply = reply || (typeof question === "string" ? question : "");
+  }
+
+  const rawOps = Array.isArray(raw.ops) ? raw.ops : [];
+  const errors: string[] = [];
+  const parsedOps = rawOps.flatMap((candidate): PlannedOp[] => {
+    const result = parseOp(candidate);
+    if ("error" in result) {
+      errors.push(result.error);
+      return [];
+    }
+    return [result.op];
+  });
+  if (intent === "edit" && rawOps.length > 0 && parsedOps.length === 0) {
+    throw new Error(`Invalid AI plan: ${errors.join("; ")}`);
+  }
+
+  const ids = new Set(sections.map((s) => s.id));
+  const deferredPages: string[] = [];
+  let pageCount = 0;
+
+  const ops = parsedOps
+    .flatMap((op): PlannedOp[] => {
+      switch (op.op) {
+        case "update":
+        case "move":
+          return ids.has(op.sectionId) ? [op] : [];
+        case "remove": {
+          const sectionIds = [...new Set(op.sectionIds)].filter((id) => ids.has(id));
+          return sectionIds.length > 0 ? [{ op: "remove", sectionIds }] : [];
+        }
+        case "create_page":
+          pageCount += 1;
+          if (pageCount > MAX_PAGES_PER_REQUEST) {
+            deferredPages.push(op.name);
+            return [];
+          }
+          return [op];
+        default:
+          return [op];
+      }
+    })
+    .slice(0, MAX_OPS);
+
+  return {
+    intent,
+    reply,
+    clarification,
+    ops: intent === "edit" ? ops : [],
+    ...(deferredPages.length > 0 ? { deferredPages } : {}),
+  };
 }
 
 const SINGLETON_TYPES = new Set(["header", "footer"]);

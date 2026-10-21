@@ -12,6 +12,11 @@ const transactionsQuerySchema = Joi.object({
   pageSize: Joi.number().integer().min(1).max(100).default(20),
 });
 
+const usageQuerySchema = Joi.object({
+  year: Joi.number().integer().min(2020).max(2100).optional(),
+  month: Joi.number().integer().min(1).max(12).empty("").allow(null).optional(),
+});
+
 const createTopupSchema = Joi.object({
   connects: Joi.number()
     .integer()
@@ -45,6 +50,7 @@ export const walletRouter = Router();
 walletRouter.use(authenticate, authorize(UserRole.CLIENT));
 walletRouter.get("/", walletController.get);
 walletRouter.get("/transactions", validate(transactionsQuerySchema, "query"), walletController.transactions);
+walletRouter.get("/usage", validate(usageQuerySchema, "query"), walletController.usage);
 walletRouter.post(
   "/topups",
   rateLimit({ name: "wallet-topup", max: 20, windowSeconds: 60 * 60 }),

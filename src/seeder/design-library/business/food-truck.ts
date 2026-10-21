@@ -223,7 +223,7 @@ const truckStory = section("split", {
   bullets: ["Produce sourced from Bay Area farmers markets", "Compostable packaging and low-waste prep", "Weekly pop-up menu collaborations"],
   image: photo("1565299624946-b28f40a0ae38", "Food truck serving customers on a sunny street", 1400),
   imagePosition: "left",
-  cta: { label: "Meet the crew", href: "/about" },
+  cta: { label: "Meet the crew", href: "/locations" },
 });
 
 const testimonials = section("testimonials", {
