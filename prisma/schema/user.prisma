@@ -19,15 +19,18 @@ model User {
   client        Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
 
-  websitesCreated      Website[]           @relation("WebsiteCreatedBy")
-  versionsPublished    WebsiteVersion[]    @relation("VersionPublishedBy")
-  mediaUploaded        MediaFile[]         @relation("MediaUploadedBy")
-  savedSectionsCreated SavedSection[]      @relation("SavedSectionCreatedBy")
-  templatesCreated     WebsiteTemplate[]   @relation("WebsiteTemplateCreatedBy")
+  websitesCreated      Website[]             @relation("WebsiteCreatedBy")
+  versionsPublished    WebsiteVersion[]      @relation("VersionPublishedBy")
+  mediaUploaded        MediaFile[]           @relation("MediaUploadedBy")
+  savedSectionsCreated SavedSection[]        @relation("SavedSectionCreatedBy")
+  templatesCreated     WebsiteTemplate[]     @relation("WebsiteTemplateCreatedBy")
   aiUsageLogs          AiUsageLog[]
-  generationsRequested WebsiteGeneration[] @relation("WebsiteGenerationRequestedBy")
-  walletTransactions   WalletTransaction[] @relation("WalletTransactionUser")
-  paymentOrders        PaymentOrder[]      @relation("PaymentOrderUser")
+  generationsRequested WebsiteGeneration[]   @relation("WebsiteGenerationRequestedBy")
+  walletTransactions   WalletTransaction[]   @relation("WalletTransactionUser")
+  paymentOrders        PaymentOrder[]        @relation("PaymentOrderUser")
+  hostingSubscriptions HostingSubscription[] @relation("HostingSubscriptionCreatedBy")
+  hostingPayments      HostingPayment[]      @relation("HostingPaymentRecordedBy")
+  hostingPriceChanges  HostingPriceChange[]  @relation("HostingPriceChangedBy")
 
   @@index([clientId])
   @@index([role, status])

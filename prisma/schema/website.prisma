@@ -1,13 +1,17 @@
 /// A client website. `theme`, `header` and `footer` hold the editable DRAFT
 /// (site-kit JSON); visitors only ever see the snapshot in `liveVersion`.
 model Website {
-  id          String        @id @default(uuid()) @db.Uuid
-  clientId    String        @db.Uuid
-  name        String        @db.VarChar(120)
-  builderType BuilderType
-  status      WebsiteStatus @default(DRAFT)
+  id              String                @id @default(uuid()) @db.Uuid
+  clientId        String                @db.Uuid
+  name            String                @db.VarChar(120)
+  builderType     BuilderType
+  status          WebsiteStatus         @default(DRAFT)
+  /// Why an UNPUBLISHED site is offline. BILLING sites go live again automatically once hosting is paid.
+  offlineReason   WebsiteOfflineReason?
+  /// Shows SEO fields and the pre-publish SEO audit in the editor. Live-site SEO works either way.
+  seoToolsEnabled Boolean               @default(false)
   /// Default address: <subdomain>.<platform domain>. Lowercase DNS label.
-  subdomain   String        @unique @db.VarChar(63)
+  subdomain       String                @unique @db.VarChar(63)
 
   businessName String? @db.VarChar(160)
   websiteType  String? @db.VarChar(80)
@@ -30,18 +34,19 @@ model Website {
   createdAt      DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
 
-  client         Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy      User?              @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  logo           MediaFile?         @relation("WebsiteLogo", fields: [logoMediaId], references: [id], onDelete: SetNull)
-  liveVersion    WebsiteVersion?    @relation("WebsiteLiveVersion", fields: [liveVersionId], references: [id], onDelete: SetNull)
-  versions       WebsiteVersion[]   @relation("WebsiteVersions")
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy      User?                @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  logo           MediaFile?           @relation("WebsiteLogo", fields: [logoMediaId], references: [id], onDelete: SetNull)
+  liveVersion    WebsiteVersion?      @relation("WebsiteLiveVersion", fields: [liveVersionId], references: [id], onDelete: SetNull)
+  versions       WebsiteVersion[]     @relation("WebsiteVersions")
   pages          Page[]
   domains        Domain[]
-  media          MediaFile[]        @relation("WebsiteMedia")
+  media          MediaFile[]          @relation("WebsiteMedia")
   mediaFolders   MediaFolder[]
   aiUsageLogs    AiUsageLog[]
   aiChatSessions AiChatSession[]
   generation     WebsiteGeneration?
+  hosting        HostingSubscription?
 
   /// Target for (websiteId, clientId) foreign keys, which guarantee child rows
   /// can never point at a website owned by a different client.

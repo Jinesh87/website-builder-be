@@ -28,6 +28,13 @@ enum WebsiteStatus {
   UNPUBLISHED
 }
 
+enum WebsiteOfflineReason {
+  /// Unpublished by a user.
+  MANUAL
+  /// Taken offline because hosting wasn't paid.
+  BILLING
+}
+
 enum PageType {
   HOME
   ABOUT

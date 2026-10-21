@@ -15,6 +15,8 @@ export type WebsiteSummary = {
   /** Set while (or after) an AI build of this website's draft ran. */
   generationStatus: GenerationStatus | null;
   hasUnpublishedChanges: boolean;
+  /** Shows SEO fields and the pre-publish SEO audit in the editor. */
+  seoToolsEnabled: boolean;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -92,7 +94,7 @@ export type CreateWebsiteInput = WebsiteInfoInput & {
   subdomain?: string;
 };
 
-export type UpdateWebsiteInput = WebsiteInfoInput & { name?: string };
+export type UpdateWebsiteInput = WebsiteInfoInput & { name?: string; seoToolsEnabled?: boolean };
 
 export type PageInput = {
   /** Page id; omitted ids get a new UUID, new client-generated UUIDs are kept. */
