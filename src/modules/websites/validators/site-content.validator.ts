@@ -907,7 +907,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       )
       .max(6)
       .optional()
-      .meta(locked),
+      .description("Department cards. Each value must be the business email or phone, never an invented address."),
     cardStyle: Joi.string()
       .valid("default", "bordered", "flat", "glass", "elevated", "contrast")
       .optional(),

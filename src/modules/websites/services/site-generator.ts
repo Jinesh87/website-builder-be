@@ -230,7 +230,7 @@ export const SECTION_GUIDE = `Section JSON shapes (all text is plain text, no HT
 - pricing: { eyebrow, heading, intro, plans: [{ name, price, period, description, features: [string], featured: boolean, cta: {label, href} }] }
 - faq: { eyebrow, heading, intro, variant: "accordion-classic"|"two-column-grid", items: [{ question, answer }] } (4-6 items)
 - gallery: { heading, columns: 3, mobileColumns: 1, images: [IMAGE token, ...] }
-- contact: { eyebrow, heading, text, email, phone, address, showForm: true, submitLabel, formHeading } (showForm renders name, email and message fields that email the site owner; submitLabel is the button, such as "Send message")
+- contact: { variant: "split-form"|"cards-hub"|"minimal-editorial"|"floating-glass", eyebrow, heading, text, email, phone, address, officeHours, responseTime, showForm: true, submitLabel, formHeading, serviceOptions?: [string], channels?: [{ label, value, description, icon: "mail"|"phone"|"chat"|"user" }] } (showForm renders name, email and message fields that email the site owner; use the brand's real email and phone)
 - cta: { variant: "centered-card"|"split-visual", eyebrow, heading, text, button: {label, href}, secondaryButton?: {label, href} }
 - text: { heading, body } (body uses blank lines between paragraphs)
 Icons are lowercase names such as: star, check, shield, zap, heart, users, globe, sparkles, rocket, layers, box, lock, cloud, code, phone, mail, clock, award.
