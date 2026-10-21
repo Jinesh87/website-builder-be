@@ -21,6 +21,7 @@ model Client {
   wallet        Wallet?
   paymentOrders PaymentOrder[]
   aiModelPrices ClientAiModelPrice[]
+  emailConfig   ClientEmailConfig?
 
   @@map("clients")
 }

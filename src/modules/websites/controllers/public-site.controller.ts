@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
+import { clientEmailService } from "../../email/services/client-email.service.js";
 import { emailService } from "../../email/services/email.service.js";
 import { liveSiteEngineService } from "../services/live-site-engine.service.js";
 import { siteRendererClient } from "../services/site-renderer.client.js";
@@ -173,15 +174,17 @@ export class PublicSiteController {
       );
 
       if (targetRecipient) {
+        const lead = {
+          to: targetRecipient,
+          siteName,
+          senderName: name.trim(),
+          senderEmail: email.trim(),
+          senderPhone: typeof phone === "string" ? phone.trim() : undefined,
+          message: message.trim(),
+        };
         try {
-          await emailService.sendContactFormLead({
-            to: targetRecipient,
-            siteName,
-            senderName: name.trim(),
-            senderEmail: email.trim(),
-            senderPhone: typeof phone === "string" ? phone.trim() : undefined,
-            message: message.trim(),
-          });
+          const sentByClient = await clientEmailService.sendWebsiteLead(website.clientId, lead);
+          if (!sentByClient) await emailService.sendContactFormLead(lead);
         } catch (mailErr) {
           logger.warn(
             { err: mailErr, websiteId: website.id },
