@@ -41,6 +41,7 @@ function toView(client: ClientWithOwner): ClientView {
     businessName: client.businessName,
     address: client.address,
     source: client.source,
+    shopFeatureEnabled: client.shopFeatureEnabled,
     createdAt: client.createdAt.toISOString(),
     updatedAt: client.updatedAt.toISOString(),
     owner: owner
@@ -138,6 +139,13 @@ export class ClientService {
     logger.info({ clientId: client.id, actorId }, "Client created by Super Admin");
 
     return { client: toView(client) };
+  }
+
+  async setShopFeature(id: string, shopFeatureEnabled: boolean, actorId: string): Promise<ClientView> {
+    await this.findOrThrow(id);
+    await prisma.client.update({ where: { id }, data: { shopFeatureEnabled } });
+    logger.info({ clientId: id, actorId, shopFeatureEnabled }, "Client shop feature updated");
+    return this.get(id);
   }
 
   async update(id: string, input: ClientDetailsInput, actorId: string): Promise<ClientView> {

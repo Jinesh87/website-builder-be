@@ -49,3 +49,7 @@ export const updateClientSchema = Joi.object({
 export const setClientPasswordSchema = Joi.object({
   password: password.required(),
 });
+
+export const setShopFeatureSchema = Joi.object({
+  shopFeatureEnabled: Joi.boolean().required(),
+});

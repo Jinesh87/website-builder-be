@@ -10,6 +10,8 @@ model Website {
   offlineReason   WebsiteOfflineReason?
   /// Shows SEO fields and the pre-publish SEO audit in the editor. Live-site SEO works either way.
   seoToolsEnabled Boolean               @default(false)
+  /// Client turned the shop on. Ignored unless the company's shop feature is enabled.
+  shopEnabled     Boolean               @default(false)
   /// Default address: <subdomain>.<platform domain>. Lowercase DNS label.
   subdomain       String                @unique @db.VarChar(63)
 
@@ -47,6 +49,10 @@ model Website {
   aiChatSessions AiChatSession[]
   generation     WebsiteGeneration?
   hosting        HostingSubscription?
+  shopCategories ShopCategory[]
+  products       Product[]
+  shopPayment    ShopPaymentConfig?
+  inventoryMovements InventoryMovement[]
 
   /// Target for (websiteId, clientId) foreign keys, which guarantee child rows
   /// can never point at a website owned by a different client.

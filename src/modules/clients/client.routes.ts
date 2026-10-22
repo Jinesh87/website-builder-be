@@ -11,6 +11,7 @@ import {
   createClientSchema,
   listClientsQuerySchema,
   setClientPasswordSchema,
+  setShopFeatureSchema,
   updateClientSchema,
 } from "./validators/client.validator.js";
 
@@ -43,6 +44,7 @@ clientsRouter.get("/:id", byId, clientController.get);
 clientsRouter.get("/:id/ai-prices", byId, clientController.aiPrices);
 clientsRouter.put("/:id/ai-prices", byId, validate(updateClientPricingSchema), clientController.updateAiPrices);
 clientsRouter.patch("/:id", byId, validate(updateClientSchema), clientController.update);
+clientsRouter.patch("/:id/shop", byId, validate(setShopFeatureSchema), clientController.setShopFeature);
 clientsRouter.post("/:id/suspend", byId, clientController.suspend);
 clientsRouter.post("/:id/reactivate", byId, clientController.reactivate);
 clientsRouter.post(

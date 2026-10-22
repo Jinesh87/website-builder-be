@@ -48,7 +48,7 @@ import { liftSiteChrome } from "./site-chrome.js";
 
 
 const summaryInclude = {
-  client: { select: { businessName: true } },
+  client: { select: { businessName: true, shopFeatureEnabled: true } },
   _count: { select: { pages: true } },
   generation: true,
 } as const satisfies Prisma.WebsiteInclude;
@@ -138,6 +138,8 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
     generationStatus: website.generation?.status ?? null,
     hasUnpublishedChanges: website.publishedAt !== null && website.draftUpdatedAt > website.publishedAt,
     seoToolsEnabled: website.seoToolsEnabled,
+    shopFeatureEnabled: website.client.shopFeatureEnabled,
+    shopEnabled: website.shopEnabled,
     publishedAt: website.publishedAt?.toISOString() ?? null,
     createdAt: website.createdAt.toISOString(),
     updatedAt: website.updatedAt.toISOString(),
@@ -655,11 +657,27 @@ export class WebsiteService {
   }
 
   async update(id: string, input: UpdateWebsiteInput, actor: AuthUser): Promise<WebsiteDetail> {
-    await this.findAccessibleOrThrow(id, actor);
+    const current = await this.findAccessibleOrThrow(id, actor);
 
     const data: Prisma.WebsiteUpdateInput = {};
     if (input.name !== undefined) data.name = input.name.trim();
     if (input.seoToolsEnabled !== undefined) data.seoToolsEnabled = input.seoToolsEnabled;
+    if (input.shopEnabled !== undefined) {
+      if (input.shopEnabled) {
+        const client = await prisma.client.findUnique({
+          where: { id: current.clientId },
+          select: { shopFeatureEnabled: true },
+        });
+        if (!client?.shopFeatureEnabled) {
+          throw new AppError(
+            403,
+            "Shop isn't available for this company yet. Ask an admin to enable it.",
+            "SHOP_NOT_ALLOWED",
+          );
+        }
+      }
+      data.shopEnabled = input.shopEnabled;
+    }
     const infoKeys = [
       "businessName",
       "websiteType",

@@ -17,6 +17,10 @@ export type WebsiteSummary = {
   hasUnpublishedChanges: boolean;
   /** Shows SEO fields and the pre-publish SEO audit in the editor. */
   seoToolsEnabled: boolean;
+  /** Super Admin has allowed this company to use a shop. */
+  shopFeatureEnabled: boolean;
+  /** Client has turned the shop on for this website. */
+  shopEnabled: boolean;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -94,7 +98,11 @@ export type CreateWebsiteInput = WebsiteInfoInput & {
   subdomain?: string;
 };
 
-export type UpdateWebsiteInput = WebsiteInfoInput & { name?: string; seoToolsEnabled?: boolean };
+export type UpdateWebsiteInput = WebsiteInfoInput & {
+  name?: string;
+  seoToolsEnabled?: boolean;
+  shopEnabled?: boolean;
+};
 
 export type PageInput = {
   /** Page id; omitted ids get a new UUID, new client-generated UUIDs are kept. */

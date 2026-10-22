@@ -122,6 +122,7 @@ export const createAiWebsiteSchema = Joi.object({
 export const updateWebsiteSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).optional(),
   seoToolsEnabled: Joi.boolean().optional(),
+  shopEnabled: Joi.boolean().optional(),
   ...websiteInfo,
 }).min(1);
 

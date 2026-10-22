@@ -24,6 +24,7 @@ import notificationsRouter from "./modules/notifications/notification.routes.js"
 import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
+import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
 import contactRouter from "./modules/contact/contact.routes.js";
 import {
@@ -61,6 +62,7 @@ app.use(
   }),
 );
 app.use("/api/payments/razorpay/webhook", razorpayWebhookRouter);
+app.use("/api/shop/razorpay/webhook", shopRazorpayWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
@@ -100,6 +102,7 @@ app.use("/api/pricing", publicPricingRouter);
 app.use("/api/internal/domains", domainSyncRouter);
 app.use("/api/websites/:id/domains", websiteDomainsRouter);
 app.use("/api/websites/:id/hosting", websiteHostingRouter);
+app.use("/api/websites/:id/shop", shopRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
 app.use("/api/contact", contactRouter);

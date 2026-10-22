@@ -6,6 +6,8 @@ model Client {
   source       ClientSource
   /// When false, client users can edit but only a Super Admin can publish.
   canPublish   Boolean      @default(true)
+  /// When true, the client may turn a shop on for each of their websites.
+  shopFeatureEnabled Boolean @default(false)
   /// AI model chosen by the client; null = use the platform default from AiConfig.
   aiModel      String?      @db.VarChar(100)
   createdAt    DateTime     @default(now()) @db.Timestamptz(6)
