@@ -48,6 +48,24 @@ test("keeps a hidden header hidden and leaves content without copies untouched",
   assert.equal(liftSiteChrome(plain), plain);
 });
 
+test("keeps a page's own header and footer on the page instead of lifting them", () => {
+  const ownHeader = { ...chrome("header", { ...header, siteName: "Blog only" }), id: "page-header" };
+  const noFooter = { ...chrome("footer", { ...footer }, true), id: "page-footer" };
+  const content = { header, footer, pages: [{ slug: "/blog", pageType: "CUSTOM", sections: [ownHeader, hero, noFooter] }] };
+  assert.equal(liftSiteChrome(content), content);
+
+  const mixed = liftSiteChrome({
+    header,
+    footer,
+    pages: [
+      { slug: "/", pageType: "HOME", sections: [chrome("header", { ...header, siteName: "Home copy" }), hero] },
+      { slug: "/blog", pageType: "CUSTOM", sections: [ownHeader, hero] },
+    ],
+  });
+  assert.equal(mixed.header.siteName, "Home copy");
+  assert.deepEqual(mixed.pages[1]?.sections, [ownHeader, hero]);
+});
+
 test("the site-wide header/footer accept their saved style", () => {
   assert.equal(headerSchema.validate({ ...header, settings }).error, undefined);
   assert.equal(footerSchema.validate({ ...footer, settings }).error, undefined);

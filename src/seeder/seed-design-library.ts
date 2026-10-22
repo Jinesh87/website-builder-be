@@ -85,5 +85,17 @@ export async function seedDesignLibrary(): Promise<void> {
     });
   }
 
+  // Only seed-created rows (no creator) are retired; client and staff-created templates are left alone.
+  const retired = await prisma.websiteTemplate.updateMany({
+    where: {
+      clientId: null,
+      createdById: null,
+      isActive: true,
+      key: { notIn: WEBSITE_TEMPLATE_SEEDS.map((seed) => seed.key) },
+    },
+    data: { isActive: false },
+  });
+  if (retired.count > 0) logger.info({ count: retired.count }, "Deactivated platform templates no longer seeded");
+
   logger.debug({ themes: themeIds.size, templates: WEBSITE_TEMPLATE_SEEDS.length }, "Design library seeded");
 }

@@ -14,13 +14,19 @@ import aiSettingsRouter from "./modules/admin-settings/ai-settings.routes.js";
 import clientAiSettingsRouter from "./modules/admin-settings/client-ai-settings.routes.js";
 import aiUsageRouter from "./modules/admin-ai-usage/ai-usage.routes.js";
 import healthRouter from "./modules/health/health.routes.js";
-import { adminHostingRouter, hostingSettingsRouter, websiteHostingRouter } from "./modules/hosting/hosting.routes.js";
+import {
+  adminHostingRouter,
+  hostingSettingsRouter,
+  publicPricingRouter,
+  websiteHostingRouter,
+} from "./modules/hosting/hosting.routes.js";
 import notificationsRouter from "./modules/notifications/notification.routes.js";
 import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
 import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
+import contactRouter from "./modules/contact/contact.routes.js";
 import {
   adminWalletRouter,
   billingSettingsRouter,
@@ -92,12 +98,14 @@ app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin/clients", clientsRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);
 app.use("/api/templates", publicTemplatesRouter);
+app.use("/api/pricing", publicPricingRouter);
 app.use("/api/internal/domains", domainSyncRouter);
 app.use("/api/websites/:id/domains", websiteDomainsRouter);
 app.use("/api/websites/:id/hosting", websiteHostingRouter);
 app.use("/api/websites/:id/shop", shopRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
+app.use("/api/contact", contactRouter);
 
 app.use(publicSiteRouter);
 
