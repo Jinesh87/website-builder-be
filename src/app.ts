@@ -20,6 +20,7 @@ import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
+import contactRouter from "./modules/contact/contact.routes.js";
 import {
   adminWalletRouter,
   billingSettingsRouter,
@@ -95,6 +96,7 @@ app.use("/api/websites/:id/domains", websiteDomainsRouter);
 app.use("/api/websites/:id/hosting", websiteHostingRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
+app.use("/api/contact", contactRouter);
 
 app.use(publicSiteRouter);
 

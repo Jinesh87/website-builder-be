@@ -185,3 +185,214 @@ export function contactFormLeadEmail(params: {
     text: `New inquiry from ${params.senderName} on ${params.siteName}\nName: ${params.senderName}\nEmail: ${params.senderEmail}\n${params.senderPhone ? `Phone: ${params.senderPhone}\n` : ""}Message:\n${params.message}`,
   };
 }
+
+export function salesInquiryEmail(params: {
+  brand?: string;
+  to: string;
+  senderName: string;
+  senderEmail: string;
+  senderPhone?: string;
+  subject?: string;
+  message: string;
+  submittedAt?: Date;
+}): RenderedEmail {
+  const brandName = params.brand?.trim() || "Bytezora";
+  const name = escapeHtml(params.senderName.trim());
+  const email = escapeHtml(params.senderEmail.trim());
+  const recipient = escapeHtml(params.to.trim());
+  const phone = params.senderPhone?.trim() ? escapeHtml(params.senderPhone.trim()) : "";
+  const subject = (params.subject?.trim() || "General question").replace(/[\r\n]+/g, " ");
+  const escapedSubject = escapeHtml(subject);
+  const msgHtml = escapeHtml(params.message.trim()).replace(/\n/g, "<br/>");
+  const dateObj = params.submittedAt || new Date();
+  const dateStr = dateObj.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }) + " IST";
+
+  const mailtoReply = `mailto:${encodeURIComponent(params.senderEmail.trim())}?subject=${encodeURIComponent(`Re: ${subject} - Bytezora`)}`;
+
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Inquiry from ${name}</title>
+  </head>
+  <body style="margin:0;padding:24px 12px;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+            <!-- Accent Top Stripe -->
+            <tr>
+              <td style="height:5px;background:linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);"></td>
+            </tr>
+            <!-- Header -->
+            <tr>
+              <td style="background-color:#0f172a;padding:28px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td>
+                      <span style="display:inline-block;background-color:#1e293b;border:1px solid #334155;color:#38bdf8;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">
+                        ${escapeHtml(brandName)} WebBuilder
+                      </span>
+                    </td>
+                    <td align="right">
+                      <span style="display:inline-block;background-color:rgba(37,99,235,0.25);border:1px solid rgba(59,130,246,0.4);color:#93c5fd;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:0.5px;">
+                        SALES LEAD
+                      </span>
+                    </td>
+                  </tr>
+                </table>
+                <h1 style="margin:20px 0 6px;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;line-height:1.25;">
+                  New Client Inquiry Received
+                </h1>
+                <p style="margin:0;color:#94a3b8;font-size:14px;line-height:1.5;">
+                  A prospective client submitted an inquiry through the official contact portal.
+                </p>
+              </td>
+            </tr>
+            <!-- Content Body -->
+            <tr>
+              <td style="padding:28px 32px;">
+                <!-- Topic & Date Pill -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+                  <tr>
+                    <td>
+                      <span style="display:inline-block;padding:6px 14px;background-color:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:0.3px;">
+                        📌 Topic: ${escapedSubject}
+                      </span>
+                    </td>
+                    <td align="right" style="color:#64748b;font-size:12px;font-weight:500;">
+                      📅 ${dateStr}
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Client Information Card -->
+                <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 22px;margin-bottom:24px;">
+                  <p style="margin:0 0 14px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;">
+                    Client Contact Details
+                  </p>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td style="padding:6px 0;width:120px;color:#64748b;font-size:13px;font-weight:600;">Full name:</td>
+                      <td style="padding:6px 0;color:#0f172a;font-size:15px;font-weight:700;">${name}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">Email address:</td>
+                      <td style="padding:6px 0;font-size:14px;">
+                        <a href="mailto:${email}" style="color:#2563eb;font-weight:600;text-decoration:none;">${email}</a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">Phone number:</td>
+                      <td style="padding:6px 0;font-size:14px;">
+                        ${
+                          phone
+                            ? `<a href="tel:${phone}" style="color:#2563eb;font-weight:600;text-decoration:none;">${phone}</a>`
+                            : `<span style="color:#94a3b8;font-style:italic;">Not provided</span>`
+                        }
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;color:#64748b;font-size:13px;font-weight:600;">Recipient:</td>
+                      <td style="padding:6px 0;color:#334155;font-size:13px;font-weight:600;">
+                        ${recipient}
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+
+                <!-- Client Message Card -->
+                <div style="margin-bottom:28px;">
+                  <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;">
+                    Client Inquiry Message
+                  </p>
+                  <div style="background-color:#ffffff;border:1px solid #cbd5e1;border-left:4px solid #2563eb;border-radius:8px;padding:18px 20px;color:#1e293b;font-size:14px;line-height:1.65;word-break:break-word;">
+                    ${msgHtml}
+                  </div>
+                </div>
+
+                <!-- Quick Action Buttons -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td>
+                      <a href="${mailtoReply}" style="display:inline-block;background-color:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;box-shadow:0 2px 6px rgba(37,99,235,0.3);">
+                        ✉️ Reply to ${name}
+                      </a>
+                    </td>
+                    ${
+                      phone
+                        ? `<td style="padding-left:12px;">
+                             <a href="tel:${phone}" style="display:inline-block;background-color:#f1f5f9;color:#0f172a;text-decoration:none;font-weight:600;font-size:14px;padding:12px 20px;border-radius:8px;border:1px solid #cbd5e1;">
+                               📞 Call Client
+                             </a>
+                           </td>`
+                        : ""
+                    }
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Footer -->
+            <tr>
+              <td style="background-color:#f8fafc;padding:24px 32px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
+                <p style="margin:0 0 6px;color:#0f172a;font-weight:700;font-size:13px;">
+                  Bytezora Technologies
+                </p>
+                <p style="margin:0 0 6px;">
+                  India Headquarters: Ground Floor, 287/A, Ernakulam, Kerala – 682315
+                </p>
+                <p style="margin:0 0 10px;">
+                  Support: <a href="mailto:Support@bytezoracoders.com" style="color:#2563eb;text-decoration:none;">Support@bytezoracoders.com</a> &nbsp;|&nbsp; Phone: <a href="tel:+919995070483" style="color:#2563eb;text-decoration:none;">+91 (999) 50-70483</a>
+                </p>
+                <p style="margin:0;color:#94a3b8;font-size:11px;">
+                  This automated message was dispatched to <strong>${recipient}</strong> from the Bytezora Website Builder contact form.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const text = `============================================================
+BYTEZORA WEBBUILDER - NEW CLIENT INQUIRY
+============================================================
+
+A new client inquiry was received from the contact portal:
+
+TOPIC:      ${subject}
+DATE/TIME:  ${dateStr}
+
+CLIENT DETAILS:
+- Full Name:    ${params.senderName}
+- Email:        ${params.senderEmail}
+- Phone:        ${params.senderPhone || "Not provided"}
+- Routed To:    ${params.to.trim()}
+
+MESSAGE:
+------------------------------------------------------------
+${params.message}
+------------------------------------------------------------
+
+QUICK ACTIONS:
+- Reply to client: ${mailtoReply}
+${params.senderPhone ? `- Call client: tel:${params.senderPhone}\n` : ""}
+------------------------------------------------------------
+Bytezora Technologies
+India Headquarters: Ground Floor, 287/A, Ernakulam, Kerala - 682315
+Support: Support@bytezoracoders.com | Phone: +91 (999) 50-70483
+`;
+
+  return {
+    subject: `[Bytezora Sales] New Inquiry: ${subject} from ${params.senderName}`,
+    html,
+    text,
+  };
+}

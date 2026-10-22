@@ -10,6 +10,7 @@ import {
   emailChangeCodeEmail,
   hostingNoticeEmail,
   passwordResetEmail,
+  salesInquiryEmail,
   testEmail,
   verificationCodeEmail,
   type RenderedEmail,
@@ -138,30 +139,55 @@ export class EmailService {
     await this.send(params.to, () => contactFormLeadEmail(params), { replyTo: params.senderEmail });
   }
 
+  async sendSalesInquiry(params: {
+    to: string;
+    senderName: string;
+    senderEmail: string;
+    senderPhone?: string;
+    subject?: string;
+    message: string;
+    submittedAt?: Date;
+  }) {
+    await this.send(params.to, (brand) => salesInquiryEmail({ brand, ...params }), {
+      replyTo: params.senderEmail,
+    });
+  }
+
   private async send(
     to: string,
     render: (brand: string) => RenderedEmail,
     options: { ignoreDisabled?: boolean; replyTo?: string } = {},
   ): Promise<void> {
     const config = await prisma.messagingConfig.findUnique({ where: { id: CONFIG_ID } });
-    if (!config) {
+    let apiKey: string | null = null;
+    let fromEmail = "Support@bytezoracoders.com";
+    let fromName = "Bytezora";
+
+    if (config) {
+      if (!config.enabled && !options.ignoreDisabled) {
+        throw new AppError(503, "Email sending is disabled", "EMAIL_DISABLED");
+      }
+      apiKey = decryptSecret(config.resendApiKeyCipher);
+      if (!apiKey) {
+        throw new AppError(
+          503,
+          "Stored Resend API key can't be decrypted. Re-enter it in email settings.",
+          "EMAIL_KEY_UNREADABLE",
+        );
+      }
+      fromEmail = config.fromEmail;
+      fromName = config.fromName;
+    } else if (process.env.RESEND_API_KEY?.trim()) {
+      apiKey = process.env.RESEND_API_KEY.trim();
+      fromEmail = process.env.RESEND_FROM_EMAIL?.trim() || "Support@bytezoracoders.com";
+      fromName = process.env.RESEND_FROM_NAME?.trim() || "Bytezora";
+    } else {
       throw new AppError(503, "Email is not configured yet", "EMAIL_NOT_CONFIGURED");
     }
-    if (!config.enabled && !options.ignoreDisabled) {
-      throw new AppError(503, "Email sending is disabled", "EMAIL_DISABLED");
-    }
-    const apiKey = decryptSecret(config.resendApiKeyCipher);
-    if (!apiKey) {
-      throw new AppError(
-        503,
-        "Stored Resend API key can't be decrypted. Re-enter it in email settings.",
-        "EMAIL_KEY_UNREADABLE",
-      );
-    }
 
-    const email = render(config.fromName);
+    const email = render(fromName);
     const { data, error } = await new Resend(apiKey).emails.send({
-      from: `${config.fromName} <${config.fromEmail}>`,
+      from: `${fromName} <${fromEmail}>`,
       to,
       replyTo: options.replyTo,
       subject: email.subject,
