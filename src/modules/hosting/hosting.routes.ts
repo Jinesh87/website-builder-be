@@ -43,6 +43,11 @@ websiteHostingRouter.post(
   hostingController.collect,
 );
 
+/** Public: the platform's default hosting prices for the marketing pricing page. */
+export const publicPricingRouter = Router();
+publicPricingRouter.use(rateLimit({ name: "public-pricing", max: 120, windowSeconds: 60 }));
+publicPricingRouter.get("/", hostingController.publicPricing);
+
 /** Super admin: global hosting prices and billing rules. */
 export const hostingSettingsRouter = Router();
 hostingSettingsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));

@@ -41,6 +41,14 @@ export class HostingController {
     }
   };
 
+  publicPricing = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ pricing: await hostingService.publicPricing() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getSettings = async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res.json({ settings: await hostingAdminService.settings() });

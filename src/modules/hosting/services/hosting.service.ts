@@ -27,6 +27,7 @@ import type {
   CyclePrices,
   HostingPaymentView,
   HostingSubscriptionView,
+  PublicHostingPricingView,
   UpdatePlanInput,
   WebsiteHostingView,
 } from "../types/hosting.types.js";
@@ -354,6 +355,18 @@ export class HostingService {
       logger.info({ websiteId }, "Website taken offline for unpaid hosting");
     }
     return count > 0;
+  }
+
+  async publicPricing(): Promise<PublicHostingPricingView> {
+    const rules = await loadHostingRules();
+    return {
+      quarterlyConnects: rules.quarterlyPrice,
+      yearlyConnects: rules.yearlyPrice,
+      quarterlyPaise: priceInPaise(rules.quarterlyPrice),
+      yearlyPaise: priceInPaise(rules.yearlyPrice),
+      reminderDays: rules.reminderDays,
+      graceDays: rules.graceDays,
+    };
   }
 
   /** Publishing needs a paid (or grace) plan while hosting billing is on. */
