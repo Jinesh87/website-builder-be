@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addCycle, isHostingLive, nextPeriod, renewalOpensAt, resolvePrice } from "./hosting-period.js";
+import { addCycle, isHostingLive, nextPeriod, priceFor, renewalOpensAt } from "./hosting-period.js";
 
 /** A time in India (UTC+5:30), as the billing dates are read there. */
 function ist(isoLocal: string): Date {
@@ -68,19 +68,18 @@ test("only paid or grace plans keep a site live", () => {
   assert.equal(isHostingLive(null), false);
 });
 
-test("website price beats client price beats global price, per cycle", () => {
-  const global = { quarterlyPrice: 1500, yearlyPrice: 5400 };
-  assert.deepEqual(resolvePrice("QUARTERLY", { website: null, client: null, global }), { amount: 1500, source: "GLOBAL" });
-  assert.deepEqual(
-    resolvePrice("YEARLY", { website: null, client: { quarterlyPrice: 1200, yearlyPrice: null }, global }),
-    { amount: 5400, source: "GLOBAL" },
-  );
-  assert.deepEqual(
-    resolvePrice("QUARTERLY", { website: null, client: { quarterlyPrice: 1200, yearlyPrice: null }, global }),
-    { amount: 1200, source: "CLIENT" },
-  );
-  assert.deepEqual(
-    resolvePrice("QUARTERLY", { website: { quarterlyPrice: 0, yearlyPrice: null }, client: { quarterlyPrice: 1200, yearlyPrice: null }, global }),
-    { amount: 0, source: "WEBSITE" },
-  );
+test("a listed package costs its own price, and can't be bought before it is priced", () => {
+  const basic = { isCustom: false, quarterlyPricePaise: 210_000, yearlyPricePaise: 0 };
+  const own = { customQuarterlyPaise: 100, customYearlyPaise: 200 };
+  assert.equal(priceFor("QUARTERLY", basic, null), 210_000);
+  assert.equal(priceFor("QUARTERLY", basic, own), 210_000);
+  assert.equal(priceFor("YEARLY", basic, own), null);
+});
+
+test("the custom package costs the website's own price, if one is agreed", () => {
+  const custom = { isCustom: true, quarterlyPricePaise: 0, yearlyPricePaise: 0 };
+  assert.equal(priceFor("QUARTERLY", custom, null), null);
+  assert.equal(priceFor("QUARTERLY", custom, { customQuarterlyPaise: 150_000, customYearlyPaise: null }), 150_000);
+  assert.equal(priceFor("YEARLY", custom, { customQuarterlyPaise: 150_000, customYearlyPaise: null }), null);
+  assert.equal(priceFor("YEARLY", custom, { customQuarterlyPaise: null, customYearlyPaise: 0 }), 0);
 });

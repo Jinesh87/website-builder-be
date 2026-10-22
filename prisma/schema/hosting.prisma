@@ -1,56 +1,71 @@
-/// Singleton (id = "default"): platform-wide hosting prices and billing rules, managed by the Super Admin.
+/// Singleton (id = "default"): platform-wide hosting billing rules, managed by the Super Admin. Prices live on the packages.
 model HostingConfig {
-  id             String   @id @default("default") @db.VarChar(50)
+  id                   String   @id @default("default") @db.VarChar(50)
   /// Off: publishing needs no plan and the billing worker does nothing.
-  enabled        Boolean  @default(false)
-  /// Connects per period.
-  quarterlyPrice Int      @default(0)
-  yearlyPrice    Int      @default(0)
+  enabled              Boolean  @default(false)
+  /// Clients may also pay hosting from their connects; Razorpay is always the default.
+  allowConnectsPayment Boolean  @default(true)
   /// Days before a period ends that the renewal reminder goes out.
-  reminderDays   Int      @default(3)
+  reminderDays         Int      @default(3)
   /// Days an unpaid site stays live after its period ends.
-  graceDays      Int      @default(3)
-  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  graceDays            Int      @default(3)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("hosting_config")
 }
 
-/// A client's own hosting prices; a null price falls back to HostingConfig.
-model ClientHostingPrice {
-  clientId       String   @id @db.Uuid
-  quarterlyPrice Int?
-  yearlyPrice    Int?
-  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+/// A package on the pricing page and at checkout. The set is fixed (basic, standard, custom); the Super Admin edits them.
+model HostingPackage {
+  id                  String   @id @default(uuid()) @db.Uuid
+  slug                String   @unique @db.VarChar(40)
+  name                String   @db.VarChar(60)
+  description         String   @db.VarChar(300)
+  /// No list price: a website's own custom price applies, otherwise visitors contact sales.
+  isCustom            Boolean  @default(false)
+  /// Paise per period; 0 = not priced yet, so it can't be bought.
+  quarterlyPricePaise Int      @default(0)
+  yearlyPricePaise    Int      @default(0)
+  features            String[]
+  /// Highlighted as the recommended package; at most one.
+  featured            Boolean  @default(false)
+  /// Hidden from the pricing page and checkout when false; existing plans keep it.
+  active              Boolean  @default(true)
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  subscriptions HostingSubscription[]
+  orders        HostingOrder[]
 
-  @@map("client_hosting_prices")
+  @@map("hosting_packages")
 }
 
 /// Hosting plan of one website. Each website renews on its own dates.
 model HostingSubscription {
-  id                 String        @id @default(uuid()) @db.Uuid
-  websiteId          String        @unique @db.Uuid
-  clientId           String        @db.Uuid
-  /// Applies from the next payment; changing it never alters the current period.
-  cycle              BillingCycle
-  /// Connects per period for this website only; null = client price, then global price. 0 = free.
-  quarterlyPrice     Int?
-  yearlyPrice        Int?
-  status             HostingStatus @default(AWAITING_PAYMENT)
-  /// Renew from the client's wallet when the period ends.
-  autoRenew          Boolean       @default(true)
-  currentPeriodStart DateTime?     @db.Timestamptz(6)
-  currentPeriodEnd   DateTime?     @db.Timestamptz(6)
+  id                   String        @id @default(uuid()) @db.Uuid
+  websiteId            String        @unique @db.Uuid
+  clientId             String        @db.Uuid
+  /// Package and cycle apply from the next payment; changing them never alters the current period.
+  packageId            String?       @db.Uuid
+  cycle                BillingCycle
+  /// This website's price on the custom package, in paise per period; null = not set. 0 = free.
+  customQuarterlyPaise Int?
+  customYearlyPaise    Int?
+  status               HostingStatus @default(AWAITING_PAYMENT)
+  /// Renew from the client's connects when the period ends (only while connects payments are allowed).
+  autoRenew            Boolean       @default(false)
+  currentPeriodStart   DateTime?     @db.Timestamptz(6)
+  currentPeriodEnd     DateTime?     @db.Timestamptz(6)
   /// Set while in GRACE: the site goes offline at this time unless paid.
-  graceEndsAt        DateTime?     @db.Timestamptz(6)
-  suspendedAt        DateTime?     @db.Timestamptz(6)
-  createdById        String?       @db.Uuid
-  createdAt          DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime      @updatedAt @db.Timestamptz(6)
+  graceEndsAt          DateTime?     @db.Timestamptz(6)
+  suspendedAt          DateTime?     @db.Timestamptz(6)
+  createdById          String?       @db.Uuid
+  createdAt            DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(6)
 
   website   Website          @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
   client    Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  package   HostingPackage?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
   createdBy User?            @relation("HostingSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   payments  HostingPayment[]
   notices   HostingNotice[]
@@ -60,7 +75,39 @@ model HostingSubscription {
   @@index([status, currentPeriodEnd])
   @@index([status, graceEndsAt])
   @@index([clientId])
+  @@index([packageId])
   @@map("hosting_subscriptions")
+}
+
+/// A Razorpay order for one hosting period. Package, cycle and price are fixed when it is created.
+model HostingOrder {
+  id                String             @id @default(uuid()) @db.Uuid
+  clientId          String             @db.Uuid
+  websiteId         String?            @db.Uuid
+  userId            String?            @db.Uuid
+  packageId         String?            @db.Uuid
+  packageName       String             @db.VarChar(60)
+  cycle             BillingCycle
+  amountPaise       Int
+  currency          String             @default("INR") @db.VarChar(3)
+  razorpayOrderId   String             @unique @db.VarChar(64)
+  razorpayPaymentId String?            @unique @db.VarChar(64)
+  /// PAID only once the period is recorded; a captured payment that couldn't be applied stays CREATED with a reason.
+  status            PaymentOrderStatus @default(CREATED)
+  failureReason     String?            @db.VarChar(500)
+  paidAt            DateTime?          @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+
+  client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  website Website?        @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  user    User?           @relation("HostingOrderUser", fields: [userId], references: [id], onDelete: SetNull)
+  package HostingPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  payment HostingPayment?
+
+  @@index([clientId, createdAt])
+  @@index([websiteId, createdAt])
+  @@map("hosting_orders")
 }
 
 /// One paid hosting period. Kept when the website is deleted, for the report.
@@ -69,26 +116,31 @@ model HostingPayment {
   subscriptionId      String?              @db.Uuid
   clientId            String               @db.Uuid
   websiteId           String?              @db.Uuid
-  /// Snapshot, so the report still reads well after the website is renamed or deleted.
+  /// Snapshots, so the report still reads well after a rename or deletion.
   websiteName         String               @db.VarChar(120)
+  packageName         String?              @db.VarChar(60)
   cycle               BillingCycle
-  /// Connects charged for the period.
-  amount              Int
+  /// Price of the period in paise, however it was paid.
+  amountPaise         Int
+  /// Connects charged from the wallet; null when paid by Razorpay or collected offline.
+  connects            Int?
   periodStart         DateTime             @db.Timestamptz(6)
   periodEnd           DateTime             @db.Timestamptz(6)
   paidBy              HostingPayer
   method              HostingPaymentMethod
-  /// Money the admin collected offline, in paise. Null for wallet payments.
+  /// Money the admin collected offline, in paise. Null otherwise.
   collectedPaise      Int?
   reference           String?              @db.VarChar(120)
   note                String?              @db.VarChar(500)
   walletTransactionId String?              @unique @db.Uuid
+  hostingOrderId      String?              @unique @db.Uuid
   recordedById        String?              @db.Uuid
   createdAt           DateTime             @default(now()) @db.Timestamptz(6)
 
   subscription      HostingSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
   walletTransaction WalletTransaction?   @relation(fields: [walletTransactionId], references: [id], onDelete: SetNull)
+  hostingOrder      HostingOrder?        @relation(fields: [hostingOrderId], references: [id], onDelete: SetNull)
   recordedBy        User?                @relation("HostingPaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
 
   /// A period can be paid once, however many people (or the worker) try at the same time.
@@ -118,8 +170,10 @@ model HostingPriceChange {
   scope             HostingPriceScope
   clientId          String?           @db.Uuid
   websiteId         String?           @db.Uuid
-  /// Name of the client or website at the time of the change.
+  /// Name of the package, client or website at the time of the change.
   label             String            @db.VarChar(160)
+  /// Changes made before hosting moved to rupees are in connects.
+  unit              HostingPriceUnit  @default(PAISE)
   oldQuarterlyPrice Int?
   newQuarterlyPrice Int?
   oldYearlyPrice    Int?
@@ -161,6 +215,7 @@ enum HostingPaymentMethod {
   CASH
   UPI
   BANK_TRANSFER
+  RAZORPAY
 }
 
 enum HostingNoticeKind {
@@ -171,6 +226,13 @@ enum HostingNoticeKind {
 
 enum HostingPriceScope {
   GLOBAL
+  /// Legacy: client-level prices were folded into website prices.
   CLIENT
   WEBSITE
+  PACKAGE
+}
+
+enum HostingPriceUnit {
+  CONNECTS
+  PAISE
 }

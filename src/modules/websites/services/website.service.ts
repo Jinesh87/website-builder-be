@@ -45,22 +45,23 @@ import { SUBDOMAIN_PATTERN } from "../validators/website.validator.js";
 import { liveSiteEngineService } from "./live-site-engine.service.js";
 import { buildPublishSnapshot } from "./publish-snapshot.js";
 import { liftSiteChrome } from "./site-chrome.js";
+import { ensureTemplateStudio } from "./template-studio.js";
 
 
 const summaryInclude = {
-  client: { select: { businessName: true, shopFeatureEnabled: true } },
+  client: { select: { businessName: true, isInternal: true, shopFeatureEnabled: true } },
   _count: { select: { pages: true } },
   generation: true,
 } as const satisfies Prisma.WebsiteInclude;
 
-const detailInclude = {
+export const detailInclude = {
   ...summaryInclude,
   domains: { where: { status: DomainStatus.ACTIVE }, orderBy: { isPrimary: "desc" }, select: { hostname: true } },
   pages: { orderBy: { sortOrder: "asc" } },
 } as const satisfies Prisma.WebsiteInclude;
 
 type WebsiteWithSummary = Prisma.WebsiteGetPayload<{ include: typeof summaryInclude }>;
-type WebsiteWithPages = Prisma.WebsiteGetPayload<{ include: typeof detailInclude }>;
+export type WebsiteWithPages = Prisma.WebsiteGetPayload<{ include: typeof detailInclude }>;
 
 const RESERVED_SUBDOMAINS = new Set([
   "www", "app", "api", "admin", "mail", "smtp", "ftp", "cdn", "static", "assets", "dashboard",
@@ -138,6 +139,7 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
     generationStatus: website.generation?.status ?? null,
     hasUnpublishedChanges: website.publishedAt !== null && website.draftUpdatedAt > website.publishedAt,
     seoToolsEnabled: website.seoToolsEnabled,
+    isTemplateStudio: website.client.isInternal,
     shopFeatureEnabled: website.client.shopFeatureEnabled,
     shopEnabled: website.shopEnabled,
     publishedAt: website.publishedAt?.toISOString() ?? null,
@@ -328,6 +330,31 @@ function templateTheme(template: TemplateWithTheme | null): Prisma.JsonValue {
   return template?.themeSettings ?? template?.theme?.settings ?? THEME_SEEDS[0]!.settings;
 }
 
+/** The website's saved draft as template content, without the site's name, menu, contact details or section ids. */
+export function templateContentFrom(website: WebsiteWithPages) {
+  const { siteName: _siteName, menu: _menu, ...header } = website.header as unknown as HeaderData;
+  const {
+    siteName: _footerName,
+    contact: _contact,
+    copyright: _copyright,
+    ...footer
+  } = website.footer as unknown as FooterData;
+  const pages: TemplatePage[] = website.pages.map((page) => ({
+    name: page.name,
+    slug: page.slug,
+    pageType: page.pageType,
+    showInNav: page.showInNav,
+    visible: page.visible,
+    sections: (page.sections as unknown as Section[]).map(({ id: _sectionId, ...section }) => section),
+  }));
+  return {
+    themeSettings: website.theme as Prisma.InputJsonValue,
+    header: header as Prisma.InputJsonValue,
+    footer: footer as Prisma.InputJsonValue,
+    pages: pages as unknown as Prisma.InputJsonValue,
+  };
+}
+
 function slugifySubdomain(name: string): string {
   const slug = name
     .toLowerCase()
@@ -345,7 +372,7 @@ async function isSubdomainAvailable(subdomain: string): Promise<boolean> {
   return !existing;
 }
 
-async function pickSubdomain(requested: string | undefined, name: string): Promise<string> {
+export async function pickSubdomain(requested: string | undefined, name: string): Promise<string> {
   if (requested) {
     if (!(await isSubdomainAvailable(requested))) throw SUBDOMAIN_TAKEN();
     return requested;
@@ -364,7 +391,7 @@ export class WebsiteService {
   async listTemplates(query: TemplateListQuery, actor: AuthUser): Promise<WebsiteTemplateSummary[]> {
     const ownerId = actor.role === UserRole.SUPER_ADMIN ? query.clientId : ownClientId(actor);
     const templates = await prisma.websiteTemplate.findMany({
-      where: { isActive: true, OR: [{ clientId: null }, ...(ownerId ? [{ clientId: ownerId }] : [])] },
+      where: { isActive: true, archivedAt: null, OR: [{ clientId: null }, ...(ownerId ? [{ clientId: ownerId }] : [])] },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     });
     return templates.sort((a, b) => Number(b.clientId !== null) - Number(a.clientId !== null)).map(toTemplateSummary);
@@ -373,7 +400,7 @@ export class WebsiteService {
   /** Public: active platform templates for the gallery. */
   async listPlatformTemplates(): Promise<WebsiteTemplateSummary[]> {
     const templates = await prisma.websiteTemplate.findMany({
-      where: { clientId: null, isActive: true },
+      where: { clientId: null, isActive: true, archivedAt: null },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     });
     return templates.map(toTemplateSummary);
@@ -382,7 +409,7 @@ export class WebsiteService {
   /** Public: only active platform templates, never a client's private ones. */
   async getTemplatePreview(key: string): Promise<TemplatePreview> {
     const template = await prisma.websiteTemplate.findFirst({
-      where: { key, clientId: null, isActive: true },
+      where: { key, clientId: null, isActive: true, archivedAt: null },
       include: { theme: { select: { settings: true } } },
     });
     if (!template) throw new AppError(404, "Template not found", "TEMPLATE_NOT_FOUND");
@@ -419,22 +446,6 @@ export class WebsiteService {
       throw new AppError(409, `You can keep up to ${MAX_CLIENT_TEMPLATES} templates. Delete one first.`, "TEMPLATE_LIMIT");
     }
 
-    const { siteName: _siteName, menu: _menu, ...header } = website.header as unknown as HeaderData;
-    const {
-      siteName: _footerName,
-      contact: _contact,
-      copyright: _copyright,
-      ...footer
-    } = website.footer as unknown as FooterData;
-    const pages: TemplatePage[] = website.pages.map((page) => ({
-      name: page.name,
-      slug: page.slug,
-      pageType: page.pageType,
-      showInNav: page.showInNav,
-      visible: page.visible,
-      sections: (page.sections as unknown as Section[]).map(({ id: _sectionId, ...section }) => section),
-    }));
-
     const template = await prisma.websiteTemplate.create({
       data: {
         key: `custom-${randomUUID()}`,
@@ -442,10 +453,7 @@ export class WebsiteService {
         name: input.name.trim(),
         category: "My templates",
         description: emptyToNull(input.description),
-        themeSettings: website.theme as Prisma.InputJsonValue,
-        header: header as Prisma.InputJsonValue,
-        footer: footer as Prisma.InputJsonValue,
-        pages: pages as unknown as Prisma.InputJsonValue,
+        ...templateContentFrom(website),
         createdById: actor.id,
       },
     });
@@ -518,6 +526,8 @@ export class WebsiteService {
     const where: Prisma.WebsiteWhereInput = {
       AND: [
         scopeFor(actor),
+        // Template Studio websites are managed from the template gallery, not listed with client sites.
+        { client: { isInternal: false } },
         query.clientId ? { clientId: query.clientId } : {},
         query.status ? { status: query.status } : {},
         query.builderType ? { builderType: query.builderType } : {},
@@ -553,15 +563,20 @@ export class WebsiteService {
     return toDetail(website);
   }
 
+  /** `templateStudio` puts the website in the internal Template Studio; only the admin template API sets it. */
   async create(
     input: CreateWebsiteInput,
     actor: AuthUser,
     builderType: BuilderType = BuilderType.MANUAL,
+    options: { templateStudio?: boolean } = {},
   ): Promise<WebsiteDetail> {
     let clientId: string;
-    if (actor.role === UserRole.SUPER_ADMIN) {
+    if (options.templateStudio) {
+      if (actor.role !== UserRole.SUPER_ADMIN) throw new AppError(403, "Insufficient permissions", "FORBIDDEN");
+      clientId = await ensureTemplateStudio();
+    } else if (actor.role === UserRole.SUPER_ADMIN) {
       if (!input.clientId) throw new AppError(400, "Choose a client for this website", "CLIENT_REQUIRED");
-      const client = await prisma.client.findUnique({ where: { id: input.clientId }, select: { id: true } });
+      const client = await prisma.client.findFirst({ where: { id: input.clientId, isInternal: false }, select: { id: true } });
       if (!client) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
       clientId = client.id;
     } else {
@@ -571,7 +586,7 @@ export class WebsiteService {
     const template = input.templateKey
       ? await prisma.websiteTemplate.findFirst({
           // A client's own templates are usable only for that client's websites.
-          where: { key: input.templateKey, isActive: true, OR: [{ clientId: null }, { clientId }] },
+          where: { key: input.templateKey, isActive: true, archivedAt: null, OR: [{ clientId: null }, { clientId }] },
           include: { theme: { select: { settings: true } } },
         })
       : null;
@@ -826,6 +841,13 @@ export class WebsiteService {
   async publish(id: string, input: PublishInput, actor: AuthUser): Promise<WebsiteDetail> {
     const website = await prisma.website.findFirst({ where: { id, ...scopeFor(actor) }, include: detailInclude });
     if (!website) throw NOT_FOUND();
+    if (website.client.isInternal) {
+      throw new AppError(
+        409,
+        "Template Studio websites can't be published. Save them to the template gallery instead.",
+        "TEMPLATE_STUDIO_NOT_PUBLISHABLE",
+      );
+    }
     if (new Date(input.expectedDraftUpdatedAt).getTime() !== website.draftUpdatedAt.getTime()) {
       throw DRAFT_CONFLICT();
     }

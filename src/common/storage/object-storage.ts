@@ -2,6 +2,7 @@ import { createReadStream, existsSync } from "node:fs";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
+import { buffer } from "node:stream/consumers";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
@@ -113,4 +114,9 @@ export async function openObjectStream(key: string, range?: ByteRange): Promise<
   const path = localPathForKey(key);
   if (!existsSync(path)) throw new AppError(404, "File not found", "NOT_FOUND");
   return createReadStream(path, range);
+}
+
+/** Reads a whole object into memory; only for files within the upload size limits. */
+export async function readObject(key: string): Promise<Buffer> {
+  return buffer(await openObjectStream(key));
 }

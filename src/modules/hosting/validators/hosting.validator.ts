@@ -1,10 +1,12 @@
 import Joi from "joi";
 
-/** Connects per period. */
-const MAX_PRICE = 10_000_000;
-const price = Joi.number().integer().min(0).max(MAX_PRICE);
+/** Paise per period: up to ₹1 crore. */
+const MAX_PRICE_PAISE = 1_000_000_000;
+const paise = Joi.number().integer().min(0).max(MAX_PRICE_PAISE);
 const cycle = Joi.string().valid("QUARTERLY", "YEARLY");
+const packageId = Joi.string().uuid();
 const isoDay = Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).messages({ "string.pattern.base": "Use a date like 2026-04-10" });
+const razorpayId = Joi.string().trim().max(64).pattern(/^[A-Za-z0-9_]+$/).required();
 
 export const websiteParamsSchema = Joi.object({
   id: Joi.string().uuid().required(),
@@ -14,18 +16,31 @@ export const clientParamsSchema = Joi.object({
   clientId: Joi.string().uuid().required(),
 });
 
-export const payHostingSchema = Joi.object({
+export const packageParamsSchema = Joi.object({
+  packageId: packageId.required(),
+});
+
+export const planChoiceSchema = Joi.object({
+  packageId: packageId.required(),
   cycle: cycle.required(),
 });
 
+export const confirmCheckoutSchema = Joi.object({
+  razorpayOrderId: razorpayId,
+  razorpayPaymentId: razorpayId,
+  razorpaySignature: Joi.string().trim().hex().max(128).required(),
+});
+
 export const updatePlanSchema = Joi.object({
+  packageId: packageId.optional(),
   cycle: cycle.optional(),
   autoRenew: Joi.boolean().optional(),
-  quarterlyPrice: price.allow(null).optional(),
-  yearlyPrice: price.allow(null).optional(),
+  customQuarterlyPaise: paise.allow(null).optional(),
+  customYearlyPaise: paise.allow(null).optional(),
 }).min(1);
 
 export const collectHostingSchema = Joi.object({
+  packageId: packageId.required(),
   cycle: cycle.required(),
   method: Joi.string().valid("WALLET", "CASH", "UPI", "BANK_TRANSFER").required(),
   reference: Joi.string().trim().max(120).allow("").optional(),
@@ -34,20 +49,25 @@ export const collectHostingSchema = Joi.object({
 
 export const updateSettingsSchema = Joi.object({
   enabled: Joi.boolean().required(),
-  quarterlyPrice: price.required(),
-  yearlyPrice: price.required(),
+  allowConnectsPayment: Joi.boolean().required(),
   reminderDays: Joi.number().integer().min(0).max(60).required(),
   graceDays: Joi.number().integer().min(0).max(60).required(),
 });
 
-export const backfillSchema = Joi.object({
-  freeDays: Joi.number().integer().min(1).max(366).required(),
-  cycle: cycle.required(),
+export const updatePackageSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(60).required(),
+  description: Joi.string().trim().min(1).max(300).required(),
+  features: Joi.array().items(Joi.string().trim().min(1).max(120)).max(20).required(),
+  quarterlyPricePaise: paise.required(),
+  yearlyPricePaise: paise.required(),
+  featured: Joi.boolean().required(),
+  active: Joi.boolean().required(),
 });
 
-export const clientPricesSchema = Joi.object({
-  quarterlyPrice: price.allow(null).required(),
-  yearlyPrice: price.allow(null).required(),
+export const backfillSchema = Joi.object({
+  freeDays: Joi.number().integer().min(1).max(366).required(),
+  packageId: packageId.required(),
+  cycle: cycle.required(),
 });
 
 export const subscriptionsQuerySchema = Joi.object({
@@ -70,7 +90,7 @@ const paymentFilters = {
   websiteId: Joi.string().uuid().allow("").optional(),
   from: isoDay.allow("").optional(),
   to: isoDay.allow("").optional(),
-  method: Joi.string().valid("WALLET", "CASH", "UPI", "BANK_TRANSFER").allow("").optional(),
+  method: Joi.string().valid("WALLET", "CASH", "UPI", "BANK_TRANSFER", "RAZORPAY").allow("").optional(),
   paidBy: Joi.string().valid("CLIENT", "ADMIN", "SYSTEM").allow("").optional(),
 };
 

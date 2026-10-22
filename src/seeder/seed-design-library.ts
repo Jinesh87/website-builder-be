@@ -8,6 +8,7 @@ import {
   sectionsSchema,
   themeSchema,
 } from "../modules/websites/validators/site-content.validator.js";
+import { ADMIN_TEMPLATE_KEY_PREFIX } from "../modules/websites/types/template.types.js";
 import { THEME_SEEDS } from "./design-library/themes.js";
 import { WEBSITE_TEMPLATE_SEEDS, type WebsiteTemplateSeed } from "./design-library/templates.js";
 
@@ -85,13 +86,15 @@ export async function seedDesignLibrary(): Promise<void> {
     });
   }
 
-  // Only seed-created rows (no creator) are retired; client and staff-created templates are left alone.
+  // Only seed-created rows are retired. Super Admin templates are matched by key prefix too, because
+  // their createdById becomes null once the admin's account is deleted.
   const retired = await prisma.websiteTemplate.updateMany({
     where: {
       clientId: null,
       createdById: null,
       isActive: true,
       key: { notIn: WEBSITE_TEMPLATE_SEEDS.map((seed) => seed.key) },
+      NOT: { key: { startsWith: ADMIN_TEMPLATE_KEY_PREFIX } },
     },
     data: { isActive: false },
   });

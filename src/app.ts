@@ -22,6 +22,7 @@ import {
 } from "./modules/hosting/hosting.routes.js";
 import notificationsRouter from "./modules/notifications/notification.routes.js";
 import mediaRouter from "./modules/media/media.routes.js";
+import adminTemplatesRouter from "./modules/websites/admin-template.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
 import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
@@ -97,6 +98,7 @@ app.use("/api/admin/hosting", adminHostingRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin/clients", clientsRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);
+app.use("/api/admin/templates", adminTemplatesRouter);
 app.use("/api/templates", publicTemplatesRouter);
 app.use("/api/pricing", publicPricingRouter);
 app.use("/api/internal/domains", domainSyncRouter);

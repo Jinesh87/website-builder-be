@@ -58,7 +58,6 @@ export const updateTemplateSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).optional(),
   description: optionalText(500),
 }).min(1);
-
 export const saveSectionSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
   section: sectionSchema.required(),

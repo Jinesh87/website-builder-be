@@ -17,6 +17,8 @@ export type WebsiteSummary = {
   hasUnpublishedChanges: boolean;
   /** Shows SEO fields and the pre-publish SEO audit in the editor. */
   seoToolsEnabled: boolean;
+  /** Lives in the internal Template Studio: designs a platform template and can't be published. */
+  isTemplateStudio: boolean;
   /** Super Admin has allowed this company to use a shop. */
   shopFeatureEnabled: boolean;
   /** Client has turned the shop on for this website. */
