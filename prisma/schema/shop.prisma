@@ -1,0 +1,61 @@
+/// A product group on one website's shop. Names are unique per website, ignoring case.
+model ShopCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  websiteId String   @db.Uuid
+  clientId  String   @db.Uuid
+  name      String   @db.VarChar(80)
+  slug      String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  website  Website   @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  products Product[]
+
+  @@unique([websiteId, slug])
+  @@unique([id, websiteId])
+  @@index([clientId])
+  @@map("shop_categories")
+}
+
+/// A sellable item. Each one belongs to a category and has at least one priced variant.
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  websiteId   String   @db.Uuid
+  clientId    String   @db.Uuid
+  categoryId  String   @db.Uuid
+  name        String   @db.VarChar(160)
+  slug        String   @db.VarChar(160)
+  description String?  @db.VarChar(2000)
+  /// How the client configured options (size, colour, …) and which values share a price.
+  optionSets  Json     @default("[]")
+  /// Product photos, in display order. Each item is `{ mediaId, alt }`.
+  images      Json     @default("[]")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  website  Website          @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  category ShopCategory     @relation(fields: [categoryId, websiteId], references: [id, websiteId], onDelete: Restrict)
+  variants ProductVariant[]
+
+  @@unique([websiteId, slug])
+  @@index([websiteId, categoryId])
+  @@index([clientId])
+  @@map("products")
+}
+
+/// One purchasable option of a product. Price is stored in paise.
+model ProductVariant {
+  id         String  @id @default(uuid()) @db.Uuid
+  productId  String  @db.Uuid
+  name       String  @db.VarChar(160)
+  sku        String? @db.VarChar(64)
+  pricePaise Int
+  sortOrder  Int     @default(0)
+  /// Photos for this variant, in display order. Each item is `{ mediaId, alt }`.
+  images     Json    @default("[]")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, sortOrder])
+  @@map("product_variants")
+}

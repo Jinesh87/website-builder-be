@@ -17,6 +17,8 @@ export type ClientView = {
   businessName: string;
   address: string | null;
   source: ClientSource;
+  /** When true, the client may turn a shop on for each website. */
+  shopFeatureEnabled: boolean;
   createdAt: string;
   updatedAt: string;
   /** The client's login account. Null only if the user row was removed manually. */

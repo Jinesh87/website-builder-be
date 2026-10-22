@@ -19,6 +19,7 @@ import notificationsRouter from "./modules/notifications/notification.routes.js"
 import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
+import shopRouter from "./modules/shop/shop.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
 import {
   adminWalletRouter,
@@ -93,6 +94,7 @@ app.use("/api/templates", publicTemplatesRouter);
 app.use("/api/internal/domains", domainSyncRouter);
 app.use("/api/websites/:id/domains", websiteDomainsRouter);
 app.use("/api/websites/:id/hosting", websiteHostingRouter);
+app.use("/api/websites/:id/shop", shopRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
 
