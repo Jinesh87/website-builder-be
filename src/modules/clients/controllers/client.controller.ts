@@ -38,6 +38,15 @@ export class ClientController {
     }
   };
 
+  setShopFeature = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      const { shopFeatureEnabled } = req.body as { shopFeatureEnabled: boolean };
+      res.json({ client: await clientService.setShopFeature(req.params.id, shopFeatureEnabled, req.user!.id) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   suspend = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ client: await clientService.suspend(req.params.id, req.user!.id) });

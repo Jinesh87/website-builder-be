@@ -32,6 +32,7 @@ model User {
   hostingPayments      HostingPayment[]      @relation("HostingPaymentRecordedBy")
   hostingPriceChanges  HostingPriceChange[]  @relation("HostingPriceChangedBy")
   hostingOrders        HostingOrder[]        @relation("HostingOrderUser")
+  inventoryMovements   InventoryMovement[]
 
   @@index([clientId])
   @@index([role, status])
