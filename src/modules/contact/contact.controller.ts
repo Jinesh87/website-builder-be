@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { logger } from "../../config/logger.js";
 import { emailService } from "../email/services/email.service.js";
 
-const DEFAULT_SALES_EMAIL = "bytezorasales@gmail.com";
+const DEFAULT_SALES_EMAIL = "support@bytezoracoders.com";
 
 export class ContactController {
   submitInquiry = async (req: Request, res: Response, next: NextFunction) => {
