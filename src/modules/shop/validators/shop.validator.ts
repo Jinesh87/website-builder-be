@@ -106,3 +106,26 @@ export const shopPaymentSchema = Joi.object({
 export const shopWebhookParamsSchema = Joi.object({
   websiteId: Joi.string().guid().required(),
 });
+
+export const shopInventoryQuerySchema = Joi.object({
+  search: Joi.string().trim().max(120).allow("").optional(),
+});
+
+export const shopInventoryLogQuerySchema = Joi.object({
+  search: Joi.string().trim().max(120).allow("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+});
+
+export const shopInventoryParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  variantId: Joi.string().guid().required(),
+});
+
+export const shopInventoryAdjustSchema = Joi.object({
+  quantity: Joi.number().integer().min(1).max(1_000_000).required().messages({
+    "number.min": "Add at least 1",
+    "number.max": "Quantity is too high",
+    "number.base": "Enter how many to add",
+  }),
+  note: Joi.string().trim().max(300).allow("").optional(),
+});

@@ -54,6 +54,7 @@ function toVariant(variant: ProductRow["variants"][number]): ShopVariantView {
     sku: variant.sku,
     pricePaise: variant.pricePaise,
     sortOrder: variant.sortOrder,
+    quantity: variant.quantity,
     images: readImages(variant.images),
   };
 }
@@ -83,7 +84,7 @@ function readImages(value: Prisma.JsonValue): ShopImageView[] {
   });
 }
 
-function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
+export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
@@ -312,6 +313,29 @@ export class ShopService {
         input.name.trim().toLowerCase() === current.name.toLowerCase()
           ? current.slug
           : await allocateSlug(tx, websiteId, input.name, "product", productId);
+      const existing = await tx.productVariant.findMany({
+        where: { productId },
+        select: { id: true, name: true, quantity: true },
+      });
+      const kept = new Set(expanded.variants.map((variant) => variant.name.toLowerCase()));
+      const removed = existing.filter((variant) => variant.quantity > 0 && !kept.has(variant.name.toLowerCase()));
+      if (removed.length > 0) {
+        await tx.inventoryMovement.createMany({
+          data: removed.map((variant) => ({
+            websiteId,
+            clientId: current.clientId,
+            productId,
+            variantId: variant.id,
+            productName: input.name.trim(),
+            variantName: variant.name,
+            delta: -variant.quantity,
+            quantityAfter: 0,
+            note: "Variant removed",
+            userId: actor.id,
+          })),
+        });
+      }
+      const quantities = new Map(existing.map((variant) => [variant.name.toLowerCase(), variant.quantity]));
       await tx.productVariant.deleteMany({ where: { productId } });
       return tx.product.update({
         where: { id: productId },
@@ -322,7 +346,7 @@ export class ShopService {
           description: emptyToNull(input.description),
           optionSets: expanded.stored as Prisma.InputJsonValue,
           images: images as Prisma.InputJsonValue,
-          variants: { create: variantRows(expanded.variants) },
+          variants: { create: variantRows(expanded.variants, quantities) },
         },
         include: productInclude,
       });
@@ -332,8 +356,31 @@ export class ShopService {
 
   async deleteProduct(websiteId: string, productId: string, actor: AuthUser): Promise<void> {
     await this.openShop(websiteId, actor);
-    const { count } = await prisma.product.deleteMany({ where: { id: productId, websiteId } });
-    if (count === 0) throw new AppError(404, "Product not found", "PRODUCT_NOT_FOUND");
+    const product = await prisma.product.findFirst({
+      where: { id: productId, websiteId },
+      select: { id: true, name: true, clientId: true, variants: { select: { id: true, name: true, quantity: true } } },
+    });
+    if (!product) throw new AppError(404, "Product not found", "PRODUCT_NOT_FOUND");
+    const stocked = product.variants.filter((variant) => variant.quantity > 0);
+    await prisma.$transaction(async (tx) => {
+      if (stocked.length > 0) {
+        await tx.inventoryMovement.createMany({
+          data: stocked.map((variant) => ({
+            websiteId,
+            clientId: product.clientId,
+            productId,
+            variantId: variant.id,
+            productName: product.name,
+            variantName: variant.name,
+            delta: -variant.quantity,
+            quantityAfter: 0,
+            note: "Product deleted",
+            userId: actor.id,
+          })),
+        });
+      }
+      await tx.product.delete({ where: { id: productId } });
+    });
   }
 
   private async resolveImages(clientId: string, images: ShopImageInput[]): Promise<{ mediaId: string; alt: string }[]> {
@@ -467,11 +514,15 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
   return { stored, variants };
 }
 
-function variantRows(variants: ExpandedVariant[]): Prisma.ProductVariantCreateWithoutProductInput[] {
+function variantRows(
+  variants: ExpandedVariant[],
+  quantities = new Map<string, number>(),
+): Prisma.ProductVariantCreateWithoutProductInput[] {
   return variants.map((variant, index) => ({
     id: randomUUID(),
     name: variant.name,
     pricePaise: variant.pricePaise,
+    quantity: quantities.get(variant.name.toLowerCase()) ?? 0,
     images: variant.images as Prisma.InputJsonValue,
     sortOrder: index,
   }));

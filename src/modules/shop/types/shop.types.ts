@@ -52,6 +52,7 @@ export type ShopVariantView = {
   sku: string | null;
   pricePaise: number;
   sortOrder: number;
+  quantity: number;
   images: ShopImageView[];
 };
 

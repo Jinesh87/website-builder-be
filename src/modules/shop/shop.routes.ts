@@ -7,6 +7,10 @@ import { shopController } from "./controllers/shop.controller.js";
 import {
   shopCategoryParamsSchema,
   shopCategorySchema,
+  shopInventoryAdjustSchema,
+  shopInventoryLogQuerySchema,
+  shopInventoryParamsSchema,
+  shopInventoryQuerySchema,
   shopPaymentSchema,
   shopProductParamsSchema,
   shopProductQuerySchema,
@@ -40,6 +44,15 @@ shopRouter.patch(
   shopController.updateProduct,
 );
 shopRouter.delete("/products/:productId", validate(shopProductParamsSchema, "params"), shopController.deleteProduct);
+
+shopRouter.get("/inventory", websiteParams, validate(shopInventoryQuerySchema, "query"), shopController.listInventory);
+shopRouter.patch(
+  "/inventory/:variantId",
+  validate(shopInventoryParamsSchema, "params"),
+  validate(shopInventoryAdjustSchema),
+  shopController.setInventory,
+);
+shopRouter.get("/inventory/log", websiteParams, validate(shopInventoryLogQuerySchema, "query"), shopController.inventoryLog);
 
 shopRouter.get("/payments", websiteParams, shopController.getPaymentConfig);
 shopRouter.put("/payments", websiteParams, validate(shopPaymentSchema), shopController.updatePaymentConfig);

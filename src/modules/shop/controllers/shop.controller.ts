@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { shopInventoryService } from "../services/shop-inventory.service.js";
 import { shopPaymentService, type UpdateShopPaymentInput } from "../services/shop-payment.service.js";
 import { shopService } from "../services/shop.service.js";
 import type { ShopCategoryInput, ShopProductInput, ShopProductQuery } from "../types/shop.types.js";
@@ -88,6 +89,34 @@ export class ShopController {
   revealPaymentSecrets = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ secrets: await shopPaymentService.revealSecrets(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listInventory = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      res.json({ items: await shopInventoryService.list(req.params.id, search, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  setInventory = async (req: Request<WebsiteParams & { variantId: string }>, res: Response, next: NextFunction) => {
+    try {
+      const { quantity, note } = req.body as { quantity: number; note?: string };
+      res.json({ item: await shopInventoryService.addQuantity(req.params.id, req.params.variantId, quantity, note, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  inventoryLog = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      const page = Number(req.query.page) || 1;
+      res.json(await shopInventoryService.log(req.params.id, search, page, req.user!));
     } catch (error) {
       next(error);
     }

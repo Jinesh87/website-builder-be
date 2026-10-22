@@ -41,7 +41,8 @@ function webhookUrl(websiteId: string): string {
 }
 
 function siteUrl(subdomain: string, customDomain: string | null): string {
-  return `https://${customDomain ?? `${subdomain}.${env.PUBLIC_SITE_DOMAIN}`}`;
+  if (customDomain) return `https://${customDomain}`;
+  return `${env.API_PUBLIC_URL}/live/${subdomain}`;
 }
 
 export class ShopPaymentService {

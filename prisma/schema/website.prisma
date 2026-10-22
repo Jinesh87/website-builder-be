@@ -52,6 +52,7 @@ model Website {
   shopCategories ShopCategory[]
   products       Product[]
   shopPayment    ShopPaymentConfig?
+  inventoryMovements InventoryMovement[]
 
   /// Target for (websiteId, clientId) foreign keys, which guarantee child rows
   /// can never point at a website owned by a different client.

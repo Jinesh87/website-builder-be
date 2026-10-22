@@ -33,9 +33,10 @@ model Product {
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
-  website  Website          @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
-  category ShopCategory     @relation(fields: [categoryId, websiteId], references: [id, websiteId], onDelete: Restrict)
-  variants ProductVariant[]
+  website   Website             @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  category  ShopCategory        @relation(fields: [categoryId, websiteId], references: [id, websiteId], onDelete: Restrict)
+  variants  ProductVariant[]
+  movements InventoryMovement[]
 
   @@unique([websiteId, slug])
   @@index([websiteId, categoryId])
@@ -53,8 +54,11 @@ model ProductVariant {
   sortOrder  Int     @default(0)
   /// Photos for this variant, in display order. Each item is `{ mediaId, alt }`.
   images     Json    @default("[]")
+  /// Units on hand. Carried across product edits when the variant name stays the same.
+  quantity   Int     @default(0)
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  movements InventoryMovement[]
 
   @@index([productId, sortOrder])
   @@map("product_variants")
@@ -76,4 +80,29 @@ model ShopPaymentConfig {
   @@unique([websiteId, clientId])
   @@index([clientId])
   @@map("shop_payment_configs")
+}
+
+/// One stock change. Names are copied so the row still reads after the variant is edited or removed.
+model InventoryMovement {
+  id            String   @id @default(uuid()) @db.Uuid
+  websiteId     String   @db.Uuid
+  clientId      String   @db.Uuid
+  productId     String?  @db.Uuid
+  variantId     String?  @db.Uuid
+  productName   String   @db.VarChar(160)
+  variantName   String   @db.VarChar(160)
+  delta         Int
+  quantityAfter Int
+  note          String?  @db.VarChar(300)
+  userId        String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  website Website         @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  user    User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([websiteId, createdAt])
+  @@index([clientId])
+  @@map("inventory_movements")
 }
