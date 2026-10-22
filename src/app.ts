@@ -19,7 +19,7 @@ import notificationsRouter from "./modules/notifications/notification.routes.js"
 import mediaRouter from "./modules/media/media.routes.js";
 import publicTemplatesRouter from "./modules/websites/public-template.routes.js";
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
-import shopRouter from "./modules/shop/shop.routes.js";
+import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
 import {
   adminWalletRouter,
@@ -56,6 +56,7 @@ app.use(
   }),
 );
 app.use("/api/payments/razorpay/webhook", razorpayWebhookRouter);
+app.use("/api/shop/razorpay/webhook", shopRazorpayWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 

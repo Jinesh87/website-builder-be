@@ -91,3 +91,18 @@ export const shopProductParamsSchema = Joi.object({
 export const shopWebsiteParamsSchema = Joi.object({
   id: Joi.string().guid().required(),
 });
+
+export const shopPaymentSchema = Joi.object({
+  razorpayKeyId: Joi.string()
+    .trim()
+    .pattern(/^rzp_(test|live)_[A-Za-z0-9]+$/)
+    .max(100)
+    .required()
+    .messages({ "string.pattern.base": 'Key ID starts with "rzp_test_" or "rzp_live_"' }),
+  razorpayKeySecret: Joi.string().trim().allow("").max(200).optional(),
+  razorpayWebhookSecret: Joi.string().trim().allow("").max(200).optional(),
+});
+
+export const shopWebhookParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+});

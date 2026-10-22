@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { shopPaymentService, type UpdateShopPaymentInput } from "../services/shop-payment.service.js";
 import { shopService } from "../services/shop.service.js";
 import type { ShopCategoryInput, ShopProductInput, ShopProductQuery } from "../types/shop.types.js";
 
@@ -63,6 +64,40 @@ export class ShopController {
       res.json({
         product: await shopService.updateProduct(req.params.id, req.params.productId, req.body as ShopProductInput, req.user!),
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPaymentConfig = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ config: await shopPaymentService.getConfig(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updatePaymentConfig = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ config: await shopPaymentService.updateConfig(req.params.id, req.body as UpdateShopPaymentInput, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  revealPaymentSecrets = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ secrets: await shopPaymentService.revealSecrets(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  razorpayWebhook = async (req: Request<{ websiteId: string }>, res: Response, next: NextFunction) => {
+    try {
+      const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
+      await shopPaymentService.handleWebhook(req.params.websiteId, rawBody, req.header("x-razorpay-signature"));
+      res.json({ ok: true });
     } catch (error) {
       next(error);
     }

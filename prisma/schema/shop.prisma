@@ -59,3 +59,21 @@ model ProductVariant {
   @@index([productId, sortOrder])
   @@map("product_variants")
 }
+
+/// Razorpay account for this website's shop. Secrets are AES-256-GCM encrypted.
+/// The webhook lives on the platform API; the site URL is what Razorpay reviews.
+model ShopPaymentConfig {
+  websiteId                   String   @id @db.Uuid
+  clientId                    String   @db.Uuid
+  razorpayKeyId               String?  @db.VarChar(100)
+  razorpayKeySecretCipher     String?  @db.Text
+  razorpayWebhookSecretCipher String?  @db.Text
+  createdAt                   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
+
+  website Website @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+
+  @@unique([websiteId, clientId])
+  @@index([clientId])
+  @@map("shop_payment_configs")
+}
