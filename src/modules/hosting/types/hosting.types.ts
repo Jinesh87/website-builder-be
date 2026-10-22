@@ -119,6 +119,16 @@ export type UpdateHostingSettingsInput = {
   graceDays: number;
 };
 
+/** The public pricing page: platform default prices only, never client or website prices. */
+export type PublicHostingPricingView = {
+  quarterlyConnects: number;
+  yearlyConnects: number;
+  quarterlyPaise: number;
+  yearlyPaise: number;
+  reminderDays: number;
+  graceDays: number;
+};
+
 export type HostingPriceChangeView = {
   id: string;
   scope: HostingPriceScope;
