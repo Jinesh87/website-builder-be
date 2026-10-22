@@ -3,10 +3,10 @@ import { test } from "node:test";
 import { salesInquiryEmail } from "../email/templates/email.templates.js";
 import { contactInquirySchema } from "./contact.validator.js";
 
-test("salesInquiryEmail renders a professional executive template for bytezorasales@gmail.com", () => {
+test("salesInquiryEmail renders a professional executive template for support@bytezoracoders.com", () => {
   const rendered = salesInquiryEmail({
     brand: "Bytezora",
-    to: "bytezorasales@gmail.com",
+    to: "support@bytezoracoders.com",
     senderName: "Arjun Ramesh",
     senderEmail: "arjun@example.com",
     senderPhone: "+91 98765 43210",
@@ -19,7 +19,7 @@ test("salesInquiryEmail renders a professional executive template for bytezorasa
   assert.equal(rendered.subject, "[Bytezora Sales] New Inquiry: Plans and pricing from Arjun Ramesh");
 
   // Verify HTML contents
-  assert.match(rendered.html, /bytezorasales@gmail\.com/);
+  assert.match(rendered.html, /support@bytezoracoders\.com/);
   assert.match(rendered.html, /Arjun Ramesh/);
   assert.match(rendered.html, /arjun@example\.com/);
   assert.match(rendered.html, /\+91 98765 43210/);
@@ -30,7 +30,7 @@ test("salesInquiryEmail renders a professional executive template for bytezorasa
 
   // Verify plain text contents
   assert.match(rendered.text, /BYTEZORA WEBBUILDER - NEW CLIENT INQUIRY/);
-  assert.match(rendered.text, /bytezorasales@gmail\.com/);
+  assert.match(rendered.text, /support@bytezoracoders\.com/);
   assert.match(rendered.text, /Arjun Ramesh/);
   assert.match(rendered.text, /arjun@example\.com/);
 });
