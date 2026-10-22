@@ -1,11 +1,18 @@
 import type { NextFunction, Request, Response } from "express";
-import type { BillingCycle } from "../../../generated/prisma/enums.js";
 import { hostingAdminService } from "../services/hosting-admin.service.js";
+import { hostingCheckoutService } from "../services/hosting-checkout.service.js";
 import { hostingService } from "../services/hosting.service.js";
-import type { ClientOverviewQuery, CyclePriceInput, PaymentListQuery, SubscriptionListQuery } from "../types/hosting.types.js";
+import type {
+  ClientOverviewQuery,
+  PaymentListQuery,
+  PlanChoice,
+  RazorpayConfirmation,
+  SubscriptionListQuery,
+} from "../types/hosting.types.js";
 
 type WebsiteParams = { id: string };
 type ClientParams = { clientId: string };
+type PackageParams = { packageId: string };
 
 export class HostingController {
   get = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
@@ -24,10 +31,26 @@ export class HostingController {
     }
   };
 
-  pay = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+  checkout = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
-      const { cycle } = req.body as { cycle: BillingCycle };
-      res.json({ hosting: await hostingService.payFromWallet(req.params.id, cycle, req.user!) });
+      res.json(await hostingCheckoutService.createCheckout(req.params.id, req.body as PlanChoice, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  confirmCheckout = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const input = req.body as RazorpayConfirmation;
+      res.json({ hosting: await hostingCheckoutService.confirm(req.params.id, input, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  payWithConnects = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ hosting: await hostingService.payWithConnects(req.params.id, req.body as PlanChoice, req.user!) });
     } catch (error) {
       next(error);
     }
@@ -65,6 +88,14 @@ export class HostingController {
     }
   };
 
+  updatePackage = async (req: Request<PackageParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ settings: await hostingAdminService.updatePackage(req.params.packageId, req.body, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   backfill = async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json(await hostingAdminService.backfill(req.body, req.user!));
@@ -84,15 +115,6 @@ export class HostingController {
   clientHosting = async (req: Request<ClientParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ hosting: await hostingAdminService.clientHosting(req.params.clientId) });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  updateClientPrices = async (req: Request<ClientParams>, res: Response, next: NextFunction) => {
-    try {
-      const prices = req.body as CyclePriceInput;
-      res.json({ hosting: await hostingAdminService.updateClientPrices(req.params.clientId, prices, req.user!) });
     } catch (error) {
       next(error);
     }

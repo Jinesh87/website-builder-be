@@ -8,6 +8,8 @@ model Client {
   canPublish   Boolean      @default(true)
   /// AI model chosen by the client; null = use the platform default from AiConfig.
   aiModel      String?      @db.VarChar(100)
+  /// Platform-owned workspace (the Template Studio): hidden from client lists, never billed or published.
+  isInternal   Boolean      @default(false)
   createdAt    DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
 
@@ -22,9 +24,9 @@ model Client {
   paymentOrders        PaymentOrder[]
   aiModelPrices        ClientAiModelPrice[]
   emailConfig          ClientEmailConfig?
-  hostingPrice         ClientHostingPrice?
   hostingSubscriptions HostingSubscription[]
   hostingPayments      HostingPayment[]
+  hostingOrders        HostingOrder[]
   notifications        Notification[]
 
   @@map("clients")

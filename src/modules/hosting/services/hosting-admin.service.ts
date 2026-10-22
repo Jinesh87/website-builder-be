@@ -4,32 +4,38 @@ import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { UserRole } from "../../../common/constants/roles.js";
 import {
-  BillingCycle,
+  HostingPaymentMethod,
   HostingPriceScope,
   HostingStatus,
   WebsiteStatus,
+  type HostingPackage,
   type Prisma,
 } from "../../../generated/prisma/client.js";
+import { paymentSettingsService } from "../../wallet/services/payment-settings.service.js";
 import { CONNECTS_PER_RUPEE } from "../../wallet/services/wallet.service.js";
 import type {
+  AdminHostingPackageView,
+  BackfillInput,
   ClientAttention,
   ClientHostingView,
   ClientOverviewList,
   ClientOverviewQuery,
-  CyclePriceInput,
   HostingPriceChangeView,
   HostingSettingsView,
   PaymentListQuery,
   SubscriptionListQuery,
   UpdateHostingSettingsInput,
+  UpdatePackageInput,
 } from "../types/hosting.types.js";
 import { addDays, CYCLE_LABELS, formatBillingDate } from "./hosting-period.js";
 import {
+  availablePrice,
   loadHostingRules,
   METHOD_LABELS,
   paymentInclude,
-  pricesFrom,
+  planPrice,
   recordPriceChange,
+  toPackageView,
   toPaymentView,
   toSubscriptionView,
 } from "./hosting.service.js";
@@ -112,6 +118,7 @@ function toPriceChangeView(
     id: row.id,
     scope: row.scope,
     label: row.label,
+    unit: row.unit,
     oldQuarterlyPrice: row.oldQuarterlyPrice,
     newQuarterlyPrice: row.newQuarterlyPrice,
     oldYearlyPrice: row.oldYearlyPrice,
@@ -121,56 +128,103 @@ function toPriceChangeView(
   };
 }
 
+function isSellable(pkg: HostingPackage): boolean {
+  return pkg.active && !pkg.isCustom && (pkg.quarterlyPricePaise > 0 || pkg.yearlyPricePaise > 0);
+}
+
 export class HostingAdminService {
   async settings(): Promise<HostingSettingsView> {
-    const [row, liveSitesWithoutPlan, plansOnGlobalPrice, changes] = await Promise.all([
+    const [row, packages, plansByPackage, liveSitesWithoutPlan, changes, razorpayConfigured] = await Promise.all([
       prisma.hostingConfig.findUnique({ where: { id: CONFIG_ID } }),
+      prisma.hostingPackage.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+      prisma.hostingSubscription.groupBy({ by: ["packageId"], _count: { _all: true } }),
       prisma.website.count({ where: { status: WebsiteStatus.PUBLISHED, hosting: { is: null } } }),
-      prisma.hostingSubscription.count({
-        where: { quarterlyPrice: null, yearlyPrice: null, client: { hostingPrice: { is: null } } },
-      }),
       prisma.hostingPriceChange.findMany({
         orderBy: { createdAt: "desc" },
         take: RECENT_PRICE_CHANGES,
         include: { changedBy: { select: { fullName: true } } },
       }),
+      paymentSettingsService.isConfigured(),
     ]);
     const rules = row ?? (await loadHostingRules());
     return {
       enabled: rules.enabled,
-      quarterlyPrice: rules.quarterlyPrice,
-      yearlyPrice: rules.yearlyPrice,
+      allowConnectsPayment: rules.allowConnectsPayment,
       reminderDays: rules.reminderDays,
       graceDays: rules.graceDays,
       connectsPerRupee: CONNECTS_PER_RUPEE,
+      razorpayConfigured,
       updatedAt: row?.updatedAt.toISOString() ?? null,
+      packages: packages.map(
+        (pkg): AdminHostingPackageView => ({
+          ...toPackageView(pkg, null),
+          active: pkg.active,
+          sortOrder: pkg.sortOrder,
+          plans: plansByPackage.find((group) => group.packageId === pkg.id)?._count._all ?? 0,
+          updatedAt: pkg.updatedAt.toISOString(),
+        }),
+      ),
       liveSitesWithoutPlan,
-      plansOnGlobalPrice,
       recentPriceChanges: changes.map(toPriceChangeView),
     };
   }
 
   async updateSettings(input: UpdateHostingSettingsInput, actor: AuthUser): Promise<HostingSettingsView> {
-    if (input.enabled && (input.quarterlyPrice <= 0 || input.yearlyPrice <= 0)) {
-      throw new AppError(400, "Set both prices before turning hosting billing on.", "HOSTING_PRICES_REQUIRED");
+    if (input.enabled && !(await prisma.hostingPackage.findMany()).some(isSellable)) {
+      throw new AppError(400, "Price and show at least one package before turning hosting billing on.", "HOSTING_PRICES_REQUIRED");
     }
-    const before = await loadHostingRules();
+    await prisma.hostingConfig.upsert({ where: { id: CONFIG_ID }, create: { id: CONFIG_ID, ...input }, update: input });
+    logger.info({ actorId: actor.id, enabled: input.enabled, allowConnectsPayment: input.allowConnectsPayment }, "Hosting settings updated");
+    return this.settings();
+  }
+
+  /** Edits one package. Prices apply from each plan's next payment; paid periods never change. */
+  async updatePackage(packageId: string, input: UpdatePackageInput, actor: AuthUser): Promise<HostingSettingsView> {
+    const before = await prisma.hostingPackage.findUnique({ where: { id: packageId } });
+    if (!before) throw new AppError(404, "Package not found", "PACKAGE_NOT_FOUND");
+
+    const prices = before.isCustom
+      ? { quarterlyPricePaise: 0, yearlyPricePaise: 0 }
+      : { quarterlyPricePaise: input.quarterlyPricePaise, yearlyPricePaise: input.yearlyPricePaise };
+    const features = [...new Set(input.features.map((feature) => feature.trim()).filter(Boolean))];
+    const after = { ...before, ...prices, active: input.active };
+
     await prisma.$transaction(async (tx) => {
-      await tx.hostingConfig.upsert({ where: { id: CONFIG_ID }, create: { id: CONFIG_ID, ...input }, update: input });
-      await recordPriceChange(tx, {
-        scope: HostingPriceScope.GLOBAL,
-        label: "Platform default",
-        before: { quarterlyPrice: before.quarterlyPrice, yearlyPrice: before.yearlyPrice },
-        after: { quarterlyPrice: input.quarterlyPrice, yearlyPrice: input.yearlyPrice },
-        actorId: actor.id,
+      if (input.featured) {
+        await tx.hostingPackage.updateMany({ where: { id: { not: packageId }, featured: true }, data: { featured: false } });
+      }
+      await tx.hostingPackage.update({
+        where: { id: packageId },
+        data: { name: input.name.trim(), description: input.description.trim(), features, featured: input.featured, active: input.active, ...prices },
       });
+      const others = await tx.hostingPackage.findMany({ where: { id: { not: packageId } } });
+      const config = await tx.hostingConfig.findUnique({ where: { id: CONFIG_ID } });
+      if (config?.enabled && ![after, ...others].some(isSellable)) {
+        throw new AppError(
+          400,
+          "Hosting billing is on, so at least one priced package must stay visible. Turn billing off first.",
+          "HOSTING_PRICES_REQUIRED",
+        );
+      }
+      if (!before.isCustom) {
+        await recordPriceChange(tx, {
+          scope: HostingPriceScope.PACKAGE,
+          label: input.name.trim(),
+          before: { quarterly: before.quarterlyPricePaise, yearly: before.yearlyPricePaise },
+          after: { quarterly: prices.quarterlyPricePaise, yearly: prices.yearlyPricePaise },
+          actorId: actor.id,
+        });
+      }
     });
-    logger.info({ actorId: actor.id, enabled: input.enabled }, "Hosting settings updated");
+    logger.info({ actorId: actor.id, packageId, active: input.active }, "Hosting package updated");
     return this.settings();
   }
 
   /** Gives every published site without a plan a free period, so turning billing on takes nothing offline. */
-  async backfill(input: { freeDays: number; cycle: BillingCycle }, actor: AuthUser): Promise<{ created: number }> {
+  async backfill(input: BackfillInput, actor: AuthUser): Promise<{ created: number }> {
+    const pkg = await prisma.hostingPackage.findUnique({ where: { id: input.packageId } });
+    // The plan must be renewable once the free days end.
+    availablePrice(pkg, input.cycle, null);
     const websites = await prisma.website.findMany({
       where: { status: WebsiteStatus.PUBLISHED, hosting: { is: null } },
       select: { id: true, clientId: true },
@@ -180,6 +234,7 @@ export class HostingAdminService {
       data: websites.map((website) => ({
         websiteId: website.id,
         clientId: website.clientId,
+        packageId: pkg!.id,
         cycle: input.cycle,
         status: HostingStatus.ACTIVE,
         currentPeriodStart: now,
@@ -199,6 +254,7 @@ export class HostingAdminService {
     const search = query.search?.trim();
     const where: Prisma.ClientWhereInput = {
       AND: [
+        { isInternal: false },
         search
           ? {
               OR: [
@@ -244,8 +300,8 @@ export class HostingAdminService {
           wallet: { select: { balance: true } },
         },
       }),
-      prisma.client.count(),
-      prisma.website.count(),
+      prisma.client.count({ where: { isInternal: false } }),
+      prisma.website.count({ where: { client: { isInternal: false } } }),
       prisma.website.count({ where: { status: WebsiteStatus.PUBLISHED } }),
       prisma.hostingSubscription.count({ where: { status: HostingStatus.ACTIVE, currentPeriodEnd: { lte: dueBy } } }),
       prisma.hostingSubscription.count({ where: { status: HostingStatus.SUSPENDED } }),
@@ -271,7 +327,7 @@ export class HostingAdminService {
         by: ["clientId"],
         where: inPage,
         _count: { _all: true },
-        _sum: { amount: true, collectedPaise: true },
+        _sum: { amountPaise: true, collectedPaise: true },
       }),
     ]);
 
@@ -312,7 +368,7 @@ export class HostingAdminService {
             : null,
           paid: {
             payments: paid?._count._all ?? 0,
-            connects: paid?._sum.amount ?? 0,
+            amountPaise: paid?._sum.amountPaise ?? 0,
             collectedPaise: paid?._sum.collectedPaise ?? 0,
           },
         };
@@ -340,7 +396,6 @@ export class HostingAdminService {
         source: true,
         createdAt: true,
         users: ownerSelect,
-        hostingPrice: true,
         wallet: { select: { balance: true } },
         websites: {
           orderBy: { createdAt: "asc" },
@@ -352,22 +407,21 @@ export class HostingAdminService {
             offlineReason: true,
             publishedAt: true,
             updatedAt: true,
-            hosting: true,
+            hosting: { include: { package: true } },
           },
         },
       },
     });
     if (!client) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
 
-    const [rules, payments, totals, lastPayments] = await Promise.all([
-      loadHostingRules(),
+    const [payments, totals, lastPayments] = await Promise.all([
       prisma.hostingPayment.findMany({
         where: { clientId },
         orderBy: { createdAt: "desc" },
         take: CLIENT_RECENT_PAYMENTS,
         include: paymentInclude,
       }),
-      prisma.hostingPayment.aggregate({ where: { clientId }, _count: { _all: true }, _sum: { amount: true, collectedPaise: true } }),
+      prisma.hostingPayment.aggregate({ where: { clientId }, _count: { _all: true }, _sum: { amountPaise: true, collectedPaise: true } }),
       prisma.hostingPayment.findMany({
         where: { clientId, websiteId: { in: client.websites.map((website) => website.id) } },
         orderBy: { createdAt: "desc" },
@@ -385,11 +439,6 @@ export class HostingAdminService {
         createdAt: client.createdAt.toISOString(),
         owner: client.users[0] ?? null,
       },
-      clientPrices: {
-        quarterlyPrice: client.hostingPrice?.quarterlyPrice ?? null,
-        yearlyPrice: client.hostingPrice?.yearlyPrice ?? null,
-      },
-      globalPrices: { quarterlyPrice: rules.quarterlyPrice, yearlyPrice: rules.yearlyPrice },
       balance: Number(client.wallet?.balance ?? 0),
       websites: client.websites.map((website) => ({
         id: website.id,
@@ -400,47 +449,16 @@ export class HostingAdminService {
         publishedAt: website.publishedAt?.toISOString() ?? null,
         updatedAt: website.updatedAt.toISOString(),
         subscription: website.hosting && toSubscriptionView(website.hosting),
-        prices: pricesFrom(website.hosting, client.hostingPrice, rules),
+        price: planPrice(website.hosting),
         lastPayment: lastByWebsite.get(website.id) ?? null,
       })),
       payments: payments.map(toPaymentView),
       totals: {
         payments: totals._count._all,
-        connects: totals._sum.amount ?? 0,
+        amountPaise: totals._sum.amountPaise ?? 0,
         collectedPaise: totals._sum.collectedPaise ?? 0,
       },
     };
-  }
-
-  /** Both null removes the client's own prices, so their websites use the global price again. */
-  async updateClientPrices(clientId: string, input: CyclePriceInput, actor: AuthUser): Promise<ClientHostingView> {
-    const client = await prisma.client.findUnique({
-      where: { id: clientId },
-      select: { businessName: true, hostingPrice: true },
-    });
-    if (!client) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
-    const before: CyclePriceInput = {
-      quarterlyPrice: client.hostingPrice?.quarterlyPrice ?? null,
-      yearlyPrice: client.hostingPrice?.yearlyPrice ?? null,
-    };
-
-    await prisma.$transaction(async (tx) => {
-      if (input.quarterlyPrice === null && input.yearlyPrice === null) {
-        await tx.clientHostingPrice.deleteMany({ where: { clientId } });
-      } else {
-        await tx.clientHostingPrice.upsert({ where: { clientId }, create: { clientId, ...input }, update: input });
-      }
-      await recordPriceChange(tx, {
-        scope: HostingPriceScope.CLIENT,
-        clientId,
-        label: client.businessName,
-        before,
-        after: input,
-        actorId: actor.id,
-      });
-    });
-    logger.info({ clientId, actorId: actor.id }, "Client hosting prices updated");
-    return this.clientHosting(clientId);
   }
 
   async listSubscriptions(query: SubscriptionListQuery) {
@@ -466,16 +484,16 @@ export class HostingAdminService {
         : {}),
     };
 
-    const [rules, rows, total, byStatus, dueSoon] = await Promise.all([
-      loadHostingRules(),
+    const [rows, total, byStatus, dueSoon] = await Promise.all([
       prisma.hostingSubscription.findMany({
         where,
         orderBy: [{ currentPeriodEnd: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         include: {
+          package: true,
           website: { select: { id: true, name: true, subdomain: true, status: true, offlineReason: true } },
-          client: { select: { id: true, businessName: true, hostingPrice: true } },
+          client: { select: { id: true, businessName: true } },
         },
       }),
       prisma.hostingSubscription.count({ where }),
@@ -491,7 +509,7 @@ export class HostingAdminService {
         subscription: toSubscriptionView(row),
         website: row.website,
         client: { id: row.client.id, businessName: row.client.businessName },
-        price: pricesFrom(row, row.client.hostingPrice, rules)[row.cycle],
+        price: planPrice(row),
       })),
       summary: {
         active: countOf(HostingStatus.ACTIVE),
@@ -518,11 +536,20 @@ export class HostingAdminService {
         include: paymentInclude,
       }),
       prisma.hostingPayment.count({ where }),
-      prisma.hostingPayment.aggregate({ where, _sum: { amount: true, collectedPaise: true } }),
+      prisma.hostingPayment.groupBy({ by: ["method"], where, _sum: { amountPaise: true, connects: true } }),
     ]);
+    const sumOf = (methods: HostingPaymentMethod[]) =>
+      totals.filter((group) => methods.includes(group.method)).reduce((sum, group) => sum + (group._sum.amountPaise ?? 0), 0);
     return {
       items: rows.map(toPaymentView),
-      summary: { payments: total, connects: totals._sum.amount ?? 0, collectedPaise: totals._sum.collectedPaise ?? 0 },
+      summary: {
+        payments: total,
+        amountPaise: sumOf(Object.values(HostingPaymentMethod)),
+        onlinePaise: sumOf([HostingPaymentMethod.RAZORPAY]),
+        connectsPaise: sumOf([HostingPaymentMethod.WALLET]),
+        connects: totals.find((group) => group.method === HostingPaymentMethod.WALLET)?._sum.connects ?? 0,
+        collectedPaise: sumOf([HostingPaymentMethod.CASH, HostingPaymentMethod.UPI, HostingPaymentMethod.BANK_TRANSFER]),
+      },
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -540,9 +567,11 @@ export class HostingAdminService {
       "Paid on",
       "Client",
       "Website",
-      "Plan",
+      "Package",
+      "Billing",
       "Period start",
       "Period end",
+      "Amount (INR)",
       "Connects",
       "Paid by",
       "Method",
@@ -556,10 +585,12 @@ export class HostingAdminService {
         formatBillingDate(row.createdAt),
         row.client.businessName,
         row.websiteName,
+        row.packageName,
         CYCLE_LABELS[row.cycle],
         formatBillingDate(row.periodStart),
         formatBillingDate(row.periodEnd),
-        row.amount,
+        (row.amountPaise / 100).toFixed(2),
+        row.connects,
         PAYER_LABELS[row.paidBy],
         METHOD_LABELS[row.method],
         row.collectedPaise === null ? null : (row.collectedPaise / 100).toFixed(2),

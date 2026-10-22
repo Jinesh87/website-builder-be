@@ -50,25 +50,20 @@ export function isHostingLive(status: HostingStatus | null | undefined): boolean
   return status === "ACTIVE" || status === "GRACE";
 }
 
-export type CyclePrices = { quarterlyPrice: number | null; yearlyPrice: number | null };
-export type PriceSource = "WEBSITE" | "CLIENT" | "GLOBAL";
-export type ResolvedPrice = { amount: number; source: PriceSource };
+export type PackagePricing = { isCustom: boolean; quarterlyPricePaise: number; yearlyPricePaise: number };
+export type CustomPricing = { customQuarterlyPaise: number | null; customYearlyPaise: number | null };
 
-function priceFor(prices: CyclePrices | null, cycle: BillingCycle): number | null {
-  if (!prices) return null;
-  return cycle === "QUARTERLY" ? prices.quarterlyPrice : prices.yearlyPrice;
-}
-
-/** The website's own price wins, then the client's, then the platform default. */
-export function resolvePrice(
-  cycle: BillingCycle,
-  sources: { website: CyclePrices | null; client: CyclePrices | null; global: { quarterlyPrice: number; yearlyPrice: number } },
-): ResolvedPrice {
-  const website = priceFor(sources.website, cycle);
-  if (website !== null) return { amount: website, source: "WEBSITE" };
-  const client = priceFor(sources.client, cycle);
-  if (client !== null) return { amount: client, source: "CLIENT" };
-  return { amount: priceFor(sources.global, cycle) ?? 0, source: "GLOBAL" };
+/**
+ * Paise a website pays per period on a package, or null when it can't be bought on that cycle: a listed package
+ * with no price yet, or the custom package without a price agreed for this website (0 = free).
+ */
+export function priceFor(cycle: BillingCycle, pkg: PackagePricing, website: CustomPricing | null): number | null {
+  if (pkg.isCustom) {
+    if (!website) return null;
+    return cycle === "QUARTERLY" ? website.customQuarterlyPaise : website.customYearlyPaise;
+  }
+  const listed = cycle === "QUARTERLY" ? pkg.quarterlyPricePaise : pkg.yearlyPricePaise;
+  return listed > 0 ? listed : null;
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });

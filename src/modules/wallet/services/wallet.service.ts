@@ -93,9 +93,23 @@ export function priceInPaise(connects: number): number {
   return Math.round((connects * 100) / CONNECTS_PER_RUPEE);
 }
 
-function formatInr(paise: number): string {
-  return `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0 })}`;
+/**
+ * Connects that pay a rupee price: ₹2,100 = 6,300 connects. Rounded up, allowing for the half paisa that
+ * `priceInPaise` rounds away, so ₹16.67 is 50 connects again rather than 51.
+ */
+export function connectsForPaise(paise: number): number {
+  return Math.max(0, Math.ceil(((paise - 0.5) * CONNECTS_PER_RUPEE) / 100));
 }
+
+export function formatInr(paise: number): string {
+  return `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+}
+
+/** The parts of a Razorpay webhook body this app reads. */
+export type RazorpayWebhookEvent = {
+  event?: string;
+  payload?: { payment?: { entity?: { id: string; order_id: string | null; amount: number; error_description?: string | null } } };
+};
 
 export function formatConnects(connects: number): string {
   return `${connects.toLocaleString("en-IN", { maximumFractionDigits: 3 })} ${connects === 1 ? "connect" : "connects"}`;
@@ -287,22 +301,29 @@ export class WalletService {
     });
   }
 
-  /** Razorpay webhook: `payment.captured` / `order.paid` credit the wallet, `payment.failed` records the reason. */
-  async handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<void> {
+  /** Checks the `X-Razorpay-Signature` of a webhook and parses it. */
+  async verifyWebhook(rawBody: Buffer, signature: string | undefined): Promise<RazorpayWebhookEvent> {
     const secret = await paymentSettingsService.getWebhookSecret();
     if (!secret) throw new AppError(503, "Webhook secret isn't configured.", "PAYMENTS_NOT_CONFIGURED");
     if (!signature || !isValidWebhookSignature(secret, rawBody, signature)) {
       throw new AppError(400, "Invalid webhook signature.", "INVALID_SIGNATURE");
     }
+    try {
+      return JSON.parse(rawBody.toString("utf8")) as RazorpayWebhookEvent;
+    } catch {
+      throw new AppError(400, "Invalid webhook body.", "VALIDATION_ERROR");
+    }
+  }
 
-    const event = JSON.parse(rawBody.toString("utf8")) as {
-      event?: string;
-      payload?: { payment?: { entity?: { id: string; order_id: string | null; amount: number; error_description?: string | null } } };
-    };
+  /**
+   * Connects purchases: `payment.captured` / `order.paid` credit the wallet, `payment.failed` records the reason.
+   * Returns false when the event is about another kind of order.
+   */
+  async applyWebhook(event: RazorpayWebhookEvent): Promise<boolean> {
     const payment = event.payload?.payment?.entity;
-    if (!payment?.order_id) return;
+    if (!payment?.order_id) return false;
     const known = await prisma.paymentOrder.findUnique({ where: { razorpayOrderId: payment.order_id }, select: { id: true } });
-    if (!known) return;
+    if (!known) return false;
 
     if (event.event === "payment.captured" || event.event === "order.paid") {
       const credited = await this.markPaid(payment.order_id, payment.id, payment.amount);
@@ -313,6 +334,7 @@ export class WalletService {
         data: { status: PaymentOrderStatus.FAILED, failureReason: payment.error_description?.slice(0, 500) ?? "Payment failed" },
       });
     }
+    return true;
   }
 }
 

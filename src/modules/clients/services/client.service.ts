@@ -72,6 +72,7 @@ export class ClientService {
     };
 
     const where: Prisma.ClientWhereInput = {
+      isInternal: false,
       ...(query.source ? { source: query.source } : {}),
       ...(query.status ? { users: { some: userFilter } } : {}),
       ...(search
@@ -254,7 +255,7 @@ export class ClientService {
   }
 
   private async findOrThrow(id: string): Promise<ClientWithOwner> {
-    const client = await prisma.client.findUnique({ where: { id }, include: clientInclude });
+    const client = await prisma.client.findFirst({ where: { id, isInternal: false }, include: clientInclude });
     if (!client) throw NOT_FOUND();
     return client;
   }

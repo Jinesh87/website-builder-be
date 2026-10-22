@@ -108,31 +108,34 @@ async function assertFolderBelongs(folderId: string, clientId: string): Promise<
 
 /**
  * Content stores media as `<API_PUBLIC_URL>/api/media/files/<id>`; matching on the path keeps this
- * working if the public URL changes. Only the owning client's content is searched, and older
- * (non-live) published versions are history, so they don't count.
+ * working if the public URL changes. Older (non-live) published versions are history, so they don't count.
+ *
+ * Normally only the owning client's content is searched. Template Studio files (`everywhere`) end up in
+ * every website created from a platform template, so all clients' websites are searched for those.
+ * Platform templates are always searched, whoever owns the file.
  */
-async function findUsages(mediaId: string, clientId: string): Promise<MediaUsage[]> {
+async function findUsages(mediaId: string, clientId: string, everywhere: boolean): Promise<MediaUsage[]> {
   const pattern = `%/media/files/${mediaId}%`;
   return prisma.$queryRaw<MediaUsage[]>`
     SELECT 'PAGE' AS kind, w.id::text AS "websiteId", w.name AS "websiteName", p.name AS label
       FROM pages p JOIN websites w ON w.id = p."websiteId"
-      WHERE p."clientId" = ${clientId}::uuid AND p.sections::text LIKE ${pattern}
+      WHERE (${everywhere}::boolean OR p."clientId" = ${clientId}::uuid) AND p.sections::text LIKE ${pattern}
     UNION ALL
     SELECT 'HEADER', w.id::text, w.name, NULL FROM websites w
-      WHERE w."clientId" = ${clientId}::uuid AND w.header::text LIKE ${pattern}
+      WHERE (${everywhere}::boolean OR w."clientId" = ${clientId}::uuid) AND w.header::text LIKE ${pattern}
     UNION ALL
     SELECT 'FOOTER', w.id::text, w.name, NULL FROM websites w
-      WHERE w."clientId" = ${clientId}::uuid AND w.footer::text LIKE ${pattern}
+      WHERE (${everywhere}::boolean OR w."clientId" = ${clientId}::uuid) AND w.footer::text LIKE ${pattern}
     UNION ALL
     SELECT 'LOGO', w.id::text, w.name, NULL FROM websites w
-      WHERE w."clientId" = ${clientId}::uuid AND w."logoMediaId" = ${mediaId}::uuid
+      WHERE (${everywhere}::boolean OR w."clientId" = ${clientId}::uuid) AND w."logoMediaId" = ${mediaId}::uuid
     UNION ALL
     SELECT 'LIVE_SITE', w.id::text, w.name, NULL FROM websites w
       JOIN website_versions v ON v.id = w."liveVersionId"
-      WHERE w."clientId" = ${clientId}::uuid AND v.snapshot::text LIKE ${pattern}
+      WHERE (${everywhere}::boolean OR w."clientId" = ${clientId}::uuid) AND v.snapshot::text LIKE ${pattern}
     UNION ALL
     SELECT 'TEMPLATE', NULL, NULL, t.name FROM website_templates t
-      WHERE t."clientId" = ${clientId}::uuid
+      WHERE (t."clientId" = ${clientId}::uuid OR t."clientId" IS NULL)
         AND (t.pages::text LIKE ${pattern} OR t.header::text LIKE ${pattern} OR t.footer::text LIKE ${pattern})
     UNION ALL
     SELECT 'SAVED_SECTION', NULL, NULL, s.name FROM saved_sections s
@@ -356,19 +359,22 @@ export class MediaService {
   }
 
   async usage(id: string, actor: AuthUser): Promise<MediaUsage[]> {
-    const file = await prisma.mediaFile.findFirst({ where: { id, ...scopeFor(actor) }, select: { id: true, clientId: true } });
+    const file = await prisma.mediaFile.findFirst({
+      where: { id, ...scopeFor(actor) },
+      select: { id: true, clientId: true, client: { select: { isInternal: true } } },
+    });
     if (!file) throw NOT_FOUND();
-    return findUsages(file.id, file.clientId);
+    return findUsages(file.id, file.clientId, file.client.isInternal);
   }
 
   /** Refuses while any draft, live site, template or saved section still references the file. */
   async remove(id: string, actor: AuthUser): Promise<void> {
     const file = await prisma.mediaFile.findFirst({
       where: { id, ...scopeFor(actor) },
-      select: { id: true, clientId: true, storageKey: true },
+      select: { id: true, clientId: true, storageKey: true, client: { select: { isInternal: true } } },
     });
     if (!file) throw NOT_FOUND();
-    const usages = await findUsages(file.id, file.clientId);
+    const usages = await findUsages(file.id, file.clientId, file.client.isInternal);
     if (usages.length > 0) {
       throw new AppError(409, "This file is still in use. Remove it from these places first.", "MEDIA_IN_USE", { usages });
     }

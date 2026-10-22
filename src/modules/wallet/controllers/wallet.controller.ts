@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../../../common/errors/AppError.js";
 import { logger } from "../../../config/logger.js";
+import { hostingCheckoutService } from "../../hosting/services/hosting-checkout.service.js";
 import { aiBillingService } from "../services/ai-billing.service.js";
 import { adminWalletService, type AdminPaymentQuery, type AdminTransactionQuery } from "../services/admin-wallet.service.js";
 import { paymentSettingsService } from "../services/payment-settings.service.js";
@@ -67,7 +68,8 @@ export class WalletController {
   webhook = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
-      await walletService.handleWebhook(rawBody, req.header("x-razorpay-signature"));
+      const event = await walletService.verifyWebhook(rawBody, req.header("x-razorpay-signature"));
+      if (!(await walletService.applyWebhook(event))) await hostingCheckoutService.applyWebhook(event);
       res.json({ ok: true });
     } catch (error) {
       next(error);

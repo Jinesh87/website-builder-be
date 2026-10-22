@@ -9,6 +9,7 @@ import { seedSuperAdmin } from "./seeder/seed-super-admin.js";
 import { ensureAiUsageTable } from "./modules/admin-ai-usage/services/ai-usage.service.js";
 import { domainChecker } from "./modules/domains/services/domain-checker.js";
 import { generationWorker } from "./modules/websites/services/website-generation.service.js";
+import { ensureTemplateStudio } from "./modules/websites/services/template-studio.js";
 import { exchangeRateService } from "./modules/wallet/services/exchange-rate.service.js";
 import { hostingBillingWorker } from "./modules/hosting/services/hosting-billing.worker.js";
 
@@ -19,6 +20,7 @@ async function bootstrap() {
   await connectRedis();
   await seedSuperAdmin();
   await seedDesignLibrary();
+  await ensureTemplateStudio();
 
   const server = http.createServer(app);
   server.listen(env.PORT, "0.0.0.0", () => {

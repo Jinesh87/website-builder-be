@@ -17,6 +17,8 @@ export type WebsiteSummary = {
   hasUnpublishedChanges: boolean;
   /** Shows SEO fields and the pre-publish SEO audit in the editor. */
   seoToolsEnabled: boolean;
+  /** Lives in the internal Template Studio: designs a platform template and can't be published. */
+  isTemplateStudio: boolean;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;

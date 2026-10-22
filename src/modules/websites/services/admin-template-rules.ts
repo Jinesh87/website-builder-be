@@ -1,0 +1,27 @@
+import { randomBytes } from "node:crypto";
+import type { PlatformTemplateOrigin, PlatformTemplateStatus } from "../types/admin-template.types.js";
+import { ADMIN_TEMPLATE_KEY_PREFIX } from "../types/template.types.js";
+
+/**
+ * e.g. "admin-dental-clinic-modern-3f9a1c"; the random suffix keeps keys unique when names repeat.
+ * Always fits `website_templates.key` (80 chars) and the public `^[a-z0-9-]+$` key pattern.
+ */
+export function platformTemplateKey(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+  return `${ADMIN_TEMPLATE_KEY_PREFIX}${slug || "template"}-${randomBytes(3).toString("hex")}`;
+}
+
+export function templateOrigin(template: { key: string }): PlatformTemplateOrigin {
+  return template.key.startsWith(ADMIN_TEMPLATE_KEY_PREFIX) ? "ADMIN" : "BUILT_IN";
+}
+
+export function templateStatus(template: { archivedAt: Date | null; isActive: boolean }): PlatformTemplateStatus {
+  if (template.archivedAt) return "ARCHIVED";
+  return template.isActive ? "LIVE" : "HIDDEN";
+}

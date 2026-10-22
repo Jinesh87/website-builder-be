@@ -19,29 +19,34 @@ model Theme {
 /// Copied into the website on creation, never referenced afterwards.
 /// clientId null = platform template (Super Admin); otherwise private to that client.
 model WebsiteTemplate {
-  id            String   @id @default(uuid()) @db.Uuid
-  key           String   @unique @db.VarChar(80)
-  clientId      String?  @db.Uuid
-  name          String   @db.VarChar(120)
-  category      String   @db.VarChar(60)
-  description   String?  @db.VarChar(500)
-  thumbnailUrl  String?  @db.VarChar(2048)
-  themeId       String?  @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
+  key             String    @unique @db.VarChar(80)
+  clientId        String?   @db.Uuid
+  name            String    @db.VarChar(120)
+  category        String    @db.VarChar(60)
+  description     String?   @db.VarChar(500)
+  thumbnailUrl    String?   @db.VarChar(2048)
+  themeId         String?   @db.Uuid
   /// Full ThemeSettings for client templates (their colours may not match any preset).
-  themeSettings Json?
-  header        Json
-  footer        Json
+  themeSettings   Json?
+  header          Json
+  footer          Json
   /// Ordered [{ name, slug, pageType, sections }].
-  pages         Json
-  isActive      Boolean  @default(true)
-  sortOrder     Int      @default(0)
-  createdById   String?  @db.Uuid
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  pages           Json
+  isActive        Boolean   @default(true)
+  sortOrder       Int       @default(0)
+  /// Template Studio website the Super Admin designs this template in; one template per website.
+  sourceWebsiteId String?   @unique @db.Uuid
+  /// Soft delete: hidden everywhere and restorable. Websites already created from it are unaffected.
+  archivedAt      DateTime? @db.Timestamptz(6)
+  createdById     String?   @db.Uuid
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
-  theme     Theme?  @relation(fields: [themeId], references: [id], onDelete: SetNull)
-  client    Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("WebsiteTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  theme         Theme?   @relation(fields: [themeId], references: [id], onDelete: SetNull)
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceWebsite Website? @relation("WebsiteTemplateSource", fields: [sourceWebsiteId], references: [id], onDelete: SetNull)
+  createdBy     User?    @relation("WebsiteTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([isActive, sortOrder])
   @@index([clientId])

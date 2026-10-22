@@ -9,15 +9,17 @@ import {
   Prisma,
   type HostingSubscription,
 } from "../../../generated/prisma/client.js";
+import { connectsForPaise } from "../../wallet/services/wallet.service.js";
 import { notifyHostingInBackground, type HostingNoticeTarget } from "./hosting-notifier.js";
-import { addDays, resolvePrice } from "./hosting-period.js";
-import { hostingService, loadHostingRules, type HostingRules } from "./hosting.service.js";
+import { addDays } from "./hosting-period.js";
+import { hostingService, loadHostingRules, planPrice, type HostingRules } from "./hosting.service.js";
 
 const BATCH_SIZE = 100;
 
 const subscriptionInclude = {
   website: { select: { name: true } },
-  client: { select: { hostingPrice: true, wallet: { select: { balance: true } } } },
+  package: true,
+  client: { select: { wallet: { select: { balance: true } } } },
 } as const satisfies Prisma.HostingSubscriptionInclude;
 
 type DueSubscription = Prisma.HostingSubscriptionGetPayload<{ include: typeof subscriptionInclude }>;
@@ -26,18 +28,15 @@ function target(subscription: DueSubscription): HostingNoticeTarget {
   return { clientId: subscription.clientId, websiteId: subscription.websiteId, websiteName: subscription.website.name };
 }
 
-function priceOf(subscription: DueSubscription, rules: HostingRules): number {
-  return resolvePrice(subscription.cycle, { website: subscription, client: subscription.client.hostingPrice, global: rules }).amount;
-}
-
-function balanceOf(subscription: DueSubscription): number {
-  return Number(subscription.client.wallet?.balance ?? 0);
-}
-
-/** Free plans renew regardless of balance, which AI usage can push below zero. */
-function canAfford(subscription: DueSubscription, rules: HostingRules): boolean {
-  const price = priceOf(subscription, rules);
-  return price === 0 || balanceOf(subscription) >= price;
+/**
+ * The worker renews from connects only when the platform allows it, the client turned auto-renew on, and the
+ * balance covers the price. Free plans renew regardless of balance, which AI usage can push below zero.
+ */
+function renewsFromConnects(subscription: DueSubscription, rules: HostingRules): boolean {
+  const price = planPrice(subscription);
+  if (price === null || !subscription.autoRenew) return false;
+  if (price === 0) return true;
+  return rules.allowConnectsPayment && Number(subscription.client.wallet?.balance ?? 0) >= connectsForPaise(price);
 }
 
 /** Records that a notice went out for this period; false when it already had (so it is sent once). */
@@ -78,14 +77,13 @@ export class HostingBillingService {
       notifyHostingInBackground(target(subscription), {
         kind: "RENEWAL_REMINDER",
         periodEnd,
-        price: priceOf(subscription, rules),
-        balance: balanceOf(subscription),
-        autoRenew: subscription.autoRenew,
+        price: planPrice(subscription),
+        renewsFromConnects: renewsFromConnects(subscription, rules),
       });
     }
   }
 
-  /** Ended ACTIVE plans: auto-renew from the wallet when possible, otherwise start the grace days. */
+  /** Ended ACTIVE plans: auto-renew from connects when possible, otherwise start the grace days. */
   private async renewDue(rules: HostingRules, now: Date): Promise<void> {
     const due = await prisma.hostingSubscription.findMany({
       where: { status: HostingStatus.ACTIVE, currentPeriodEnd: { lte: now } },
@@ -94,9 +92,7 @@ export class HostingBillingService {
       take: BATCH_SIZE,
     });
     for (const subscription of due) {
-      if (subscription.autoRenew && canAfford(subscription, rules) && (await this.autoRenew(subscription, now))) {
-        continue;
-      }
+      if (renewsFromConnects(subscription, rules) && (await this.autoRenew(subscription, now))) continue;
       await this.startGrace(subscription, rules, now);
     }
   }
@@ -109,7 +105,7 @@ export class HostingBillingService {
       take: BATCH_SIZE,
     });
     for (const subscription of inGrace) {
-      if (canAfford(subscription, rules)) await this.autoRenew(subscription, now);
+      if (renewsFromConnects(subscription, rules)) await this.autoRenew(subscription, now);
     }
   }
 
@@ -142,7 +138,7 @@ export class HostingBillingService {
     if (claimed.count === 0) return;
     logger.info({ websiteId: subscription.websiteId, graceEndsAt }, "Hosting expired; grace started");
     if (graceEndsAt > now && (await claimNotice(subscription, HostingNoticeKind.EXPIRED, periodEnd))) {
-      notifyHostingInBackground(target(subscription), { kind: "EXPIRED", graceEndsAt, price: priceOf(subscription, rules) });
+      notifyHostingInBackground(target(subscription), { kind: "EXPIRED", graceEndsAt, price: planPrice(subscription) });
     }
   }
 
@@ -158,7 +154,8 @@ export class HostingBillingService {
       });
       return true;
     } catch (error) {
-      if (error instanceof AppError && ["INSUFFICIENT_BALANCE", "HOSTING_CHANGED"].includes(error.code)) return false;
+      const expected = ["INSUFFICIENT_BALANCE", "HOSTING_CHANGED", "CONNECTS_PAYMENT_DISABLED", "PACKAGE_NOT_AVAILABLE", "PLAN_REQUIRED"];
+      if (error instanceof AppError && expected.includes(error.code)) return false;
       logger.error({ err: error, websiteId: subscription.websiteId }, "Hosting auto-renewal failed");
       return false;
     }

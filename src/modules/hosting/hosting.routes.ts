@@ -7,13 +7,15 @@ import { hostingController } from "./controllers/hosting.controller.js";
 import {
   backfillSchema,
   clientParamsSchema,
-  clientPricesSchema,
   clientsOverviewQuerySchema,
   collectHostingSchema,
-  payHostingSchema,
+  confirmCheckoutSchema,
+  packageParamsSchema,
   paymentsCsvQuerySchema,
   paymentsQuerySchema,
+  planChoiceSchema,
   subscriptionsQuerySchema,
+  updatePackageSchema,
   updatePlanSchema,
   updateSettingsSchema,
   websiteParamsSchema,
@@ -27,12 +29,28 @@ websiteHostingRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.
 websiteHostingRouter.get("/", byWebsite, hostingController.get);
 websiteHostingRouter.patch("/", byWebsite, validate(updatePlanSchema), hostingController.updatePlan);
 websiteHostingRouter.post(
+  "/checkout",
+  authorize(UserRole.CLIENT),
+  byWebsite,
+  rateLimit({ name: "hosting-checkout", max: 30, windowSeconds: 60 * 60 }),
+  validate(planChoiceSchema),
+  hostingController.checkout,
+);
+websiteHostingRouter.post(
+  "/checkout/verify",
+  authorize(UserRole.CLIENT),
+  byWebsite,
+  rateLimit({ name: "hosting-checkout-verify", max: 60, windowSeconds: 60 * 60 }),
+  validate(confirmCheckoutSchema),
+  hostingController.confirmCheckout,
+);
+websiteHostingRouter.post(
   "/pay",
   authorize(UserRole.CLIENT),
   byWebsite,
   rateLimit({ name: "hosting-pay", max: 30, windowSeconds: 60 * 60 }),
-  validate(payHostingSchema),
-  hostingController.pay,
+  validate(planChoiceSchema),
+  hostingController.payWithConnects,
 );
 websiteHostingRouter.post(
   "/collect",
@@ -43,16 +61,22 @@ websiteHostingRouter.post(
   hostingController.collect,
 );
 
-/** Public: the platform's default hosting prices for the marketing pricing page. */
+/** Public: the packages and list prices for the marketing pricing page. */
 export const publicPricingRouter = Router();
 publicPricingRouter.use(rateLimit({ name: "public-pricing", max: 120, windowSeconds: 60 }));
 publicPricingRouter.get("/", hostingController.publicPricing);
 
-/** Super admin: global hosting prices and billing rules. */
+/** Super admin: hosting packages and billing rules. */
 export const hostingSettingsRouter = Router();
 hostingSettingsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 hostingSettingsRouter.get("/", hostingController.getSettings);
 hostingSettingsRouter.put("/", validate(updateSettingsSchema), hostingController.updateSettings);
+hostingSettingsRouter.put(
+  "/packages/:packageId",
+  validate(packageParamsSchema, "params"),
+  validate(updatePackageSchema),
+  hostingController.updatePackage,
+);
 hostingSettingsRouter.post(
   "/backfill",
   rateLimit({ name: "hosting-backfill", max: 10, windowSeconds: 60 * 60 }),
@@ -74,4 +98,3 @@ adminHostingRouter.get(
 );
 adminHostingRouter.get("/clients", validate(clientsOverviewQuerySchema, "query"), hostingController.clients);
 adminHostingRouter.get("/clients/:clientId", byClient, hostingController.clientHosting);
-adminHostingRouter.put("/clients/:clientId/prices", byClient, validate(clientPricesSchema), hostingController.updateClientPrices);
