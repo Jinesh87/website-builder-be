@@ -17,6 +17,12 @@ export function platformTemplateKey(name: string): string {
   return `${ADMIN_TEMPLATE_KEY_PREFIX}${slug || "template"}-${randomBytes(3).toString("hex")}`;
 }
 
+/** "3001" or "#3001" as a template number to search for; null for any other search text. */
+export function templateNumberFromSearch(search: string): number | null {
+  const match = /^#?(\d{1,9})$/.exec(search.trim());
+  return match ? Number(match[1]) : null;
+}
+
 export function templateOrigin(template: { key: string }): PlatformTemplateOrigin {
   return template.key.startsWith(ADMIN_TEMPLATE_KEY_PREFIX) ? "ADMIN" : "BUILT_IN";
 }

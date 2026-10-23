@@ -15,10 +15,20 @@ import type {
   TemplateDetailsInput,
 } from "../types/admin-template.types.js";
 import type { FooterData, HeaderData, Section } from "../types/site-content.types.js";
-import type { TemplatePage } from "../types/template.types.js";
-import { platformTemplateKey, templateOrigin, templateStatus } from "./admin-template-rules.js";
+import { ADMIN_TEMPLATE_KEY_PREFIX, type TemplatePage } from "../types/template.types.js";
+import type { TemplatePreview } from "../types/website.types.js";
+import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
+import { platformTemplateKey, templateNumberFromSearch, templateOrigin, templateStatus } from "./admin-template-rules.js";
+import { templateCategoryService } from "./template-category.service.js";
 import { ensureTemplateStudio } from "./template-studio.js";
-import { detailInclude, pickSubdomain, templateContentFrom, websiteService, type WebsiteWithPages } from "./website.service.js";
+import {
+  detailInclude,
+  pickSubdomain,
+  templateContentFrom,
+  templatePreview,
+  websiteService,
+  type WebsiteWithPages,
+} from "./website.service.js";
 
 const MAX_LISTED_TEMPLATES = 500;
 const MAX_IMPORTED_MEDIA = 200;
@@ -34,8 +44,10 @@ function toView(template: TemplateRow): AdminTemplateView {
   return {
     id: template.id,
     key: template.key,
+    number: template.number,
     name: template.name,
     category: template.category,
+    categoryId: template.categoryId,
     description: template.description,
     origin: templateOrigin(template),
     status: templateStatus(template),
@@ -56,20 +68,42 @@ function emptyToNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/** Next gallery number for a Super Admin template. A create that fails leaves a gap; numbers are never reused. */
+async function nextTemplateNumber(): Promise<number> {
+  const [row] = await prisma.$queryRaw<{ value: bigint }[]>`SELECT nextval('website_template_number_seq') AS value`;
+  return Number(row!.value);
+}
+
 function assertHasSections(website: WebsiteWithPages): void {
   if (!website.pages.some((page) => (page.sections as unknown as Section[]).length > 0)) {
     throw new AppError(400, "Add at least one section before saving this website as a template.", "TEMPLATE_EMPTY");
   }
 }
 
-function detailsData(input: Partial<TemplateDetailsInput>): Prisma.WebsiteTemplateUpdateInput {
+/** Checks the category still exists, and stores its name alongside the id as the display label. */
+async function detailsData(input: Partial<TemplateDetailsInput>): Promise<Prisma.WebsiteTemplateUncheckedUpdateInput> {
+  const category = input.categoryId !== undefined ? await templateCategoryService.findOrThrow(input.categoryId) : null;
   return {
     ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-    ...(input.category !== undefined ? { category: input.category } : {}),
+    ...(category ? { categoryId: category.id, category: category.name } : {}),
     ...(input.description !== undefined ? { description: emptyToNull(input.description) } : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
   };
 }
+
+const BUILT_IN_TEMPLATE_KEYS = WEBSITE_TEMPLATE_SEEDS.map((seed) => seed.key);
+
+const ORIGIN_WHERE = {
+  "built-in": { key: { in: BUILT_IN_TEMPLATE_KEYS } },
+  custom: { key: { startsWith: ADMIN_TEMPLATE_KEY_PREFIX } },
+} as const satisfies Record<NonNullable<AdminTemplateListQuery["origin"]>, Prisma.WebsiteTemplateWhereInput>;
+
+const VALID_PLATFORM_KEY_WHERE: Prisma.WebsiteTemplateWhereInput = {
+  OR: [
+    { key: { in: BUILT_IN_TEMPLATE_KEYS } },
+    { key: { startsWith: ADMIN_TEMPLATE_KEY_PREFIX } },
+  ],
+};
 
 /**
  * Super Admin management of the platform template gallery. Templates are designed in Template Studio
@@ -79,6 +113,7 @@ function detailsData(input: Partial<TemplateDetailsInput>): Prisma.WebsiteTempla
 export class AdminTemplateService {
   async list(query: AdminTemplateListQuery): Promise<AdminTemplateView[]> {
     const search = query.search?.trim();
+    const searchNumber = search ? templateNumberFromSearch(search) : null;
     const byStatus: Prisma.WebsiteTemplateWhereInput =
       query.status === "archived"
         ? { archivedAt: { not: null } }
@@ -90,16 +125,20 @@ export class AdminTemplateService {
     const templates = await prisma.websiteTemplate.findMany({
       where: {
         clientId: null,
-        ...byStatus,
-        ...(query.category ? { category: query.category } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: "insensitive" } },
-                { key: { contains: search.toLowerCase() } },
-              ],
-            }
-          : {}),
+        AND: [
+          byStatus,
+          query.origin ? ORIGIN_WHERE[query.origin] : VALID_PLATFORM_KEY_WHERE,
+          query.categoryId ? { categoryId: query.categoryId } : {},
+          search
+            ? {
+                OR: [
+                  { name: { contains: search, mode: "insensitive" } },
+                  { key: { contains: search.toLowerCase() } },
+                  ...(searchNumber !== null ? [{ number: searchNumber }] : []),
+                ],
+              }
+            : {},
+        ],
       },
       include: templateInclude,
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
@@ -136,17 +175,21 @@ export class AdminTemplateService {
     assertHasSections(website);
     if (await this.sourceTaken(website.id)) throw this.alreadySaved();
 
+    const category = await templateCategoryService.findOrThrow(input.categoryId);
     const content = templateContentFrom(website);
     const { _max } = await prisma.websiteTemplate.aggregate({ where: { clientId: null }, _max: { sortOrder: true } });
+    const number = await nextTemplateNumber();
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const template = await prisma.websiteTemplate.create({
           data: {
             key: platformTemplateKey(input.name),
+            number,
             clientId: null,
             name: input.name.trim(),
-            category: input.category,
+            categoryId: category.id,
+            category: category.name,
             description: emptyToNull(input.description),
             ...content,
             isActive: input.isActive,
@@ -177,7 +220,7 @@ export class AdminTemplateService {
 
     const updated = await prisma.websiteTemplate.update({
       where: { id: template.id },
-      data: { ...detailsData(input), ...templateContentFrom(website) },
+      data: { ...(await detailsData(input)), ...templateContentFrom(website) },
       include: templateInclude,
     });
     logger.info({ templateId: updated.id, websiteId: website.id, actorId: actor.id }, "Platform template design updated");
@@ -195,7 +238,7 @@ export class AdminTemplateService {
 
     const updated = await prisma.websiteTemplate.update({
       where: { id: template.id },
-      data: detailsData({ ...details, isActive }),
+      data: await detailsData({ ...details, isActive }),
       include: templateInclude,
     });
     logger.info({ templateId: updated.id, actorId: actor.id, fields: Object.keys(input) }, "Platform template details updated");
@@ -225,6 +268,43 @@ export class AdminTemplateService {
     });
     logger.info({ templateId: updated.id, actorId: actor.id }, "Platform template restored");
     return toView(updated);
+  }
+
+  /** Any platform template, including hidden and archived ones the public preview won't serve. */
+  async preview(templateId: string): Promise<TemplatePreview> {
+    const template = await prisma.websiteTemplate.findFirst({
+      where: { id: templateId, clientId: null, ...VALID_PLATFORM_KEY_WHERE },
+      include: { theme: { select: { settings: true } } },
+    });
+    if (!template) throw TEMPLATE_NOT_FOUND();
+    return templatePreview(template);
+  }
+
+  /**
+   * Hard delete of an archived, admin-made template and the Template Studio website it was designed in.
+   * Websites created from it keep their own copy, and the Studio's media files stay, so live sites that
+   * show those images keep working.
+   */
+  async deletePermanently(templateId: string, actor: AuthUser): Promise<void> {
+    const template = await this.findPlatformOrThrow(templateId);
+    if (templateOrigin(template) === "BUILT_IN") {
+      throw new AppError(400, "Built-in templates can only be shown or hidden.", "TEMPLATE_BUILT_IN");
+    }
+    if (!template.archivedAt) {
+      throw new AppError(409, "Delete the template first; only archived templates can be removed for good.", "TEMPLATE_NOT_ARCHIVED");
+    }
+
+    const studioWebsiteId = template.sourceWebsiteId;
+    await prisma.$transaction(async (tx) => {
+      await tx.websiteTemplate.delete({ where: { id: template.id } });
+      if (!studioWebsiteId) return;
+      const studio = await tx.website.findFirst({
+        where: { id: studioWebsiteId, client: { isInternal: true } },
+        select: { id: true },
+      });
+      if (studio) await tx.website.delete({ where: { id: studio.id } });
+    });
+    logger.info({ templateId: template.id, key: template.key, studioWebsiteId, actorId: actor.id }, "Platform template deleted permanently");
   }
 
   /**
@@ -345,7 +425,10 @@ export class AdminTemplateService {
   }
 
   private async findPlatformOrThrow(templateId: string): Promise<TemplateRow> {
-    const template = await prisma.websiteTemplate.findFirst({ where: { id: templateId, clientId: null }, include: templateInclude });
+    const template = await prisma.websiteTemplate.findFirst({
+      where: { id: templateId, clientId: null, ...VALID_PLATFORM_KEY_WHERE },
+      include: templateInclude,
+    });
     if (!template) throw TEMPLATE_NOT_FOUND();
     return template;
   }

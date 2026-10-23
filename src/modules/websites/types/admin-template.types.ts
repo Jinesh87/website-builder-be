@@ -1,5 +1,3 @@
-import type { PlatformTemplateCategory } from "./template.types.js";
-
 /** BUILT_IN rows come from the seed files and can only be shown or hidden; ADMIN rows are fully editable. */
 export type PlatformTemplateOrigin = "BUILT_IN" | "ADMIN";
 export type PlatformTemplateStatus = "LIVE" | "HIDDEN" | "ARCHIVED";
@@ -8,8 +6,12 @@ export type AdminTemplateView = {
   id: string;
   /** Unique, URL-safe template ID used by the gallery and `templateKey` on website creation. */
   key: string;
+  /** Gallery number (#3001, …) of a Super Admin template; null for built-in ones, which use their marketing number. */
+  number: number | null;
   name: string;
+  /** Category name, for display. */
   category: string;
+  categoryId: string | null;
   description: string | null;
   origin: PlatformTemplateOrigin;
   status: PlatformTemplateStatus;
@@ -23,7 +25,8 @@ export type AdminTemplateView = {
 
 export type AdminTemplateListQuery = {
   status?: "live" | "hidden" | "archived";
-  category?: string;
+  origin?: "built-in" | "custom";
+  categoryId?: string;
   search?: string;
 };
 
@@ -34,7 +37,7 @@ export type CreateStudioWebsiteInput =
 
 export type TemplateDetailsInput = {
   name: string;
-  category: PlatformTemplateCategory;
+  categoryId: string;
   description?: string | null;
   isActive: boolean;
 };

@@ -69,6 +69,23 @@ export class AdminTemplateController {
       next(error);
     }
   };
+
+  preview = async (req: Request<TemplateParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await adminTemplateService.preview(req.params.templateId));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deletePermanently = async (req: Request<TemplateParams>, res: Response, next: NextFunction) => {
+    try {
+      await adminTemplateService.deletePermanently(req.params.templateId, req.user!);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const adminTemplateController = new AdminTemplateController();

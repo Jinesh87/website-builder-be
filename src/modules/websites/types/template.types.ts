@@ -16,18 +16,20 @@ export type TemplatePage = {
   sections: TemplateSection[];
 };
 
-/** Gallery categories; Super Admin templates must use one of these. */
-export const PLATFORM_TEMPLATE_CATEGORIES = [
-  "Business",
-  "Agency",
-  "Services",
-  "Health",
-  "Food",
-  "Portfolio",
-  "Landing page",
-  "Education",
+/**
+ * Categories the built-in templates use, in gallery order. Seeded as locked `template_categories` rows;
+ * the 20261023120000_template_categories migration inserts the same slugs and names.
+ */
+export const SYSTEM_TEMPLATE_CATEGORIES = [
+  { slug: "business", name: "Business" },
+  { slug: "agency", name: "Agency" },
+  { slug: "services", name: "Services" },
+  { slug: "health", name: "Health" },
+  { slug: "food", name: "Food" },
+  { slug: "portfolio", name: "Portfolio" },
+  { slug: "landing-page", name: "Landing page" },
+  { slug: "education", name: "Education" },
 ] as const;
-export type PlatformTemplateCategory = (typeof PLATFORM_TEMPLATE_CATEGORIES)[number];
 
 /** Keys of templates a Super Admin published from the editor; the design-library seeder never touches them. */
 export const ADMIN_TEMPLATE_KEY_PREFIX = "admin-";

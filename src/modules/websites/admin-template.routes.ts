@@ -48,7 +48,9 @@ adminTemplatesRouter.patch(
   validate(patchPlatformTemplateSchema),
   adminTemplateController.updateDetails,
 );
+adminTemplatesRouter.get("/:templateId/preview", byTemplateId, adminTemplateController.preview);
 adminTemplatesRouter.delete("/:templateId", byTemplateId, writeLimit, adminTemplateController.archive);
+adminTemplatesRouter.delete("/:templateId/permanent", byTemplateId, writeLimit, adminTemplateController.deletePermanently);
 adminTemplatesRouter.post("/:templateId/restore", byTemplateId, writeLimit, adminTemplateController.restore);
 
 export default adminTemplatesRouter;
