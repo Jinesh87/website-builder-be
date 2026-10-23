@@ -13,6 +13,7 @@ import {
   salesInquiryEmail,
   testEmail,
   verificationCodeEmail,
+  type ContactLeadField,
   type RenderedEmail,
 } from "../templates/email.templates.js";
 
@@ -132,9 +133,10 @@ export class EmailService {
     to: string;
     siteName: string;
     senderName: string;
-    senderEmail: string;
+    senderEmail?: string;
     senderPhone?: string;
     message: string;
+    fields?: ContactLeadField[];
   }) {
     await this.send(params.to, () => contactFormLeadEmail(params), { replyTo: params.senderEmail });
   }

@@ -698,7 +698,7 @@ Sitemap: ${domain}/sitemap.xml
 </html>`;
 
     // Not cached: the next request retries the site-kit renderer.
-    return { html: fullHtml, statusCode: 200, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
+    return { html: fullHtml, statusCode: 200, contentType: "text/html; charset=utf-8", cachedAt: Date.now(), transient: true };
   }
 
   /** The editor's own components, rendered by the site-renderer service. Null means use the legacy renderer. */

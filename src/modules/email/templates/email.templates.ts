@@ -154,16 +154,56 @@ export function testEmail(params: { brand: string }): RenderedEmail {
   };
 }
 
+export type ContactLeadField = { label: string; value: string };
+
+function contactFieldsLeadEmail(params: {
+  siteName: string;
+  senderName: string;
+  fields: ContactLeadField[];
+}): RenderedEmail {
+  const brand = escapeHtml(params.siteName);
+  const rows = params.fields
+    .map(
+      (field) =>
+        `<tr>
+           <td style="padding:8px 12px 8px 0;vertical-align:top;width:160px;color:#64748b;font-size:13px;font-weight:600;">${escapeHtml(field.label)}</td>
+           <td style="padding:8px 0;vertical-align:top;color:#0f172a;font-size:14px;line-height:1.5;word-break:break-word;">${escapeHtml(field.value).replace(/\n/g, "<br/>")}</td>
+         </tr>`,
+    )
+    .join("");
+
+  return {
+    subject: `New inquiry from ${params.senderName} (${params.siteName})`,
+    html: layout(
+      params.siteName,
+      `<h1 style="margin:0 0 16px;font-size:20px;color:#0f172a;">New Contact Form Inquiry</h1>
+       <p style="margin:0 0 16px;color:#475569;font-size:14px;">Someone submitted the contact form on <strong>${brand}</strong>.</p>
+       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:20px;">
+         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table>
+       </div>
+       <p style="margin:0;color:#94a3b8;font-size:12px;">This inquiry was sent automatically via your published website.</p>`,
+    ),
+    text: `New inquiry from ${params.senderName} on ${params.siteName}\n\n${params.fields
+      .map((field) => `${field.label}: ${field.value}`)
+      .join("\n")}`,
+  };
+}
+
 export function contactFormLeadEmail(params: {
   siteName: string;
   senderName: string;
-  senderEmail: string;
+  senderEmail?: string;
   senderPhone?: string;
   message: string;
+  /** Every answered field of a customized form; replaces the fixed name/email/phone/message layout. */
+  fields?: ContactLeadField[];
 }): RenderedEmail {
+  if (params.fields?.length) {
+    return contactFieldsLeadEmail({ siteName: params.siteName, senderName: params.senderName, fields: params.fields });
+  }
   const brand = escapeHtml(params.siteName);
   const name = escapeHtml(params.senderName);
-  const email = escapeHtml(params.senderEmail);
+  const email = escapeHtml(params.senderEmail ?? "");
   const phone = params.senderPhone ? escapeHtml(params.senderPhone) : "";
   const msg = escapeHtml(params.message).replace(/\n/g, "<br/>");
 
@@ -182,7 +222,7 @@ export function contactFormLeadEmail(params: {
        </div>
        <p style="margin:0;color:#94a3b8;font-size:12px;">This inquiry was sent automatically via your published website.</p>`,
     ),
-    text: `New inquiry from ${params.senderName} on ${params.siteName}\nName: ${params.senderName}\nEmail: ${params.senderEmail}\n${params.senderPhone ? `Phone: ${params.senderPhone}\n` : ""}Message:\n${params.message}`,
+    text: `New inquiry from ${params.senderName} on ${params.siteName}\nName: ${params.senderName}\nEmail: ${params.senderEmail ?? ""}\n${params.senderPhone ? `Phone: ${params.senderPhone}\n` : ""}Message:\n${params.message}`,
   };
 }
 

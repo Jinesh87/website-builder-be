@@ -4,7 +4,7 @@ import { decryptSecret, encryptSecret } from "../../../common/utils/secret-box.j
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { EmailProvider, type ClientEmailConfig } from "../../../generated/prisma/client.js";
-import { contactFormLeadEmail, testEmail, type RenderedEmail } from "../templates/email.templates.js";
+import { contactFormLeadEmail, testEmail, type ContactLeadField, type RenderedEmail } from "../templates/email.templates.js";
 
 export type ClientEmailConfigView = {
   configured: boolean;
@@ -30,9 +30,11 @@ export type WebsiteLead = {
   to: string;
   siteName: string;
   senderName: string;
-  senderEmail: string;
+  /** Absent when a customized form has no email field; the lead then has no reply-to. */
+  senderEmail?: string;
   senderPhone?: string;
   message: string;
+  fields?: ContactLeadField[];
 };
 
 type Outbound = {
@@ -129,7 +131,7 @@ export class ClientEmailService {
     const email = contactFormLeadEmail(lead);
     await this.dispatch(config, {
       to: lead.to,
-      replyTo: { email: lead.senderEmail, name: lead.senderName },
+      replyTo: lead.senderEmail ? { email: lead.senderEmail, name: lead.senderName } : undefined,
       email,
     });
     return true;

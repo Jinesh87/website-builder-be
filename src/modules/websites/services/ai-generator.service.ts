@@ -25,7 +25,7 @@ import {
 } from "../ai/navigation.js";
 import { sanitizeCustomData } from "../ai/custom-section.js";
 import { repairSection } from "../ai/repair-section.js";
-import { CUSTOM_LIMITS, FEATURE_ICON_COLORS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
+import { CONTACT_VARIANTS, CUSTOM_LIMITS, FEATURE_ICON_COLORS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { aiBillingService } from "../../wallet/services/ai-billing.service.js";
 import {
@@ -977,12 +977,7 @@ export function sanitizeSectionData(
     }
 
     case "contact": {
-      const validContactVariants = [
-        "split-form",
-        "cards-hub",
-        "minimal-editorial",
-        "floating-glass",
-      ];
+      const validContactVariants: readonly string[] = CONTACT_VARIANTS;
       if (
         typeof data.variant !== "string" ||
         !validContactVariants.includes(data.variant)
