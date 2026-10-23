@@ -8,6 +8,17 @@ import {
   BRAND_DISPLAY_MODES,
   BUTTON_STYLES,
   CARD_STYLES,
+  CONTACT_BLOCK_TYPES,
+  CONTACT_FIELD_TYPES,
+  CONTACT_FIELD_WIDTHS,
+  CONTACT_ID_PATTERN,
+  CONTACT_INFO_KINDS,
+  CONTACT_LAYOUT_ALIGNS,
+  CONTACT_LAYOUT_GAPS,
+  CONTACT_LIMITS,
+  CONTACT_MAP_HEIGHTS,
+  CONTACT_VARIANTS,
+  type ContactLayout,
   CUSTOM_ALIGNS,
   CUSTOM_CARD_TONES,
   CUSTOM_GAPS,
@@ -210,6 +221,79 @@ export const customDataSchema = Joi.object({
     if (count > CUSTOM_LIMITS.maxBlocks) return helpers.message({ custom: `Custom layouts can have at most ${CUSTOM_LIMITS.maxBlocks} blocks` });
     return value;
   });
+
+const contactId = Joi.string()
+  .pattern(CONTACT_ID_PATTERN)
+  .required()
+  .messages({ "string.pattern.base": "Ids use lowercase letters, digits, - and _" });
+
+export const contactFormFieldSchema = Joi.object({
+  id: contactId,
+  type: Joi.string().valid(...CONTACT_FIELD_TYPES).required(),
+  label: optionalText(80),
+  placeholder: optionalText(120),
+  required: Joi.boolean().optional(),
+  width: Joi.string().valid(...CONTACT_FIELD_WIDTHS).optional(),
+  options: Joi.array().items(optionalText(80)).max(CONTACT_LIMITS.maxOptions).optional(),
+});
+
+const contactBlockType = (type: (typeof CONTACT_BLOCK_TYPES)[number]) => Joi.string().valid(type).required();
+const contactBlockBase = { id: contactId, boxed: Joi.boolean().optional() };
+
+const contactBlockSchema = Joi.alternatives().try(
+  Joi.object({ ...contactBlockBase, type: contactBlockType("heading"), text: optionalText(200), level: Joi.number().valid(2, 3).optional() }),
+  Joi.object({ ...contactBlockBase, type: contactBlockType("text"), text: optionalText(1200) }),
+  Joi.object({ ...contactBlockBase, type: contactBlockType("badge"), text: optionalText(80) }),
+  Joi.object({
+    ...contactBlockBase,
+    type: contactBlockType("info"),
+    kind: Joi.string().valid(...CONTACT_INFO_KINDS).required(),
+    label: optionalText(80),
+    value: optionalText(500),
+    icon: Joi.string().valid(...ICON_NAMES).optional(),
+  }),
+  Joi.object({ ...contactBlockBase, type: contactBlockType("form") }),
+  Joi.object({
+    ...contactBlockBase,
+    type: contactBlockType("map"),
+    query: optionalText(200),
+    height: Joi.string().valid(...CONTACT_MAP_HEIGHTS).optional(),
+  }),
+  Joi.object({
+    ...contactBlockBase,
+    type: contactBlockType("button"),
+    label: optionalText(80),
+    href: text(2048).pattern(SAFE_HREF).allow("").optional().messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
+    tone: Joi.string().valid("primary", "secondary").optional(),
+  }),
+  Joi.object({ ...contactBlockBase, type: contactBlockType("image"), image: image.required() }),
+  Joi.object({ ...contactBlockBase, type: contactBlockType("divider") }),
+);
+
+const contactColumnSchema = Joi.object({
+  id: contactId,
+  width: Joi.number().integer().min(1).max(12).required(),
+  boxed: Joi.boolean().optional(),
+  blocks: Joi.array().items(contactBlockSchema).max(CONTACT_LIMITS.maxBlocksPerColumn).required(),
+});
+
+export const contactLayoutSchema = Joi.object({
+  columns: Joi.array().items(contactColumnSchema).min(1).max(CONTACT_LIMITS.maxColumns).required(),
+  gap: Joi.string().valid(...CONTACT_LAYOUT_GAPS).optional(),
+  align: Joi.string().valid(...CONTACT_LAYOUT_ALIGNS).optional(),
+  mobileReverse: Joi.boolean().optional(),
+}).custom((value: ContactLayout, helpers) => {
+  const blocks = value.columns.flatMap((column) => column.blocks);
+  if (blocks.length > CONTACT_LIMITS.maxBlocks) {
+    return helpers.message({ custom: `A contact layout can have at most ${CONTACT_LIMITS.maxBlocks} blocks` });
+  }
+  if (blocks.filter((block) => block.type === "form").length > 1) {
+    return helpers.message({ custom: "A contact layout can have only one form" });
+  }
+  const ids = [...value.columns.map((column) => column.id), ...blocks.map((block) => block.id)];
+  if (new Set(ids).size !== ids.length) return helpers.message({ custom: "Contact layout ids must be unique" });
+  return value;
+});
 const columns = Joi.number().valid(1, 2, 3, 4);
 
 const authField = Joi.object({
@@ -880,7 +964,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   contact: Joi.object({
     variant: flexibleVariant(
-      ["split-form", "cards-hub", "minimal-editorial", "floating-glass"],
+      CONTACT_VARIANTS,
       "split-form",
       { "split": "split-form", "cards": "cards-hub", "minimal": "minimal-editorial", "floating": "floating-glass" },
     ),
@@ -912,6 +996,14 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .valid("default", "bordered", "flat", "glass", "elevated", "contrast")
       .optional(),
     align: Joi.string().valid("left", "center").optional(),
+    formFields: Joi.array()
+      .items(contactFormFieldSchema)
+      .max(CONTACT_LIMITS.maxFields)
+      .unique("id")
+      .optional()
+      .meta(locked),
+    layout: contactLayoutSchema.optional().meta(locked),
+    showHeader: Joi.boolean().optional().meta(locked),
   }),
   text: Joi.object({
     heading: optionalText(200),

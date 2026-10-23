@@ -708,7 +708,7 @@ export class WebsiteService {
 
     const website = await prisma.website.update({ where: { id }, data, include: detailInclude });
     const hostnames = (website.domains || []).map((d) => d.hostname);
-    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+    await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     return toDetail(website);
   }
 
@@ -730,7 +730,7 @@ export class WebsiteService {
     });
 
     const hostnames = (website.domains || []).map((d) => d.hostname);
-    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+    await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     logger.info({ websiteId: website.id, clientId: website.clientId, actorId: actor.id }, "Website deleted");
   }
 
@@ -898,7 +898,7 @@ export class WebsiteService {
 
     logger.info({ websiteId: website.id, version: versionNumber, actorId: actor.id }, "Website published");
     const hostnames = (website.domains || []).map((d) => d.hostname);
-    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+    await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     return this.get(id, actor);
   }
 
@@ -916,7 +916,7 @@ export class WebsiteService {
     });
     logger.info({ websiteId: website.id, actorId: actor.id }, "Website unpublished");
     const hostnames = (website.domains || []).map((d) => d.hostname);
-    liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+    await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     return this.get(id, actor);
   }
 

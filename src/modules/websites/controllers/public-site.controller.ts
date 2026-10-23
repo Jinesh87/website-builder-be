@@ -3,10 +3,21 @@ import { AppError } from "../../../common/errors/AppError.js";
 import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
-import { clientEmailService } from "../../email/services/client-email.service.js";
+import { clientEmailService, type WebsiteLead } from "../../email/services/client-email.service.js";
 import { emailService } from "../../email/services/email.service.js";
+import {
+  findContactFormFields,
+  leadFromEntries,
+  validateContactSubmission,
+  type ContactLeadContent,
+} from "../services/contact-submission.js";
 import { liveSiteEngineService } from "../services/live-site-engine.service.js";
 import { siteRendererClient } from "../services/site-renderer.client.js";
+import type { PublishSnapshot } from "../types/website.types.js";
+
+const THANK_YOU = "Thank you! Your message has been received.";
+/** Hidden input on contact forms; people never fill it, form-filling bots usually do. */
+const HONEYPOT_FIELD = "_wb_hp";
 
 /** Client sites embed videos, maps and images from anywhere, so they get a wider policy than the app. */
 const LIVE_SITE_CSP = [
@@ -79,7 +90,8 @@ export class PublicSiteController {
       res.setHeader("Content-Type", result.contentType);
       res.setHeader("X-Robots-Tag", "all");
       res.setHeader("Content-Security-Policy", LIVE_SITE_CSP);
-      res.setHeader("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400");
+      // Browsers revalidate every visit (cheap 304s via ETag), so a new publish shows up immediately.
+      res.setHeader("Cache-Control", result.transient ? "no-store" : "public, no-cache");
       res.send(result.html);
     } catch (error) {
       next(error);
@@ -147,15 +159,42 @@ export class PublicSiteController {
         return res.status(404).json({ error: "Website not found or not published" });
       }
 
-      const { name, email, phone, message } = req.body || {};
-      if (!name || typeof name !== "string" || !name.trim()) {
-        return res.status(400).json({ error: "Your name is required." });
+      const body: Record<string, unknown> = req.body && typeof req.body === "object" ? req.body : {};
+      if (typeof body[HONEYPOT_FIELD] === "string" && body[HONEYPOT_FIELD].trim()) {
+        logger.info({ websiteId: website.id }, "Contact submission dropped by the spam trap");
+        return res.status(200).json({ ok: true, message: THANK_YOU });
       }
-      if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        return res.status(400).json({ error: "A valid email address is required." });
-      }
-      if (!message || typeof message !== "string" || !message.trim()) {
-        return res.status(400).json({ error: "A message is required." });
+
+      let content: ContactLeadContent;
+      if (typeof body.sectionId === "string" && body.fields !== undefined) {
+        const snapshot = website.liveVersion?.snapshot as unknown as PublishSnapshot | null;
+        const formFields = findContactFormFields(snapshot, body.sectionId);
+        if (!formFields) {
+          return res.status(409).json({ error: "This form was just updated. Refresh the page and try again." });
+        }
+        const result = validateContactSubmission(formFields, body.fields);
+        if (!result.ok) {
+          return res.status(400).json({ error: result.error });
+        }
+        content = leadFromEntries(result.entries);
+      } else {
+        const { name, email, phone, message } = body;
+        if (!name || typeof name !== "string" || !name.trim()) {
+          return res.status(400).json({ error: "Your name is required." });
+        }
+        if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+          return res.status(400).json({ error: "A valid email address is required." });
+        }
+        if (!message || typeof message !== "string" || !message.trim()) {
+          return res.status(400).json({ error: "A message is required." });
+        }
+        content = {
+          senderName: name.trim(),
+          senderEmail: email.trim(),
+          senderPhone: typeof phone === "string" ? phone.trim() : undefined,
+          message: message.trim(),
+          fields: [],
+        };
       }
 
       // Identify destination recipient
@@ -170,19 +209,12 @@ export class PublicSiteController {
 
       const siteName = website.businessName || website.name;
       logger.info(
-        { websiteId: website.id, senderEmail: email.trim(), targetRecipient },
+        { websiteId: website.id, senderEmail: content.senderEmail, fieldCount: content.fields.length, targetRecipient },
         "Contact lead submitted",
       );
 
       if (targetRecipient) {
-        const lead = {
-          to: targetRecipient,
-          siteName,
-          senderName: name.trim(),
-          senderEmail: email.trim(),
-          senderPhone: typeof phone === "string" ? phone.trim() : undefined,
-          message: message.trim(),
-        };
+        const lead: WebsiteLead = { to: targetRecipient, siteName, ...content };
         try {
           const sentByClient = await clientEmailService.sendWebsiteLead(website.clientId, lead);
           if (!sentByClient) await emailService.sendContactFormLead(lead);
@@ -194,10 +226,7 @@ export class PublicSiteController {
         return next(new AppError(422, "This site has no contact email yet. Add one in the website settings.", "CONTACT_EMAIL_MISSING"));
       }
 
-      return res.status(200).json({
-        ok: true,
-        message: "Thank you! Your message has been received.",
-      });
+      return res.status(200).json({ ok: true, message: THANK_YOU });
     } catch (error) {
       next(error);
     }

@@ -106,3 +106,41 @@ test("SiteCacheService purgeSite and purgeWebsite", async () => {
   assert.equal(await cache.getPage("shop", "/pricing"), null);
   assert.equal(await cache.getPage("customshop.com", "/"), null);
 });
+
+test("SiteCacheService never caches transient stand-in pages", async () => {
+  const cache = new SiteCacheService({ defaultTtlSeconds: 60 });
+  let renders = 0;
+  const render = async () => {
+    renders += 1;
+    return { html: "<p>fallback</p>", statusCode: 200, contentType: "text/html", cachedAt: Date.now(), transient: true };
+  };
+  await cache.getOrRender("transient-site", "/", render);
+  await cache.getOrRender("transient-site", "/", render);
+  assert.equal(renders, 2);
+  assert.equal(await cache.getPage("transient-site", "/"), null);
+});
+
+test("SiteCacheService drops a render that finishes after a purge", async () => {
+  const cache = new SiteCacheService({ defaultTtlSeconds: 60 });
+  let release!: () => void;
+  let markStarted!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const started = new Promise<void>((resolve) => (markStarted = resolve));
+  const stale = cache.getOrRender("race-site", "/", async () => {
+    markStarted();
+    await gate;
+    return { html: "<p>old</p>", statusCode: 200, contentType: "text/html", cachedAt: Date.now() };
+  });
+  await started;
+  await cache.purgeSite("race-site");
+  const fresh = await cache.getOrRender("race-site", "/", async () => ({
+    html: "<p>new</p>",
+    statusCode: 200,
+    contentType: "text/html",
+    cachedAt: Date.now(),
+  }));
+  release();
+  await stale;
+  assert.equal(fresh.html, "<p>new</p>");
+  assert.equal((await cache.getPage("race-site", "/"))?.html, "<p>new</p>");
+});

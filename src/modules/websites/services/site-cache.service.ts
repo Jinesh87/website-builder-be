@@ -7,7 +7,12 @@ export type CachedPagePayload = {
   contentType: string;
   redirectUrl?: string;
   cachedAt: number;
+  /** A stand-in page (e.g. while the site renderer is down); never cached anywhere. */
+  transient?: boolean;
 };
+
+/** Other app instances only learn about a purge through Redis, so their memory copies must expire quickly. */
+const L1_MAX_TTL_SECONDS = 30;
 
 type L1CacheEntry = {
   payload: CachedPagePayload;
@@ -43,6 +48,9 @@ export class SiteCacheService {
 
   // Single-flight promise tracker to prevent cache stampedes
   private readonly inFlightRenders = new Map<string, Promise<CachedPagePayload>>();
+
+  /** Bumped on every purge, so renders that started before it are not cached afterwards. */
+  private readonly generations = new Map<string, number>();
 
   constructor(options: { maxL1Entries?: number; defaultTtlSeconds?: number } = {}) {
     this.maxL1Entries = options.maxL1Entries ?? 1000;
@@ -154,18 +162,22 @@ export class SiteCacheService {
       return inFlight;
     }
 
+    const cleanId = identifier.toLowerCase().trim();
+    const generation = this.generations.get(cleanId) ?? 0;
     const renderPromise = (async () => {
       try {
         const payload = await renderFn();
+        const purgedMeanwhile = (this.generations.get(cleanId) ?? 0) !== generation;
         // Only cache successful or legitimate redirects/not-founds
-        if (payload.statusCode < 500) {
+        if (payload.statusCode < 500 && !payload.transient && !purgedMeanwhile) {
           // If status is 404, cache for shorter TTL (e.g. 60 seconds) to prevent stampedes on dead links
           const effectiveTtl = payload.statusCode === 404 ? Math.min(ttlSeconds, 60) : ttlSeconds;
           await this.setPage(identifier, path, payload, effectiveTtl);
         }
         return payload;
       } finally {
-        this.inFlightRenders.delete(key);
+        // After a purge the key may already belong to a newer render; leave that one alone.
+        if ((this.generations.get(cleanId) ?? 0) === generation) this.inFlightRenders.delete(key);
       }
     })();
 
@@ -185,11 +197,17 @@ export class SiteCacheService {
     const cleanId = identifier.toLowerCase().trim();
     const prefix = `live_page:${cleanId}:`;
     const siteSetKey = this.siteKeysSetKey(cleanId);
+    this.generations.set(cleanId, (this.generations.get(cleanId) ?? 0) + 1);
 
-    // 1. Purge matching keys from L1 Memory
+    // 1. Purge matching keys from L1 Memory, and stop new requests from joining renders of the old content
     for (const key of this.l1Cache.keys()) {
       if (key.startsWith(prefix)) {
         this.l1Cache.delete(key);
+      }
+    }
+    for (const key of this.inFlightRenders.keys()) {
+      if (key.startsWith(prefix)) {
+        this.inFlightRenders.delete(key);
       }
     }
 
@@ -238,7 +256,7 @@ export class SiteCacheService {
 
     this.l1Cache.set(key, {
       payload,
-      expiresAt: Date.now() + ttlSeconds * 1000,
+      expiresAt: Date.now() + Math.min(ttlSeconds, L1_MAX_TTL_SECONDS) * 1000,
     });
   }
 }
