@@ -14,7 +14,7 @@ model HostingConfig {
   @@map("hosting_config")
 }
 
-/// A package on the pricing page and at checkout. The set is fixed (basic, standard, custom); the Super Admin edits them.
+/// A package on the pricing page and at checkout. The set is fixed (basic = Starter, standard = Dedicated, custom); the Super Admin edits them.
 model HostingPackage {
   id                  String   @id @default(uuid()) @db.Uuid
   slug                String   @unique @db.VarChar(40)
