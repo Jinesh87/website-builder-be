@@ -29,6 +29,9 @@ import {
   FONT_KEYS,
   FOOTER_DESIGNS,
   HEADER_DESIGNS,
+  HERO_ALIGNS,
+  HERO_BUTTON_RADIUS_MAX,
+  HERO_BUTTON_SHAPES,
   HERO_VARIANTS,
   ICON_NAMES,
   RADIUS_SIZES,
@@ -656,7 +659,28 @@ export const heroSchema = Joi.object({
   overlayOpacity: Joi.number().min(0).max(100).optional().description("Strength of bgOverlayType, 0-100."),
   overlayBlur: Joi.boolean().optional(),
   minHeight: Joi.string().valid("auto", "compact", "screen", "tall").optional(),
-  contentAlign: Joi.string().valid("center", "left", "right").optional(),
+  contentAlign: Joi.string().valid(...HERO_ALIGNS).optional(),
+  alignment: Joi.object({
+    all: Joi.string().valid(...HERO_ALIGNS).optional(),
+    badge: Joi.string().valid(...HERO_ALIGNS).optional(),
+    heading: Joi.string().valid(...HERO_ALIGNS).optional(),
+    subheading: Joi.string().valid(...HERO_ALIGNS).optional(),
+    description: Joi.string().valid(...HERO_ALIGNS).optional(),
+    actions: Joi.string().valid(...HERO_ALIGNS).optional(),
+    trustedBy: Joi.string().valid(...HERO_ALIGNS).optional(),
+  })
+    .optional()
+    .description("Hero content alignment: `all` aligns every element; per-element keys override it."),
+  buttonShape: Joi.string()
+    .valid(...HERO_BUTTON_SHAPES)
+    .optional()
+    .description("Corner shape of all hero buttons; unset follows the theme radius."),
+  buttonRadius: Joi.number()
+    .integer()
+    .min(0)
+    .max(HERO_BUTTON_RADIUS_MAX)
+    .optional()
+    .description('Button corner radius in px; only used when buttonShape is "custom".'),
   bottomShape: Joi.string()
     .valid("none", "wave", "curve", "curved", "slant", "tilt", "arch", "normal")
     .optional(),

@@ -92,6 +92,10 @@ export const HERO_VARIANTS = [
   "curved-carousel",
   "campaign-banner",
 ] as const;
+export const HERO_ALIGNS = ["left", "center", "right"] as const;
+export const HERO_ALIGN_ELEMENTS = ["badge", "heading", "subheading", "description", "actions", "trustedBy"] as const;
+export const HERO_BUTTON_SHAPES = ["square", "soft", "rounded", "pill", "oval", "custom"] as const;
+export const HERO_BUTTON_RADIUS_MAX = 48;
 export const SECTION_BACKGROUNDS = ["default", "surface", "primary", "dark"] as const;
 export const SECTION_SPACINGS = ["none", "compact", "default", "relaxed"] as const;
 export const SECTION_ALIGNMENTS = ["center", "left"] as const;
@@ -519,7 +523,15 @@ export type HeroData = {
   overlayOpacity?: number;
   overlayBlur?: boolean;
   minHeight?: "auto" | "compact" | "screen" | "tall";
-  contentAlign?: "center" | "left" | "right";
+  /** Legacy video-banner text alignment; only read by "campaign-banner", and `alignment.all` takes precedence. */
+  contentAlign?: (typeof HERO_ALIGNS)[number];
+  /** `all` aligns every hero element; per-element keys override it. */
+  alignment?: { all?: (typeof HERO_ALIGNS)[number] } & Partial<
+    Record<(typeof HERO_ALIGN_ELEMENTS)[number], (typeof HERO_ALIGNS)[number]>
+  >;
+  buttonShape?: (typeof HERO_BUTTON_SHAPES)[number];
+  /** Corner radius in px, used only when `buttonShape` is "custom". */
+  buttonRadius?: number;
   bottomShape?: "none" | "wave" | "curve" | "curved" | "slant" | "tilt" | "arch" | "normal";
   rating?: HeroRating;
   floatingCards?: HeroFloatingCard[];
