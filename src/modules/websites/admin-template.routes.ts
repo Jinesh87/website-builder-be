@@ -8,6 +8,7 @@ import {
   createPlatformTemplateSchema,
   createStudioWebsiteSchema,
   listAdminTemplatesQuerySchema,
+  listTemplateDraftsQuerySchema,
   patchPlatformTemplateSchema,
   sourceWebsiteParamsSchema,
   templateIdParamsSchema,
@@ -22,6 +23,13 @@ const writeLimit = rateLimit({ name: "admin-template-write", max: 120, windowSec
 adminTemplatesRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 
 adminTemplatesRouter.get("/", validate(listAdminTemplatesQuerySchema, "query"), adminTemplateController.list);
+adminTemplatesRouter.get("/drafts", validate(listTemplateDraftsQuerySchema, "query"), adminTemplateController.listDrafts);
+adminTemplatesRouter.delete(
+  "/drafts/:websiteId",
+  validate(sourceWebsiteParamsSchema, "params"),
+  writeLimit,
+  adminTemplateController.discardDraft,
+);
 adminTemplatesRouter.get(
   "/by-website/:websiteId",
   validate(sourceWebsiteParamsSchema, "params"),
@@ -48,7 +56,9 @@ adminTemplatesRouter.patch(
   validate(patchPlatformTemplateSchema),
   adminTemplateController.updateDetails,
 );
+adminTemplatesRouter.get("/:templateId/preview", byTemplateId, adminTemplateController.preview);
 adminTemplatesRouter.delete("/:templateId", byTemplateId, writeLimit, adminTemplateController.archive);
+adminTemplatesRouter.delete("/:templateId/permanent", byTemplateId, writeLimit, adminTemplateController.deletePermanently);
 adminTemplatesRouter.post("/:templateId/restore", byTemplateId, writeLimit, adminTemplateController.restore);
 
 export default adminTemplatesRouter;

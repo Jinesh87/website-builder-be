@@ -16,7 +16,7 @@ import { hostingService } from "../../hosting/services/hosting.service.js";
 import { THEME_SEEDS } from "../../../seeder/design-library/themes.js";
 import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
 import type { FooterData, HeaderData, LinkRef, Section, ThemeSettings } from "../types/site-content.types.js";
-import type { TemplateFooter, TemplateHeader, TemplatePage } from "../types/template.types.js";
+import { ADMIN_TEMPLATE_KEY_PREFIX, type TemplateFooter, type TemplateHeader, type TemplatePage } from "../types/template.types.js";
 import type {
   CreateWebsiteInput,
   PageView,
@@ -70,6 +70,14 @@ const RESERVED_SUBDOMAINS = new Set([
 
 const MAX_CLIENT_TEMPLATES = 20;
 const MAX_SAVED_SECTIONS = 100;
+
+const BUILT_IN_TEMPLATE_KEYS = WEBSITE_TEMPLATE_SEEDS.map((seed) => seed.key);
+const VALID_PLATFORM_KEY_WHERE: Prisma.WebsiteTemplateWhereInput = {
+  OR: [
+    { key: { in: BUILT_IN_TEMPLATE_KEYS } },
+    { key: { startsWith: ADMIN_TEMPLATE_KEY_PREFIX } },
+  ],
+};
 
 function toTemplateSummary(template: WebsiteTemplate): WebsiteTemplateSummary {
   return {
@@ -330,6 +338,30 @@ function templateTheme(template: TemplateWithTheme | null): Prisma.JsonValue {
   return template?.themeSettings ?? template?.theme?.settings ?? THEME_SEEDS[0]!.settings;
 }
 
+/** Read-only site data for a template, named after the template itself. Callers decide who may see it. */
+export function templatePreview(template: TemplateWithTheme): TemplatePreview {
+  const { pages, header, footer } = buildTemplateContent(template, template.name, template.name);
+  return {
+    template: toTemplateSummary(template),
+    site: {
+      theme: templateTheme(template) as unknown as ThemeSettings,
+      header,
+      footer,
+      pages: pages
+        .filter((page) => page.visible !== false)
+        .map((page, pageIndex) => ({
+          id: `template-page-${pageIndex}`,
+          name: page.name,
+          slug: page.slug,
+          sections: page.sections.map((section, sectionIndex) => ({
+            ...section,
+            id: `template-section-${pageIndex}-${sectionIndex}`,
+          })) as Section[],
+        })),
+    },
+  };
+}
+
 /** The website's saved draft as template content, without the site's name, menu, contact details or section ids. */
 export function templateContentFrom(website: WebsiteWithPages) {
   const { siteName: _siteName, menu: _menu, ...header } = website.header as unknown as HeaderData;
@@ -391,7 +423,14 @@ export class WebsiteService {
   async listTemplates(query: TemplateListQuery, actor: AuthUser): Promise<WebsiteTemplateSummary[]> {
     const ownerId = actor.role === UserRole.SUPER_ADMIN ? query.clientId : ownClientId(actor);
     const templates = await prisma.websiteTemplate.findMany({
-      where: { isActive: true, archivedAt: null, OR: [{ clientId: null }, ...(ownerId ? [{ clientId: ownerId }] : [])] },
+      where: {
+        isActive: true,
+        archivedAt: null,
+        OR: [
+          { clientId: null, ...VALID_PLATFORM_KEY_WHERE },
+          ...(ownerId ? [{ clientId: ownerId }] : []),
+        ],
+      },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     });
     return templates.sort((a, b) => Number(b.clientId !== null) - Number(a.clientId !== null)).map(toTemplateSummary);
@@ -400,7 +439,7 @@ export class WebsiteService {
   /** Public: active platform templates for the gallery. */
   async listPlatformTemplates(): Promise<WebsiteTemplateSummary[]> {
     const templates = await prisma.websiteTemplate.findMany({
-      where: { clientId: null, isActive: true, archivedAt: null },
+      where: { clientId: null, isActive: true, archivedAt: null, ...VALID_PLATFORM_KEY_WHERE },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     });
     return templates.map(toTemplateSummary);
@@ -409,31 +448,11 @@ export class WebsiteService {
   /** Public: only active platform templates, never a client's private ones. */
   async getTemplatePreview(key: string): Promise<TemplatePreview> {
     const template = await prisma.websiteTemplate.findFirst({
-      where: { key, clientId: null, isActive: true, archivedAt: null },
+      where: { key, clientId: null, isActive: true, archivedAt: null, ...VALID_PLATFORM_KEY_WHERE },
       include: { theme: { select: { settings: true } } },
     });
     if (!template) throw new AppError(404, "Template not found", "TEMPLATE_NOT_FOUND");
-
-    const { pages, header, footer } = buildTemplateContent(template, template.name, template.name);
-    return {
-      template: toTemplateSummary(template),
-      site: {
-        theme: templateTheme(template) as unknown as ThemeSettings,
-        header,
-        footer,
-        pages: pages
-          .filter((page) => page.visible !== false)
-          .map((page, pageIndex) => ({
-            id: `template-page-${pageIndex}`,
-            name: page.name,
-            slug: page.slug,
-            sections: page.sections.map((section, sectionIndex) => ({
-              ...section,
-              id: `template-section-${pageIndex}-${sectionIndex}`,
-            })) as Section[],
-          })),
-      },
-    };
+    return templatePreview(template);
   }
 
   /** Copies the website's saved draft into a template private to the website's client. */
@@ -586,7 +605,15 @@ export class WebsiteService {
     const template = input.templateKey
       ? await prisma.websiteTemplate.findFirst({
           // A client's own templates are usable only for that client's websites.
-          where: { key: input.templateKey, isActive: true, archivedAt: null, OR: [{ clientId: null }, { clientId }] },
+          where: {
+            key: input.templateKey,
+            isActive: true,
+            archivedAt: null,
+            OR: [
+              { clientId: null, ...VALID_PLATFORM_KEY_WHERE },
+              ...(clientId ? [{ clientId }] : []),
+            ],
+          },
           include: { theme: { select: { settings: true } } },
         })
       : null;

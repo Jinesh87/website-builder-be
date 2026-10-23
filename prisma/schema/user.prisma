@@ -24,6 +24,7 @@ model User {
   mediaUploaded        MediaFile[]           @relation("MediaUploadedBy")
   savedSectionsCreated SavedSection[]        @relation("SavedSectionCreatedBy")
   templatesCreated     WebsiteTemplate[]     @relation("WebsiteTemplateCreatedBy")
+  templatesUpdated     WebsiteTemplate[]     @relation("WebsiteTemplateUpdatedBy")
   aiUsageLogs          AiUsageLog[]
   generationsRequested WebsiteGeneration[]   @relation("WebsiteGenerationRequestedBy")
   walletTransactions   WalletTransaction[]   @relation("WalletTransactionUser")

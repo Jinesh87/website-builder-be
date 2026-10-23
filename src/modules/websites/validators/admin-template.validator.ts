@@ -1,10 +1,11 @@
 import Joi from "joi";
-import { PLATFORM_TEMPLATE_CATEGORIES } from "../types/template.types.js";
 
 const name = Joi.string().trim().min(2).max(120);
-const category = Joi.string().valid(...PLATFORM_TEMPLATE_CATEGORIES);
+const categoryId = Joi.string().guid().messages({ "string.guid": "Choose a category", "any.required": "Choose a category" });
 /** null is accepted because the API returns an unset description as null. */
 const description = Joi.string().trim().max(500).allow("", null);
+const createdBy = Joi.string().valid("me");
+const search = Joi.string().trim().max(120).allow("");
 
 export const templateIdParamsSchema = Joi.object({
   templateId: Joi.string().guid().required(),
@@ -16,8 +17,15 @@ export const sourceWebsiteParamsSchema = Joi.object({
 
 export const listAdminTemplatesQuerySchema = Joi.object({
   status: Joi.string().valid("live", "hidden", "archived").optional(),
-  category: category.optional(),
-  search: Joi.string().trim().max(120).allow("").optional(),
+  origin: Joi.string().valid("built-in", "custom").optional(),
+  categoryId: categoryId.optional(),
+  createdBy: createdBy.optional(),
+  search: search.optional(),
+});
+
+export const listTemplateDraftsQuerySchema = Joi.object({
+  createdBy: createdBy.optional(),
+  search: search.optional(),
 });
 
 export const createStudioWebsiteSchema = Joi.object({
@@ -41,7 +49,7 @@ export const createStudioWebsiteSchema = Joi.object({
 
 const templateDetails = {
   name: name.required(),
-  category: category.required(),
+  categoryId: categoryId.required(),
   description: description.optional(),
   isActive: Joi.boolean().default(true),
 };
@@ -55,7 +63,7 @@ export const updatePlatformTemplateSchema = Joi.object(templateDetails);
 
 export const patchPlatformTemplateSchema = Joi.object({
   name: name.optional(),
-  category: category.optional(),
+  categoryId: categoryId.optional(),
   description: description.optional(),
   isActive: Joi.boolean().optional(),
 }).min(1);

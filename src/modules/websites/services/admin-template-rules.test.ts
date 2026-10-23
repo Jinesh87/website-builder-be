@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { platformTemplateKey, templateOrigin, templateStatus } from "./admin-template-rules.js";
+import {
+  hasUnpublishedDesign,
+  platformTemplateKey,
+  templateNumberFromSearch,
+  templateOrigin,
+  templateStatus,
+} from "./admin-template-rules.js";
 
 const KEY_PATTERN = /^[a-z0-9-]+$/;
 
@@ -24,6 +30,23 @@ test("platformTemplateKey falls back when the name has no usable characters", ()
 test("platformTemplateKey gives different keys for the same name", () => {
   const keys = new Set(Array.from({ length: 50 }, () => platformTemplateKey("Bakery")));
   assert.equal(keys.size, 50);
+});
+
+test("templateNumberFromSearch reads a template number with or without #", () => {
+  assert.equal(templateNumberFromSearch("3001"), 3001);
+  assert.equal(templateNumberFromSearch(" #3002 "), 3002);
+  assert.equal(templateNumberFromSearch("bakery"), null);
+  assert.equal(templateNumberFromSearch("30a1"), null);
+  assert.equal(templateNumberFromSearch("12345678901"), null);
+});
+
+test("hasUnpublishedDesign is true only for Studio edits made after the last copy", () => {
+  const copiedAt = new Date("2026-10-23T10:00:00Z");
+  assert.equal(hasUnpublishedDesign(new Date("2026-10-23T10:05:00Z"), copiedAt), true);
+  assert.equal(hasUnpublishedDesign(copiedAt, copiedAt), false);
+  assert.equal(hasUnpublishedDesign(new Date("2026-10-23T09:00:00Z"), copiedAt), false);
+  assert.equal(hasUnpublishedDesign(undefined, copiedAt), false);
+  assert.equal(hasUnpublishedDesign(new Date(), null), false);
 });
 
 test("templateOrigin separates admin templates from seeded ones", () => {

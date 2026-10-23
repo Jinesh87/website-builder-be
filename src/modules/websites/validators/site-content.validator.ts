@@ -29,6 +29,9 @@ import {
   FONT_KEYS,
   FOOTER_DESIGNS,
   HEADER_DESIGNS,
+  HERO_ALIGNS,
+  HERO_BUTTON_RADIUS_MAX,
+  HERO_BUTTON_SHAPES,
   HERO_VARIANTS,
   ICON_NAMES,
   RADIUS_SIZES,
@@ -39,6 +42,16 @@ import {
   SPACING_SIZES,
   type SectionType,
   BLOG_DETAIL_DESIGNS,
+  CARDS_BUTTON_SIZES,
+  CARDS_BUTTON_VARIANTS,
+  CARDS_CARD_STYLES,
+  CARDS_CORNERS,
+  CARDS_DESCRIPTION_LINES_MAX,
+  CARDS_HEADER_LAYOUTS,
+  CARDS_HOVER_EFFECTS,
+  CARDS_IMAGE_ASPECTS,
+  CARDS_RADIUS_MAX,
+  CARDS_VARIANTS,
 } from "../types/site-content.types.js";
 
 /**
@@ -656,7 +669,28 @@ export const heroSchema = Joi.object({
   overlayOpacity: Joi.number().min(0).max(100).optional().description("Strength of bgOverlayType, 0-100."),
   overlayBlur: Joi.boolean().optional(),
   minHeight: Joi.string().valid("auto", "compact", "screen", "tall").optional(),
-  contentAlign: Joi.string().valid("center", "left", "right").optional(),
+  contentAlign: Joi.string().valid(...HERO_ALIGNS).optional(),
+  alignment: Joi.object({
+    all: Joi.string().valid(...HERO_ALIGNS).optional(),
+    badge: Joi.string().valid(...HERO_ALIGNS).optional(),
+    heading: Joi.string().valid(...HERO_ALIGNS).optional(),
+    subheading: Joi.string().valid(...HERO_ALIGNS).optional(),
+    description: Joi.string().valid(...HERO_ALIGNS).optional(),
+    actions: Joi.string().valid(...HERO_ALIGNS).optional(),
+    trustedBy: Joi.string().valid(...HERO_ALIGNS).optional(),
+  })
+    .optional()
+    .description("Hero content alignment: `all` aligns every element; per-element keys override it."),
+  buttonShape: Joi.string()
+    .valid(...HERO_BUTTON_SHAPES)
+    .optional()
+    .description("Corner shape of all hero buttons; unset follows the theme radius."),
+  buttonRadius: Joi.number()
+    .integer()
+    .min(0)
+    .max(HERO_BUTTON_RADIUS_MAX)
+    .optional()
+    .description('Button corner radius in px; only used when buttonShape is "custom".'),
   bottomShape: Joi.string()
     .valid("none", "wave", "curve", "curved", "slant", "tilt", "arch", "normal")
     .optional(),
@@ -841,6 +875,75 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           link: link.optional(),
           secondaryLink: link.optional(),
           backgroundColor: Joi.string().max(100).allow("").optional(),
+          featured: Joi.boolean().optional(),
+        }),
+      )
+      .max(24)
+      .required(),
+  }),
+  cards: Joi.object({
+    variant: flexibleVariant(CARDS_VARIANTS, "product-classic", {
+      product: "product-classic",
+      classic: "product-classic",
+      overlay: "image-overlay",
+      horizontal: "horizontal-split",
+      split: "horizontal-split",
+      minimal: "minimal-accent",
+      accent: "minimal-accent",
+      floating: "floating-panel",
+    }),
+    eyebrow: optionalText(100),
+    heading: text(200).allow("").required(),
+    intro: optionalText(500),
+    headerLayout: Joi.string().valid(...CARDS_HEADER_LAYOUTS).optional(),
+    headerLink: link.optional(),
+    bottomCta: link.optional(),
+    columns: columns.optional().default(3),
+    tabletColumns: columns.optional(),
+    mobileColumns: columns.optional().default(1),
+    mobileLayout: Joi.string().valid("stack", "scroll").optional(),
+    gap: Joi.string().valid("sm", "md", "lg").optional(),
+    cardStyle: Joi.string().valid(...CARDS_CARD_STYLES).optional(),
+    cardCorners: Joi.string().valid(...CARDS_CORNERS).optional(),
+    cardRadius: Joi.number().integer().min(0).max(CARDS_RADIUS_MAX).optional(),
+    imageAspect: Joi.string().valid(...CARDS_IMAGE_ASPECTS).optional(),
+    imageFit: Joi.string().valid("cover", "contain").optional(),
+    imagePosition: Joi.string().valid("left", "right").optional(),
+    contentAlign: Joi.string().valid("left", "center").optional(),
+    hoverEffect: Joi.string().valid(...CARDS_HOVER_EFFECTS).optional(),
+    descriptionLines: Joi.number().integer().min(0).max(CARDS_DESCRIPTION_LINES_MAX).optional(),
+    clickableCards: Joi.boolean().optional(),
+    showImages: Joi.boolean().optional(),
+    showIcons: Joi.boolean().optional(),
+    showBadges: Joi.boolean().optional(),
+    showTags: Joi.boolean().optional(),
+    showDescription: Joi.boolean().optional(),
+    showPrices: Joi.boolean().optional(),
+    showNumbers: Joi.boolean().optional(),
+    button: Joi.object({
+      variant: Joi.string().valid(...CARDS_BUTTON_VARIANTS).optional(),
+      secondaryVariant: Joi.string().valid(...CARDS_BUTTON_VARIANTS).optional(),
+      shape: Joi.string().valid(...HERO_BUTTON_SHAPES).optional(),
+      radius: Joi.number().integer().min(0).max(HERO_BUTTON_RADIUS_MAX).optional(),
+      size: Joi.string().valid(...CARDS_BUTTON_SIZES).optional(),
+      fullWidth: Joi.boolean().optional(),
+      showArrow: Joi.boolean().optional(),
+    }).optional(),
+    items: Joi.array()
+      .items(
+        Joi.object({
+          title: text(120).required(),
+          subtitle: optionalText(120),
+          description: optionalText(800),
+          image: image.optional(),
+          icon: Joi.string().max(50).allow("").optional(),
+          badge: optionalText(30),
+          tags: Joi.array().items(text(40)).max(8).optional(),
+          price: optionalText(50),
+          link: link.optional(),
+          secondaryLink: link.optional(),
+          backgroundColor: color.optional(),
+          accentColor: color.optional(),
           featured: Joi.boolean().optional(),
         }),
       )

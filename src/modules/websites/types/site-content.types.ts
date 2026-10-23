@@ -92,6 +92,26 @@ export const HERO_VARIANTS = [
   "curved-carousel",
   "campaign-banner",
 ] as const;
+export const HERO_ALIGNS = ["left", "center", "right"] as const;
+export const HERO_ALIGN_ELEMENTS = ["badge", "heading", "subheading", "description", "actions", "trustedBy"] as const;
+export const HERO_BUTTON_SHAPES = ["square", "soft", "rounded", "pill", "oval", "custom"] as const;
+export const HERO_BUTTON_RADIUS_MAX = 48;
+export const CARDS_VARIANTS = [
+  "product-classic",
+  "image-overlay",
+  "horizontal-split",
+  "minimal-accent",
+  "floating-panel",
+] as const;
+export const CARDS_CARD_STYLES = ["bordered", "shadow", "flat", "glass", "elevated"] as const;
+export const CARDS_CORNERS = ["square", "soft", "rounded", "large", "custom"] as const;
+export const CARDS_BUTTON_VARIANTS = ["filled", "outline", "soft", "ghost", "link"] as const;
+export const CARDS_BUTTON_SIZES = ["sm", "md", "lg"] as const;
+export const CARDS_IMAGE_ASPECTS = ["16:9", "4:3", "1:1", "3:4", "auto"] as const;
+export const CARDS_HOVER_EFFECTS = ["none", "lift", "zoom", "glow"] as const;
+export const CARDS_HEADER_LAYOUTS = ["center", "left", "split"] as const;
+export const CARDS_DESCRIPTION_LINES_MAX = 8;
+export const CARDS_RADIUS_MAX = 48;
 export const SECTION_BACKGROUNDS = ["default", "surface", "primary", "dark"] as const;
 export const SECTION_SPACINGS = ["none", "compact", "default", "relaxed"] as const;
 export const SECTION_ALIGNMENTS = ["center", "left"] as const;
@@ -127,6 +147,7 @@ export const SECTION_TYPES = [
   "hero",
   "features",
   "services",
+  "cards",
   "testimonials",
   "faq",
   "cta",
@@ -519,7 +540,15 @@ export type HeroData = {
   overlayOpacity?: number;
   overlayBlur?: boolean;
   minHeight?: "auto" | "compact" | "screen" | "tall";
-  contentAlign?: "center" | "left" | "right";
+  /** Legacy video-banner text alignment; only read by "campaign-banner", and `alignment.all` takes precedence. */
+  contentAlign?: (typeof HERO_ALIGNS)[number];
+  /** `all` aligns every hero element; per-element keys override it. */
+  alignment?: { all?: (typeof HERO_ALIGNS)[number] } & Partial<
+    Record<(typeof HERO_ALIGN_ELEMENTS)[number], (typeof HERO_ALIGNS)[number]>
+  >;
+  buttonShape?: (typeof HERO_BUTTON_SHAPES)[number];
+  /** Corner radius in px, used only when `buttonShape` is "custom". */
+  buttonRadius?: number;
   bottomShape?: "none" | "wave" | "curve" | "curved" | "slant" | "tilt" | "arch" | "normal";
   rating?: HeroRating;
   floatingCards?: HeroFloatingCard[];
@@ -620,6 +649,61 @@ export type SectionDataMap = {
     showPrices?: boolean;
     showBullets?: boolean;
     showNumbers?: boolean;
+  };
+  cards: {
+    variant?: (typeof CARDS_VARIANTS)[number];
+    eyebrow?: string;
+    heading: string;
+    intro?: string;
+    headerLayout?: (typeof CARDS_HEADER_LAYOUTS)[number];
+    headerLink?: LinkRef;
+    bottomCta?: LinkRef;
+    columns: GridColumns;
+    tabletColumns?: GridColumns;
+    mobileColumns: GridColumns;
+    mobileLayout?: "stack" | "scroll";
+    gap?: "sm" | "md" | "lg";
+    cardStyle?: (typeof CARDS_CARD_STYLES)[number];
+    cardCorners?: (typeof CARDS_CORNERS)[number];
+    cardRadius?: number;
+    imageAspect?: (typeof CARDS_IMAGE_ASPECTS)[number];
+    imageFit?: "cover" | "contain";
+    imagePosition?: "left" | "right";
+    contentAlign?: "left" | "center";
+    hoverEffect?: (typeof CARDS_HOVER_EFFECTS)[number];
+    descriptionLines?: number;
+    clickableCards?: boolean;
+    showImages?: boolean;
+    showIcons?: boolean;
+    showBadges?: boolean;
+    showTags?: boolean;
+    showDescription?: boolean;
+    showPrices?: boolean;
+    showNumbers?: boolean;
+    button?: {
+      variant?: (typeof CARDS_BUTTON_VARIANTS)[number];
+      secondaryVariant?: (typeof CARDS_BUTTON_VARIANTS)[number];
+      shape?: (typeof HERO_BUTTON_SHAPES)[number];
+      radius?: number;
+      size?: (typeof CARDS_BUTTON_SIZES)[number];
+      fullWidth?: boolean;
+      showArrow?: boolean;
+    };
+    items: {
+      title: string;
+      subtitle?: string;
+      description?: string;
+      image?: ImageRef;
+      icon?: IconName | string;
+      badge?: string;
+      tags?: string[];
+      price?: string;
+      link?: LinkRef;
+      secondaryLink?: LinkRef;
+      backgroundColor?: string;
+      accentColor?: string;
+      featured?: boolean;
+    }[];
   };
   testimonials: {
     variant?: "cards-grid" | "carousel-slider" | "marquee-wall" | "spotlight-featured" | "minimal-editorial";

@@ -17,6 +17,12 @@ export function platformTemplateKey(name: string): string {
   return `${ADMIN_TEMPLATE_KEY_PREFIX}${slug || "template"}-${randomBytes(3).toString("hex")}`;
 }
 
+/** "3001" or "#3001" as a template number to search for; null for any other search text. */
+export function templateNumberFromSearch(search: string): number | null {
+  const match = /^#?(\d{1,9})$/.exec(search.trim());
+  return match ? Number(match[1]) : null;
+}
+
 export function templateOrigin(template: { key: string }): PlatformTemplateOrigin {
   return template.key.startsWith(ADMIN_TEMPLATE_KEY_PREFIX) ? "ADMIN" : "BUILT_IN";
 }
@@ -24,4 +30,13 @@ export function templateOrigin(template: { key: string }): PlatformTemplateOrigi
 export function templateStatus(template: { archivedAt: Date | null; isActive: boolean }): PlatformTemplateStatus {
   if (template.archivedAt) return "ARCHIVED";
   return template.isActive ? "LIVE" : "HIDDEN";
+}
+
+/**
+ * True when the Template Studio draft was edited after its design was last copied into the template,
+ * i.e. those edits are not what new websites get yet. Unknown copy times count as in sync.
+ */
+export function hasUnpublishedDesign(studioDraftUpdatedAt: Date | null | undefined, copiedAt: Date | null): boolean {
+  if (!studioDraftUpdatedAt || !copiedAt) return false;
+  return studioDraftUpdatedAt.getTime() > copiedAt.getTime();
 }
