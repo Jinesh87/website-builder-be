@@ -18,15 +18,38 @@ export type AdminTemplateView = {
   /** Template Studio website to open with "Edit design"; null for built-in templates. */
   sourceWebsiteId: string | null;
   pages: { name: string; slug: string }[];
+  /** The Template Studio design was edited after it was last saved into the template. */
+  hasUnpublishedChanges: boolean;
   createdByName: string | null;
+  updatedByName: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/** "me" limits the list to what the signed-in Super Admin created. */
+export type CreatedByFilter = "me";
 
 export type AdminTemplateListQuery = {
   status?: "live" | "hidden" | "archived";
   origin?: "built-in" | "custom";
   categoryId?: string;
+  createdBy?: CreatedByFilter;
+  search?: string;
+};
+
+/** A Template Studio website not yet saved as a template: work in progress, never shown to clients. */
+export type TemplateDraftView = {
+  websiteId: string;
+  name: string;
+  pageCount: number;
+  createdByName: string | null;
+  createdAt: string;
+  /** Last edit to the draft's design. */
+  updatedAt: string;
+};
+
+export type TemplateDraftListQuery = {
+  createdBy?: CreatedByFilter;
   search?: string;
 };
 

@@ -13,12 +13,20 @@ import type {
   CreateStudioWebsiteInput,
   PatchPlatformTemplateInput,
   TemplateDetailsInput,
+  TemplateDraftListQuery,
+  TemplateDraftView,
 } from "../types/admin-template.types.js";
 import type { FooterData, HeaderData, Section } from "../types/site-content.types.js";
 import { ADMIN_TEMPLATE_KEY_PREFIX, type TemplatePage } from "../types/template.types.js";
 import type { TemplatePreview } from "../types/website.types.js";
 import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
-import { platformTemplateKey, templateNumberFromSearch, templateOrigin, templateStatus } from "./admin-template-rules.js";
+import {
+  hasUnpublishedDesign,
+  platformTemplateKey,
+  templateNumberFromSearch,
+  templateOrigin,
+  templateStatus,
+} from "./admin-template-rules.js";
 import { templateCategoryService } from "./template-category.service.js";
 import { ensureTemplateStudio } from "./template-studio.js";
 import {
@@ -34,8 +42,27 @@ const MAX_LISTED_TEMPLATES = 500;
 const MAX_IMPORTED_MEDIA = 200;
 const MEDIA_ID_PATTERN = /\/media\/files\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
-const templateInclude = { createdBy: { select: { fullName: true } } } as const satisfies Prisma.WebsiteTemplateInclude;
+const MAX_LISTED_DRAFTS = 200;
+
+const templateInclude = {
+  createdBy: { select: { fullName: true } },
+  updatedBy: { select: { fullName: true } },
+  sourceWebsite: { select: { draftUpdatedAt: true } },
+} as const satisfies Prisma.WebsiteTemplateInclude;
 type TemplateRow = Prisma.WebsiteTemplateGetPayload<{ include: typeof templateInclude }>;
+
+const draftSelect = {
+  id: true,
+  name: true,
+  createdAt: true,
+  draftUpdatedAt: true,
+  createdBy: { select: { fullName: true } },
+  _count: { select: { pages: true } },
+} as const satisfies Prisma.WebsiteSelect;
+type DraftRow = Prisma.WebsiteGetPayload<{ select: typeof draftSelect }>;
+
+/** Template Studio websites that have not been saved as a template yet. */
+const DRAFT_WHERE = { client: { isInternal: true }, sourceOfTemplate: { is: null } } as const satisfies Prisma.WebsiteWhereInput;
 
 const TEMPLATE_NOT_FOUND = () => new AppError(404, "Template not found", "TEMPLATE_NOT_FOUND");
 const STUDIO_WEBSITE_NOT_FOUND = () => new AppError(404, "Template Studio website not found", "WEBSITE_NOT_FOUND");
@@ -53,9 +80,22 @@ function toView(template: TemplateRow): AdminTemplateView {
     status: templateStatus(template),
     sourceWebsiteId: template.sourceWebsiteId,
     pages: (template.pages as unknown as TemplatePage[]).map(({ name, slug }) => ({ name, slug })),
+    hasUnpublishedChanges: hasUnpublishedDesign(template.sourceWebsite?.draftUpdatedAt, template.sourceDraftUpdatedAt),
     createdByName: template.createdBy?.fullName ?? null,
+    updatedByName: template.updatedBy?.fullName ?? null,
     createdAt: template.createdAt.toISOString(),
     updatedAt: template.updatedAt.toISOString(),
+  };
+}
+
+function toDraftView(draft: DraftRow): TemplateDraftView {
+  return {
+    websiteId: draft.id,
+    name: draft.name,
+    pageCount: draft._count.pages,
+    createdByName: draft.createdBy?.fullName ?? null,
+    createdAt: draft.createdAt.toISOString(),
+    updatedAt: draft.draftUpdatedAt.toISOString(),
   };
 }
 
@@ -111,7 +151,7 @@ const VALID_PLATFORM_KEY_WHERE: Prisma.WebsiteTemplateWhereInput = {
  * so editing, hiding or archiving a template never changes existing drafts or live sites.
  */
 export class AdminTemplateService {
-  async list(query: AdminTemplateListQuery): Promise<AdminTemplateView[]> {
+  async list(query: AdminTemplateListQuery, actor: AuthUser): Promise<AdminTemplateView[]> {
     const search = query.search?.trim();
     const searchNumber = search ? templateNumberFromSearch(search) : null;
     const byStatus: Prisma.WebsiteTemplateWhereInput =
@@ -129,6 +169,7 @@ export class AdminTemplateService {
           byStatus,
           query.origin ? ORIGIN_WHERE[query.origin] : VALID_PLATFORM_KEY_WHERE,
           query.categoryId ? { categoryId: query.categoryId } : {},
+          query.createdBy === "me" ? { createdById: actor.id } : {},
           search
             ? {
                 OR: [
@@ -145,6 +186,36 @@ export class AdminTemplateService {
       take: MAX_LISTED_TEMPLATES,
     });
     return templates.map(toView);
+  }
+
+  /** Unsaved work: Template Studio websites not yet saved as a template, most recently edited first. */
+  async listDrafts(query: TemplateDraftListQuery, actor: AuthUser): Promise<TemplateDraftView[]> {
+    const search = query.search?.trim();
+    const drafts = await prisma.website.findMany({
+      where: {
+        ...DRAFT_WHERE,
+        ...(query.createdBy === "me" ? { createdById: actor.id } : {}),
+        ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
+      },
+      select: draftSelect,
+      orderBy: { draftUpdatedAt: "desc" },
+      take: MAX_LISTED_DRAFTS,
+    });
+    return drafts.map(toDraftView);
+  }
+
+  /**
+   * Deletes an unsaved draft's Template Studio website. Its media files stay in the Studio library, so
+   * anything already using them keeps working. Saved templates are deleted from the template instead.
+   */
+  async discardDraft(websiteId: string, actor: AuthUser): Promise<void> {
+    const { count } = await prisma.website.deleteMany({ where: { id: websiteId, ...DRAFT_WHERE } });
+    if (count === 0) {
+      const saved = await prisma.websiteTemplate.count({ where: { sourceWebsiteId: websiteId } });
+      if (saved > 0) throw new AppError(409, "This draft was already saved as a template. Delete the template instead.", "TEMPLATE_EXISTS");
+      throw new AppError(404, "Draft not found", "DRAFT_NOT_FOUND");
+    }
+    logger.info({ websiteId, actorId: actor.id }, "Template draft discarded");
   }
 
   /** The template a Template Studio website is the source of, or null before its first save. */
@@ -195,7 +266,9 @@ export class AdminTemplateService {
             isActive: input.isActive,
             sortOrder: (_max.sortOrder ?? -1) + 1,
             sourceWebsiteId: website.id,
+            sourceDraftUpdatedAt: website.draftUpdatedAt,
             createdById: actor.id,
+            updatedById: actor.id,
           },
           include: templateInclude,
         });
@@ -220,7 +293,12 @@ export class AdminTemplateService {
 
     const updated = await prisma.websiteTemplate.update({
       where: { id: template.id },
-      data: { ...(await detailsData(input)), ...templateContentFrom(website) },
+      data: {
+        ...(await detailsData(input)),
+        ...templateContentFrom(website),
+        sourceDraftUpdatedAt: website.draftUpdatedAt,
+        updatedById: actor.id,
+      },
       include: templateInclude,
     });
     logger.info({ templateId: updated.id, websiteId: website.id, actorId: actor.id }, "Platform template design updated");
@@ -238,7 +316,7 @@ export class AdminTemplateService {
 
     const updated = await prisma.websiteTemplate.update({
       where: { id: template.id },
-      data: await detailsData({ ...details, isActive }),
+      data: { ...(await detailsData({ ...details, isActive })), updatedById: actor.id },
       include: templateInclude,
     });
     logger.info({ templateId: updated.id, actorId: actor.id, fields: Object.keys(input) }, "Platform template details updated");
@@ -250,7 +328,7 @@ export class AdminTemplateService {
     const template = await this.findEditableOrThrow(templateId);
     const updated = await prisma.websiteTemplate.update({
       where: { id: template.id },
-      data: { archivedAt: new Date(), isActive: false },
+      data: { archivedAt: new Date(), isActive: false, updatedById: actor.id },
       include: templateInclude,
     });
     logger.info({ templateId: updated.id, actorId: actor.id }, "Platform template archived");
@@ -263,7 +341,7 @@ export class AdminTemplateService {
     if (!template.archivedAt) throw new AppError(409, "This template isn't archived.", "TEMPLATE_NOT_ARCHIVED");
     const updated = await prisma.websiteTemplate.update({
       where: { id: template.id },
-      data: { archivedAt: null, isActive: false },
+      data: { archivedAt: null, isActive: false, updatedById: actor.id },
       include: templateInclude,
     });
     logger.info({ templateId: updated.id, actorId: actor.id }, "Platform template restored");

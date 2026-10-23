@@ -4,6 +4,7 @@ import {
   createPlatformTemplateSchema,
   createStudioWebsiteSchema,
   listAdminTemplatesQuerySchema,
+  listTemplateDraftsQuerySchema,
   patchPlatformTemplateSchema,
 } from "./admin-template.validator.js";
 
@@ -34,10 +35,19 @@ test("new templates need a gallery category and default to live", () => {
   assert.ok(createPlatformTemplateSchema.validate({ websiteId: WEBSITE_ID, name: "B", categoryId: CATEGORY_ID }).error);
 });
 
-test("the admin list filters by category id and origin", () => {
-  assert.equal(listAdminTemplatesQuerySchema.validate({ categoryId: CATEGORY_ID, origin: "custom" }).error, undefined);
+test("the admin list filters by category id, origin and creator", () => {
+  assert.equal(
+    listAdminTemplatesQuerySchema.validate({ categoryId: CATEGORY_ID, origin: "custom", createdBy: "me" }).error,
+    undefined,
+  );
   assert.ok(listAdminTemplatesQuerySchema.validate({ categoryId: "Food" }).error);
   assert.ok(listAdminTemplatesQuerySchema.validate({ origin: "client" }).error);
+  assert.ok(listAdminTemplatesQuerySchema.validate({ createdBy: WEBSITE_ID }).error);
+});
+
+test("drafts can be filtered to the signed-in admin's own", () => {
+  assert.equal(listTemplateDraftsQuerySchema.validate({ createdBy: "me", search: "bakery" }).error, undefined);
+  assert.ok(listTemplateDraftsQuerySchema.validate({ createdBy: "someone" }).error);
 });
 
 test("a details patch must change something", () => {

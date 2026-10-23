@@ -37,37 +37,42 @@ model TemplateCategory {
 /// Copied into the website on creation, never referenced afterwards.
 /// clientId null = platform template (Super Admin); otherwise private to that client.
 model WebsiteTemplate {
-  id              String    @id @default(uuid()) @db.Uuid
-  key             String    @unique @db.VarChar(80)
+  id                   String    @id @default(uuid()) @db.Uuid
+  key                  String    @unique @db.VarChar(80)
   /// Gallery number of a Super Admin template (#3001, #3002, …), taken from website_template_number_seq.
   /// Built-in templates show their marketing number instead; a client's own templates have none.
-  number          Int?      @unique
-  clientId        String?   @db.Uuid
-  name            String    @db.VarChar(120)
+  number               Int?      @unique
+  clientId             String?   @db.Uuid
+  name                 String    @db.VarChar(120)
   /// Display label. For platform templates it mirrors `categoryRef.name`, kept in sync by the category service.
-  category        String    @db.VarChar(60)
+  category             String    @db.VarChar(60)
   /// Required for platform templates (DB check constraint); null for a client's own templates.
-  categoryId      String?   @db.Uuid
-  description     String?   @db.VarChar(500)
-  thumbnailUrl    String?   @db.VarChar(2048)
-  themeId         String?   @db.Uuid
+  categoryId           String?   @db.Uuid
+  description          String?   @db.VarChar(500)
+  thumbnailUrl         String?   @db.VarChar(2048)
+  themeId              String?   @db.Uuid
   /// Full ThemeSettings for client templates (their colours may not match any preset).
-  themeSettings   Json?
-  header          Json
-  footer          Json
+  themeSettings        Json?
+  header               Json
+  footer               Json
   /// Ordered [{ name, slug, pageType, sections }].
-  pages           Json
-  isActive        Boolean   @default(true)
-  sortOrder       Int       @default(0)
+  pages                Json
+  isActive             Boolean   @default(true)
+  sortOrder            Int       @default(0)
   /// Template Studio website the Super Admin designs this template in; one template per website.
-  sourceWebsiteId String?   @unique @db.Uuid
+  sourceWebsiteId      String?   @unique @db.Uuid
+  /// The Studio website's draftUpdatedAt when its design was last copied in; a newer draft means unpublished edits.
+  sourceDraftUpdatedAt DateTime? @db.Timestamptz(6)
   /// Soft delete: hidden everywhere and restorable. Websites already created from it are unaffected.
-  archivedAt      DateTime? @db.Timestamptz(6)
-  createdById     String?   @db.Uuid
-  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  archivedAt           DateTime? @db.Timestamptz(6)
+  createdById          String?   @db.Uuid
+  /// Super Admin who last saved, published, hid, archived or restored it.
+  updatedById          String?   @db.Uuid
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
 
   theme         Theme?            @relation(fields: [themeId], references: [id], onDelete: SetNull)
+  updatedBy     User?             @relation("WebsiteTemplateUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   categoryRef   TemplateCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   client        Client?           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   sourceWebsite Website?          @relation("WebsiteTemplateSource", fields: [sourceWebsiteId], references: [id], onDelete: SetNull)

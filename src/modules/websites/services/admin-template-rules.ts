@@ -31,3 +31,12 @@ export function templateStatus(template: { archivedAt: Date | null; isActive: bo
   if (template.archivedAt) return "ARCHIVED";
   return template.isActive ? "LIVE" : "HIDDEN";
 }
+
+/**
+ * True when the Template Studio draft was edited after its design was last copied into the template,
+ * i.e. those edits are not what new websites get yet. Unknown copy times count as in sync.
+ */
+export function hasUnpublishedDesign(studioDraftUpdatedAt: Date | null | undefined, copiedAt: Date | null): boolean {
+  if (!studioDraftUpdatedAt || !copiedAt) return false;
+  return studioDraftUpdatedAt.getTime() > copiedAt.getTime();
+}

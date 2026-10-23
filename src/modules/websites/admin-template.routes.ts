@@ -8,6 +8,7 @@ import {
   createPlatformTemplateSchema,
   createStudioWebsiteSchema,
   listAdminTemplatesQuerySchema,
+  listTemplateDraftsQuerySchema,
   patchPlatformTemplateSchema,
   sourceWebsiteParamsSchema,
   templateIdParamsSchema,
@@ -22,6 +23,13 @@ const writeLimit = rateLimit({ name: "admin-template-write", max: 120, windowSec
 adminTemplatesRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 
 adminTemplatesRouter.get("/", validate(listAdminTemplatesQuerySchema, "query"), adminTemplateController.list);
+adminTemplatesRouter.get("/drafts", validate(listTemplateDraftsQuerySchema, "query"), adminTemplateController.listDrafts);
+adminTemplatesRouter.delete(
+  "/drafts/:websiteId",
+  validate(sourceWebsiteParamsSchema, "params"),
+  writeLimit,
+  adminTemplateController.discardDraft,
+);
 adminTemplatesRouter.get(
   "/by-website/:websiteId",
   validate(sourceWebsiteParamsSchema, "params"),
