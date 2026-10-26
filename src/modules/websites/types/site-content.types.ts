@@ -114,7 +114,7 @@ export const CARDS_DESCRIPTION_LINES_MAX = 8;
 export const CARDS_RADIUS_MAX = 48;
 export const SECTION_BACKGROUNDS = ["default", "surface", "primary", "dark"] as const;
 export const SECTION_SPACINGS = ["none", "compact", "default", "relaxed"] as const;
-export const SECTION_ALIGNMENTS = ["center", "left"] as const;
+export const SECTION_ALIGNMENTS = ["center", "left", "right"] as const;
 export const ICON_NAMES = [
   "check",
   "star",
