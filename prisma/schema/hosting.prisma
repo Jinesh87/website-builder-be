@@ -36,6 +36,7 @@ model HostingPackage {
 
   subscriptions HostingSubscription[]
   orders        HostingOrder[]
+  autopays      HostingAutopay[]
 
   @@map("hosting_packages")
 }
@@ -53,6 +54,7 @@ model HostingSubscription {
   customYearlyPaise    Int?
   status               HostingStatus @default(AWAITING_PAYMENT)
   /// Renew from the client's connects when the period ends (only while connects payments are allowed).
+  /// Never on together with a live autopay, so a period is not charged twice.
   autoRenew            Boolean       @default(false)
   currentPeriodStart   DateTime?     @db.Timestamptz(6)
   currentPeriodEnd     DateTime?     @db.Timestamptz(6)
@@ -69,6 +71,7 @@ model HostingSubscription {
   createdBy User?            @relation("HostingSubscriptionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   payments  HostingPayment[]
   notices   HostingNotice[]
+  autopay   HostingAutopay?
 
   /// Required by the (websiteId, clientId) foreign key, which keeps clientId equal to the website's client.
   @@unique([websiteId, clientId])
@@ -95,6 +98,8 @@ model HostingOrder {
   /// PAID only once the period is recorded; a captured payment that couldn't be applied stays CREATED with a reason.
   status            PaymentOrderStatus @default(CREATED)
   failureReason     String?            @db.VarChar(500)
+  /// Set when autopay charged it rather than a one-off checkout.
+  razorpaySubscriptionId String?       @db.VarChar(64)
   paidAt            DateTime?          @db.Timestamptz(6)
   createdAt         DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
@@ -108,6 +113,37 @@ model HostingOrder {
   @@index([clientId, createdAt])
   @@index([websiteId, createdAt])
   @@map("hosting_orders")
+}
+
+/// Razorpay autopay for one website's hosting: a subscription that charges the plan's price every period on the
+/// client's card or UPI mandate. Package, cycle and price are fixed when the client approves it; a plan or price
+/// change cancels it, so a charge never applies a plan the client didn't approve.
+model HostingAutopay {
+  id                     String        @id @default(uuid()) @db.Uuid
+  subscriptionId         String        @unique @db.Uuid
+  clientId               String        @db.Uuid
+  userId                 String?       @db.Uuid
+  razorpaySubscriptionId String        @unique @db.VarChar(64)
+  packageId              String?       @db.Uuid
+  packageName            String        @db.VarChar(60)
+  cycle                  BillingCycle
+  amountPaise            Int
+  status                 AutopayStatus @default(CREATED)
+  /// First charge: the end of the paid period. Null = charged as soon as the client approves.
+  startAt                DateTime?     @db.Timestamptz(6)
+  /// When Razorpay charges next, as last reported by Razorpay.
+  nextChargeAt           DateTime?     @db.Timestamptz(6)
+  createdAt              DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime      @updatedAt @db.Timestamptz(6)
+
+  subscription HostingSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user         User?               @relation("HostingAutopayUser", fields: [userId], references: [id], onDelete: SetNull)
+  package      HostingPackage?     @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([packageId])
+  @@map("hosting_autopays")
 }
 
 /// One paid hosting period. Kept when the website is deleted, for the report.

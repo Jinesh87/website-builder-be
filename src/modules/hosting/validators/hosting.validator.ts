@@ -31,6 +31,12 @@ export const confirmCheckoutSchema = Joi.object({
   razorpaySignature: Joi.string().trim().hex().max(128).required(),
 });
 
+export const confirmAutopaySchema = Joi.object({
+  razorpaySubscriptionId: razorpayId,
+  razorpayPaymentId: razorpayId,
+  razorpaySignature: Joi.string().trim().hex().max(128).required(),
+});
+
 export const updatePlanSchema = Joi.object({
   packageId: packageId.optional(),
   cycle: cycle.optional(),

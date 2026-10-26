@@ -1,4 +1,5 @@
 import type {
+  AutopayStatus,
   BillingCycle,
   ClientSource,
   HostingPayer,
@@ -50,6 +51,18 @@ export type HostingSubscriptionView = {
   suspendedAt: string | null;
 };
 
+/** Razorpay autopay on a website's plan, while it can still charge. */
+export type HostingAutopayView = {
+  status: AutopayStatus;
+  packageName: string;
+  cycle: BillingCycle;
+  /** Charged each period, in paise. */
+  amountPaise: number;
+  /** First charge; null = it was charged on approval. */
+  startAt: string | null;
+  nextChargeAt: string | null;
+};
+
 export type HostingPaymentView = {
   id: string;
   websiteId: string | null;
@@ -96,6 +109,7 @@ export type WebsiteHostingView = {
     clientName: string;
   };
   subscription: HostingSubscriptionView | null;
+  autopay: HostingAutopayView | null;
   /** Packages this website can choose, priced for it; includes its current package even if since hidden. */
   packages: HostingPackageView[];
   /** The period a payment made now would cover, per cycle. */
