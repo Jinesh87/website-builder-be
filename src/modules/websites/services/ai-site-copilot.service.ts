@@ -269,7 +269,14 @@ RULES & CROSS-PAGE REASONING
      - Call to Action (bold closing conversion banner with button)
      - FAQ (key questions answered)
      - Contact (variant "split-form", "cards-hub", "minimal-editorial" or "floating-glass"; showForm true; email, phone and address from the business facts)
-  5. Never generate only a single section when the user asked for a complete page, website, or menu.`;
+  5. Never generate only a single section when the user asked for a complete page, website, or menu.
+  6. SHOP / PRODUCT / ECOMMERCE PAGES ("product page", "shop page", "catalogue", "store"):
+     Do NOT clarify and do NOT build a services or cards grid of made-up products. The catalogue is live.
+     Create two pages when they are not already in SITE PAGES:
+     - "Shop" slug "/shop", showInNav true: a short hero plus one "products" section. products data is only eyebrow, title, subtitle, layout "grid-3", showSearch true, showCategoryFilter true, detailBase "/product", emptyMessage. It lists the real products.
+     - "Product" slug "/product", showInNav false: one "product_detail" section with backLabel "All products", backHref "/shop", showDescription true, showStock true. A product opens at /product/its-slug.
+     Also emit "update_navigation" so the header menu includes { "label": "Shop", "href": "/shop" }, keeping the existing items.
+     If the owner is already on the Shop page, use "replace_page" for that page instead of creating a duplicate.`;
 
 /** What the AI sees of the page: the section types whose fields it gets, and which sections it sees in full. */
 export type PromptScope = { types: EditableSectionType[]; fullIds: Set<string>; pageJson: string };

@@ -68,7 +68,12 @@ export class PublicSiteController {
       }
 
       const slug = req.path || "/";
-      const result = await liveSiteEngineService.renderPage(identifier, slug, req.baseUrl || "");
+      const selection: Record<string, string> = {};
+      for (const [key, value] of Object.entries(req.query)) {
+        const text = Array.isArray(value) ? value[0] : value;
+        if (typeof text === "string" && text && key.length <= 40 && text.length <= 40) selection[key] = text;
+      }
+      const result = await liveSiteEngineService.renderPage(identifier, slug, req.baseUrl || "", selection);
 
       if (result.redirectUrl) {
         const queryString = req.url && req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";

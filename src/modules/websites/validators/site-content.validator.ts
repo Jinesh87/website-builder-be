@@ -1384,6 +1384,25 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .max(50)
       .required(),
   }),
+  products: Joi.object({
+    design: Joi.string().valid("classic-grid", "editorial", "compact", "showcase").optional(),
+    eyebrow: optionalText(120),
+    title: text(160).required(),
+    subtitle: optionalText(320),
+    layout: Joi.string().valid("grid-3", "grid-2").optional(),
+    showSearch: Joi.boolean().optional(),
+    showCategoryFilter: Joi.boolean().optional(),
+    showSort: Joi.boolean().optional(),
+    detailBase: Joi.string().trim().max(80).pattern(/^\/[A-Za-z0-9/_-]*$/).optional(),
+    emptyMessage: optionalText(200),
+  }),
+  product_detail: Joi.object({
+    design: Joi.string().valid("split", "gallery-focus", "editorial", "compact").optional(),
+    backLabel: optionalText(80),
+    backHref: Joi.string().trim().max(200).allow("").optional(),
+    showDescription: Joi.boolean().optional(),
+    showStock: Joi.boolean().optional(),
+  }),
   blog_detail: Joi.object({
     design: Joi.string().valid(...BLOG_DETAIL_DESIGNS).required(),
     title: text(240).required(),

@@ -3,6 +3,7 @@ import { BuilderType } from "../../../common/constants/website.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import { logger } from "../../../config/logger.js";
 import type { LayoutSlot } from "../ai/ai-ops.js";
+import { shopPagesSuggestion } from "../ai/shop-pages.js";
 import { aiGeneratorService, type AiSuggestionPayload, type GenerateAiOptions } from "../services/ai-generator.service.js";
 import { aiChatService } from "../services/ai-chat.service.js";
 import { aiSeoService } from "../services/ai-seo.service.js";
@@ -242,8 +243,11 @@ export class WebsiteController {
       const useCopilot =
         website.builderType === BuilderType.AI && (selectedType === undefined || isEditableSectionType(selectedType));
 
+      const shopPages = shopPagesSuggestion(body.prompt, website);
       const generate = (onPlan?: (layout: LayoutSlot[]) => void): Promise<AiSuggestionPayload> =>
-        useCopilot
+        shopPages
+          ? Promise.resolve(shopPages)
+          : useCopilot
           ? aiSiteCopilotService.generate({
               ...body,
               website,

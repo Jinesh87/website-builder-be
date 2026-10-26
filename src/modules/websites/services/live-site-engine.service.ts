@@ -4,10 +4,59 @@ import { prisma } from "../../../config/prisma.js";
 import { siteRendererClient, type RenderedSitePage } from "./site-renderer.client.js";
 import { siteCacheService, type CachedPagePayload } from "./site-cache.service.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
+import { shopService } from "../../shop/services/shop.service.js";
+import type { PublicShopProduct } from "../../shop/types/shop.types.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 
+type ShopRender = {
+  products: PublicShopProduct[];
+  productSlug?: string;
+  selection?: Record<string, string>;
+  live: true;
+};
+
 export type CachedPage = CachedPagePayload;
+
+function formatInr(paise: number): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
+}
+
+const SHOP_DETAIL_PICK = `(function(){document.querySelectorAll("[data-wb-detail]").forEach(function(root){if(root.getAttribute("data-wb-detail-ready"))return;root.setAttribute("data-wb-detail-ready","1");var node=root.querySelector("[data-wb-variants]");if(!node||!node.textContent)return;var variants=[];try{variants=JSON.parse(node.textContent);}catch(e){return;}var priceEl=root.querySelector("[data-wb-price]");var stockEl=root.querySelector("[data-wb-stock]");var hero=root.querySelector("[data-wb-hero]");function same(options,pick){var keys=Object.keys(options);if(keys.length!==Object.keys(pick).length)return false;for(var i=0;i<keys.length;i++){if(options[keys[i]]!==pick[keys[i]])return false;}return true;}function selected(){var pick={};root.querySelectorAll("[data-wb-option].is-active").forEach(function(btn){pick[btn.getAttribute("data-wb-option")]=btn.getAttribute("data-wb-value");});return pick;}function apply(variant){if(priceEl)priceEl.textContent=variant.price;if(stockEl)stockEl.textContent=variant.stock;var list=variant.images&&variant.images.length?variant.images:(variant.image?[{url:variant.image,alt:variant.alt||""}]:[]);if(hero&&list[0]){hero.setAttribute("src",list[0].url);if(list[0].alt)hero.setAttribute("alt",list[0].alt);}var box=root.querySelector("[data-wb-thumbs]");if(box){box.innerHTML="";box.style.display=list.length>1?"flex":"none";list.forEach(function(photo){var b=document.createElement("button");b.type="button";b.style.cssText="width:72px;height:72px;padding:0;border:1px solid rgba(0,0,0,.15);border-radius:10px;overflow:hidden;cursor:pointer;background:transparent;";var im=document.createElement("img");im.src=photo.url;im.alt="";im.style.cssText="width:100%;height:100%;object-fit:cover;display:block;";b.appendChild(im);b.addEventListener("click",function(){if(hero){hero.src=photo.url;if(photo.alt)hero.alt=photo.alt;}});box.appendChild(b);});}root.querySelectorAll("[data-wb-option]").forEach(function(btn){var on=variant.options[btn.getAttribute("data-wb-option")]===btn.getAttribute("data-wb-value");btn.classList.toggle("is-active",on);btn.style.background=on?"var(--color-text)":"transparent";btn.style.color=on?"var(--color-background)":"inherit";});}root.querySelectorAll("[data-wb-option]").forEach(function(btn){btn.addEventListener("click",function(){var name=btn.getAttribute("data-wb-option")||"";var value=btn.getAttribute("data-wb-value")||"";var pick=selected();pick[name]=value;var exact=null,fallback=null;for(var i=0;i<variants.length;i++){if(!exact&&same(variants[i].options,pick))exact=variants[i];if(!fallback&&variants[i].options[name]===value)fallback=variants[i];}if(exact||fallback)apply(exact||fallback);});});});})();`;
+
+/** Exact page, or /product/:slug when that page holds a product detail section. */
+function resolvePublishedPage(
+  pages: PublishSnapshot["pages"],
+  cleanSlug: string,
+): { page: PublishSnapshot["pages"][number]; productSlug?: string } | null {
+  const exact =
+    pages.find((page) => page.slug === cleanSlug) ||
+    pages.find((page) => page.slug === cleanSlug.replace(/\/+$/, "")) ||
+    (cleanSlug === "/" ? pages[0] : undefined);
+  if (exact) return { page: exact };
+
+  const matches = pages.flatMap((page) => {
+    if (!page.sections.some((section) => section.type === "product_detail")) return [];
+    const base = page.slug === "/" ? "" : page.slug.replace(/\/+$/, "");
+    if (!base || !cleanSlug.startsWith(`${base}/`)) return [];
+    const productSlug = decodeURIComponent(cleanSlug.slice(base.length + 1));
+    if (!productSlug || productSlug.includes("/")) return [];
+    return [{ page, productSlug, length: base.length }];
+  });
+  matches.sort((left, right) => right.length - left.length);
+  const best = matches[0];
+  return best ? { page: best.page, productSlug: best.productSlug } : null;
+}
+
+/** On localhost the site lives under /live/<subdomain>. Root links like /shop would otherwise hit the API. */
+function prefixLocalHrefs(html: string, basePath: string): string {
+  if (!basePath) return html;
+  return html.replace(/(\shref=")\/(?!\/)([^"]*)"/g, (_, attr: string, rest: string) => {
+    if (rest.startsWith("_wb/")) return `${attr}/${rest}"`;
+    const path = rest && !rest.startsWith("#") && !rest.startsWith("?") ? `/${rest}` : rest;
+    return `${attr}${basePath}${path}"`;
+  });
+}
 
 function escapeHtml(str: string | null | undefined): string {
   if (!str) return "";
@@ -77,6 +126,125 @@ const renderStateSelect = {
   },
 };
 
+
+function shopCards(
+  product: PublicShopProduct,
+  detailBase: string,
+): { href: string; name: string; label: string; price: string; image: string }[] {
+  const groups = new Map<string, { label: string; query: URLSearchParams; variants: PublicShopProduct["variants"] }>();
+  for (const variant of product.variants) {
+    const listed = variant.options.filter((option) => option.list);
+    const key = listed.length ? listed.map((option) => `${option.name.toLowerCase()}=${option.value.toLowerCase()}`).join("&") : "*";
+    const group = groups.get(key);
+    if (group) {
+      group.variants.push(variant);
+      continue;
+    }
+    const query = new URLSearchParams();
+    for (const option of listed) query.set(option.name, option.value);
+    groups.set(key, {
+      label: listed.map((option) => option.value).join(" / "),
+      query,
+      variants: [variant],
+    });
+  }
+  const rows = groups.size > 0 ? [...groups.values()] : [{ label: "", query: new URLSearchParams(), variants: product.variants }];
+  return rows.map((group) => {
+    const query = group.query.toString();
+    const pricePaise = group.variants[0]?.pricePaise;
+    return {
+      href: `${detailBase}/${encodeURIComponent(product.slug)}${query ? `?${query}` : ""}`,
+      name: product.name,
+      label: group.label,
+      price: pricePaise === undefined ? "" : formatInr(pricePaise),
+      image: group.variants.find((variant) => variant.images[0])?.images[0]?.url || product.images[0]?.url || "",
+    };
+  });
+}
+
+function legacyShopHtml(
+  type: string,
+  data: Record<string, unknown>,
+  shop: ShopRender | undefined,
+  heading: string,
+  subheading: string,
+  badgeText: string,
+  getHeadingMarkup: (heading: string) => { tag: string; cls: string },
+): string {
+  if (type === "product_detail") {
+    const product = shop?.productSlug ? shop.products.find((item) => item.slug === shop.productSlug) : shop?.products[0];
+    const backHref = typeof data.backHref === "string" && data.backHref ? data.backHref : "/shop";
+    const backLabel = typeof data.backLabel === "string" && data.backLabel ? data.backLabel : "All products";
+    if (!product) return `<section style="padding:4.5rem 0;"><div class="container"><p>This product is not in the shop.</p></div></section>`;
+    const wanted = Object.entries(shop?.selection ?? {});
+    const first =
+      product.variants.find((variant) =>
+        wanted.every(([name, value]) =>
+          variant.options.some((option) => option.name.toLowerCase() === name.toLowerCase() && option.value.toLowerCase() === value.toLowerCase()),
+        ),
+      ) ?? product.variants[0];
+    const gallery = first && first.images.length > 0 ? first.images : product.images;
+    const image = gallery[0]?.url || "";
+    const thumbHtml =
+      gallery.length > 1
+        ? `<div data-wb-thumbs="" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">${gallery
+            .map(
+              (photo) =>
+                `<button type="button" style="width:72px;height:72px;padding:0;border:1px solid rgba(0,0,0,.15);border-radius:10px;overflow:hidden;cursor:pointer;background:transparent;" onclick="var h=this.closest('article').querySelector('[data-wb-hero]');if(h)h.src=this.querySelector('img').src"><img src="${escapeHtml(photo.url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></button>`,
+            )
+            .join("")}</div>`
+        : `<div data-wb-thumbs="" style="display:none;"></div>`;
+    const groups = new Map<string, string[]>();
+    for (const variant of product.variants) {
+      const options = variant.options.length > 0 ? variant.options : product.variants.length > 1 ? [{ name: "Option", value: variant.name }] : [];
+      for (const option of options) {
+        const values = groups.get(option.name) ?? [];
+        if (!values.includes(option.value)) values.push(option.value);
+        groups.set(option.name, values);
+      }
+    }
+    const optionHtml = [...groups.entries()]
+      .map(([name, values]) => {
+        const buttons = values
+          .map((value, index) => {
+            const chosen = first?.options.some((option) => option.name === name && option.value === value) || (first && first.options.length === 0 && index === 0);
+            return `<button type="button" data-wb-option="${escapeHtml(name)}" data-wb-value="${escapeHtml(value)}" class="${chosen ? "is-active" : ""}" style="border:1px solid rgba(0,0,0,.15);border-radius:10px;padding:.45rem .85rem;background:${chosen ? "var(--color-text)" : "transparent"};color:${chosen ? "var(--color-background)" : "inherit"};cursor:pointer;">${escapeHtml(value)}</button>`;
+          })
+          .join("");
+        return `<div style="margin-top:1rem;"><div style="font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--color-muted);margin-bottom:.4rem;">${escapeHtml(name)}</div><div style="display:flex;flex-wrap:wrap;gap:.5rem;">${buttons}</div></div>`;
+      })
+      .join("");
+    const payload = JSON.stringify(
+      product.variants.map((variant) => {
+        const options = variant.options.length > 0 ? variant.options : product.variants.length > 1 ? [{ name: "Option", value: variant.name }] : [];
+        const photos = variant.images.length > 0 ? variant.images : product.images;
+        return {
+          price: formatInr(variant.pricePaise),
+          stock: variant.quantity > 0 ? `${variant.quantity} in stock` : "Out of stock",
+          out: variant.quantity <= 0,
+          image: photos[0]?.url ?? "",
+          alt: photos[0]?.alt || product.name,
+          images: photos.map((photo) => ({ url: photo.url, alt: photo.alt || product.name })),
+          options: Object.fromEntries(options.map((option) => [option.name, option.value])),
+        };
+      }),
+    ).replace(/</g, "\\u003c");
+    const stock = first ? (first.quantity > 0 ? `${first.quantity} in stock` : "Out of stock") : "";
+    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
+  }
+
+  const list = shop?.products ?? [];
+  const detailBase = typeof data.detailBase === "string" && data.detailBase.startsWith("/") ? data.detailBase.replace(/\/+$/, "") : "/product";
+  const effectiveHeading = heading || "Shop";
+  const markup = getHeadingMarkup(effectiveHeading);
+  const cards = list
+    .flatMap((product) => shopCards(product, detailBase))
+    .map((card) => {
+      return `<article class="card">${card.image ? `<a href="${escapeHtml(card.href)}"><img src="${escapeHtml(card.image)}" alt="${escapeHtml(card.name)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:0.6rem;" /></a>` : ""}<a href="${escapeHtml(card.href)}"><h3 class="card-title">${escapeHtml(card.name)}</h3></a>${card.label ? `<p style="color:var(--color-muted);">${escapeHtml(card.label)}</p>` : ""}${card.price ? `<p style="font-weight:700;">${escapeHtml(card.price)}</p>` : ""}</article>`;
+    })
+    .join("");
+  return `<section style="padding:4.5rem 0;"><div class="container"><div style="text-align:center;max-width:720px;margin:0 auto 2.5rem;">${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}<${markup.tag} class="${markup.cls}">${escapeHtml(effectiveHeading)}</${markup.tag}>${subheading ? `<p class="subtitle" style="margin:0 auto;">${escapeHtml(subheading)}</p>` : ""}</div>${list.length === 0 ? `<p style="text-align:center;">${escapeHtml(String(data.emptyMessage || "No products yet."))}</p>` : `<div class="grid-3">${cards}</div>`}</div></section>`;
+}
 
 export class LiveSiteEngineService {
   /** Purges cache entries for a specific subdomain or custom domain across L1 memory and L2 Redis */
@@ -202,7 +370,7 @@ Sitemap: ${domain}/sitemap.xml
   }
 
   /** `basePath` is the URL prefix in preview mode ("/live/<subdomain>"); empty when served on the site's own host. */
-  async renderPage(identifier: string, pathSlug: string, basePath = ""): Promise<CachedPage> {
+  async renderPage(identifier: string, pathSlug: string, basePath = "", selection: Record<string, string> = {}): Promise<CachedPage> {
     // 1. Trailing slash canonical redirect (e.g., /about/ -> /about)
     if (pathSlug.length > 1 && pathSlug.endsWith("/")) {
       const canonicalSlug = pathSlug.replace(/\/+$/, "");
@@ -227,15 +395,18 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     const cleanSlug = pathSlug === "" || pathSlug === "/" ? "/" : pathSlug.startsWith("/") ? pathSlug : `/${pathSlug}`;
-    const pageRoute = `${basePath}${cleanSlug}`;
+    const picked = Object.entries(selection)
+      .filter(([, value]) => value)
+      .sort(([left], [right]) => left.localeCompare(right));
+    const pageRoute = `${basePath}${cleanSlug}${picked.length ? `?${new URLSearchParams(picked).toString()}` : ""}`;
 
     // Multi-tier L1 Memory + L2 Redis cached resolution with single-flight stampede protection
     return siteCacheService.getOrRender(identifier, pageRoute, async () => {
-      return this.renderPageInternal(identifier, cleanSlug, basePath);
+      return this.renderPageInternal(identifier, cleanSlug, basePath, selection);
     });
   }
 
-  private async renderPageInternal(identifier: string, cleanSlug: string, basePath = ""): Promise<CachedPage> {
+  private async renderPageInternal(identifier: string, cleanSlug: string, basePath = "", selection: Record<string, string> = {}): Promise<CachedPage> {
     const website = await this.resolveWebsite(identifier);
     if (!website || !website.liveVersion) {
       const notFoundHtml = this.renderNotFoundHtml(identifier);
@@ -256,18 +427,28 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     const snapshot = website.liveVersion.snapshot as unknown as PublishSnapshot;
-    const targetPage =
-      snapshot.pages.find((p) => p.slug === cleanSlug) ||
-      snapshot.pages.find((p) => p.slug === cleanSlug.replace(/\/+$/, "")) ||
-      (cleanSlug === "/" ? snapshot.pages[0] : null);
-
-    if (!targetPage) {
+    const resolved = resolvePublishedPage(snapshot.pages, cleanSlug);
+    if (!resolved) {
       const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
+    const targetPage = resolved.page;
+    const products = await shopService.publicCatalog(website.id);
+    const activeProduct = resolved.productSlug ? products.find((product) => product.slug === resolved.productSlug) : undefined;
+    if (resolved.productSlug && !activeProduct) {
+      const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
+      return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
+    }
+    const shop: ShopRender = {
+      products,
+      ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
+      ...(Object.keys(selection).length > 0 ? { selection } : {}),
+      live: true,
+    };
 
     const domain = this.getPublicDomain(website);
-    const pageUrl = `${domain}${targetPage.slug === "/" ? "" : targetPage.slug}`;
+    const publicPath = resolved.productSlug ? cleanSlug : targetPage.slug;
+    const pageUrl = `${domain}${publicPath === "/" ? "" : publicPath}`;
 
     const businessName = website.businessName || website.name;
     const businessDesc = website.description || "";
@@ -276,15 +457,17 @@ Sitemap: ${domain}/sitemap.xml
     const address = website.address || "";
     const faviconUrl = website.logoMediaId ? `${env.API_PUBLIC_URL}/api/media/files/${website.logoMediaId}` : "";
 
-    const title =
-      targetPage.seoTitle ||
-      (targetPage.slug === "/" ? `${businessName} — Official Website` : `${targetPage.name} | ${businessName}`);
-    const description =
-      targetPage.seoDescription || businessDesc || `Welcome to ${businessName}. Discover our services, products, and contact details.`;
+    const title = activeProduct
+      ? `${activeProduct.name} | ${businessName}`
+      : targetPage.seoTitle ||
+        (targetPage.slug === "/" ? `${businessName} — Official Website` : `${targetPage.name} | ${businessName}`);
+    const description = activeProduct?.description
+      ? activeProduct.description
+      : targetPage.seoDescription || businessDesc || `Welcome to ${businessName}. Discover our services, products, and contact details.`;
 
     // Find prominent image for OG tag
-    let ogImageUrl = "";
-    for (const sec of targetPage.sections) {
+    let ogImageUrl = activeProduct?.images[0]?.url || activeProduct?.variants.find((variant) => variant.images[0])?.images[0]?.url || "";
+    for (const sec of ogImageUrl ? [] : targetPage.sections) {
       const d = sec.data as Record<string, unknown>;
       if (d.image && typeof d.image === "object" && "url" in d.image && typeof d.image.url === "string") {
         ogImageUrl = d.image.url;
@@ -414,6 +597,7 @@ Sitemap: ${domain}/sitemap.xml
         contactPhone,
         address,
       },
+      shop,
     );
 
     const siteLang =
@@ -450,12 +634,10 @@ Sitemap: ${domain}/sitemap.xml
 
     const htmlLang = escapeHtml(String(siteLang));
 
-    const siteKitPage = await this.renderWithSiteKit(snapshot, targetPage.slug, identifier);
+    const siteKitPage = await this.renderWithSiteKit({ ...snapshot, shop }, targetPage.slug, identifier);
     if (siteKitPage) {
       const assetQuery = `?v=${encodeURIComponent(siteKitPage.assetsVersion)}`;
-      const body = basePath
-        ? siteKitPage.body.replace(/(\shref=")\/(?!\/)([^"]*)"/g, (_, attr: string, rest: string) => `${attr}${basePath}${rest && !rest.startsWith("#") && !rest.startsWith("?") ? `/${rest}` : rest}"`)
-        : siteKitPage.body;
+      const body = prefixLocalHrefs(siteKitPage.body, basePath);
       const html = `<!DOCTYPE html>
 <html lang="${htmlLang}">
   <head>
@@ -698,11 +880,17 @@ Sitemap: ${domain}/sitemap.xml
 </html>`;
 
     // Not cached: the next request retries the site-kit renderer.
-    return { html: fullHtml, statusCode: 200, contentType: "text/html; charset=utf-8", cachedAt: Date.now(), transient: true };
+    return {
+      html: prefixLocalHrefs(fullHtml, basePath),
+      statusCode: 200,
+      contentType: "text/html; charset=utf-8",
+      cachedAt: Date.now(),
+      transient: true,
+    };
   }
 
   /** The editor's own components, rendered by the site-renderer service. Null means use the legacy renderer. */
-  private async renderWithSiteKit(snapshot: PublishSnapshot, slug: string, identifier: string): Promise<RenderedSitePage | null> {
+  private async renderWithSiteKit(snapshot: PublishSnapshot & { shop?: ShopRender }, slug: string, identifier: string): Promise<RenderedSitePage | null> {
     try {
       return await siteRendererClient.render(snapshot, slug);
     } catch (error) {
@@ -724,6 +912,7 @@ Sitemap: ${domain}/sitemap.xml
       contactPhone?: string;
       address?: string;
     },
+    shop?: ShopRender,
   ): string {
     const menuItems = header?.menu || [];
     const headerCta = header?.cta;
@@ -1397,6 +1586,12 @@ Sitemap: ${domain}/sitemap.xml
               </div>
             </div>
           </article>`);
+          break;
+        }
+
+        case "products":
+        case "product_detail": {
+          sectionParts.push(legacyShopHtml(section.type, d, shop, heading, subheading, badgeText, getHeadingMarkup));
           break;
         }
 

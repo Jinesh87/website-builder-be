@@ -172,6 +172,8 @@ export const SECTION_TYPES = [
   "custom",
   "blog",
   "blog_detail",
+  "products",
+  "product_detail",
 ] as const;
 
 export const AUTH_VARIANTS = [
@@ -1050,6 +1052,8 @@ export type SectionDataMap = {
   };
   blog: BlogData;
   blog_detail: BlogDetailData;
+  products: ProductsData;
+  product_detail: ProductDetailData;
 };
 
 export const BLOG_DETAIL_DESIGNS = [
@@ -1080,6 +1084,28 @@ export type BlogPostItem = {
   readTime: string;
   featured?: boolean;
   readMoreLabel?: string;
+};
+
+export type ProductsData = {
+  design?: "classic-grid" | "editorial" | "compact" | "showcase";
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  layout?: "grid-3" | "grid-2";
+  showSearch?: boolean;
+  showCategoryFilter?: boolean;
+  showSort?: boolean;
+  /** Address of the page that holds the product detail section, such as "/product". */
+  detailBase?: string;
+  emptyMessage?: string;
+};
+
+export type ProductDetailData = {
+  design?: "split" | "gallery-focus" | "editorial" | "compact";
+  backLabel?: string;
+  backHref?: string;
+  showDescription?: boolean;
+  showStock?: boolean;
 };
 
 export type BlogData = {
