@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
+import type { SubscriptionConfirmation } from "../../wallet/services/autopay.js";
 import { hostingAdminService } from "../services/hosting-admin.service.js";
+import { hostingAutopayService } from "../services/hosting-autopay.service.js";
 import { hostingCheckoutService } from "../services/hosting-checkout.service.js";
 import { hostingService } from "../services/hosting.service.js";
 import type {
@@ -25,7 +27,34 @@ export class HostingController {
 
   updatePlan = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
-      res.json({ hosting: await hostingService.updatePlan(req.params.id, req.body, req.user!) });
+      const hosting = await hostingService.updatePlan(req.params.id, req.body, req.user!);
+      const autopayStopped = await hostingAutopayService.afterPlanChange(req.params.id);
+      res.json({ hosting: autopayStopped ? await hostingService.getForWebsite(req.params.id, req.user!) : hosting });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  setupAutopay = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ checkout: await hostingAutopayService.setup(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  confirmAutopay = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const input = req.body as SubscriptionConfirmation;
+      res.json({ hosting: await hostingAutopayService.confirm(req.params.id, input, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  cancelAutopay = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ hosting: await hostingAutopayService.cancel(req.params.id, req.user!) });
     } catch (error) {
       next(error);
     }
@@ -90,7 +119,9 @@ export class HostingController {
 
   updatePackage = async (req: Request<PackageParams>, res: Response, next: NextFunction) => {
     try {
-      res.json({ settings: await hostingAdminService.updatePackage(req.params.packageId, req.body, req.user!) });
+      const settings = await hostingAdminService.updatePackage(req.params.packageId, req.body, req.user!);
+      await hostingAutopayService.afterPackageChange(req.params.packageId);
+      res.json({ settings });
     } catch (error) {
       next(error);
     }

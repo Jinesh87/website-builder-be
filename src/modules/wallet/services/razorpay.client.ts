@@ -16,6 +16,30 @@ export type RazorpayPayment = {
   error_description?: string | null;
 };
 
+export type RazorpayPlanPeriod = "monthly" | "yearly";
+
+export type RazorpaySubscriptionStatus =
+  | "created"
+  | "authenticated"
+  | "active"
+  | "pending"
+  | "halted"
+  | "paused"
+  | "cancelled"
+  | "completed"
+  | "expired";
+
+/** Times are Unix seconds. */
+export type RazorpaySubscription = {
+  id: string;
+  plan_id: string;
+  status: RazorpaySubscriptionStatus;
+  charge_at: number | null;
+  start_at: number | null;
+  current_end: number | null;
+  paid_count: number;
+};
+
 async function call<T>(keys: RazorpayKeys, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   const auth = Buffer.from(`${keys.keyId}:${keys.keySecret}`).toString("base64");
   let response: Response;
@@ -64,6 +88,40 @@ export function captureRazorpayPayment(
   return call(keys, "POST", `/payments/${encodeURIComponent(paymentId)}/capture`, { amount: amountPaise, currency });
 }
 
+export function createRazorpayPlan(
+  keys: RazorpayKeys,
+  input: { period: RazorpayPlanPeriod; interval: number; itemName: string; amountPaise: number; currency: string },
+): Promise<{ id: string }> {
+  return call(keys, "POST", "/plans", {
+    period: input.period,
+    interval: input.interval,
+    item: { name: input.itemName, amount: input.amountPaise, currency: input.currency },
+  });
+}
+
+/** Without `startAt` the first charge is taken when the customer approves the mandate. */
+export function createRazorpaySubscription(
+  keys: RazorpayKeys,
+  input: { planId: string; totalCount: number; startAt?: Date; notes: Record<string, string> },
+): Promise<RazorpaySubscription> {
+  return call(keys, "POST", "/subscriptions", {
+    plan_id: input.planId,
+    total_count: input.totalCount,
+    customer_notify: 1,
+    ...(input.startAt ? { start_at: Math.floor(input.startAt.getTime() / 1000) } : {}),
+    notes: input.notes,
+  });
+}
+
+export function fetchRazorpaySubscription(keys: RazorpayKeys, subscriptionId: string): Promise<RazorpaySubscription> {
+  return call(keys, "GET", `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+}
+
+/** Stops it straight away; what was already paid is not refunded. */
+export function cancelRazorpaySubscription(keys: RazorpayKeys, subscriptionId: string): Promise<RazorpaySubscription> {
+  return call(keys, "POST", `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { cancel_at_cycle_end: 0 });
+}
+
 /** Cheap authenticated call used to check keys before saving them. */
 export async function checkRazorpayKeys(keys: RazorpayKeys): Promise<void> {
   await call(keys, "GET", "/orders?count=1");
@@ -78,6 +136,12 @@ function safeEqualHex(expected: string, actual: string): boolean {
 /** Signature Razorpay Checkout returns after a successful payment. */
 export function isValidPaymentSignature(keySecret: string, orderId: string, paymentId: string, signature: string): boolean {
   const expected = createHmac("sha256", keySecret).update(`${orderId}|${paymentId}`).digest("hex");
+  return safeEqualHex(expected, signature);
+}
+
+/** Signature Razorpay Checkout returns after the customer approves a subscription. Note the order: payment first. */
+export function isValidSubscriptionSignature(keySecret: string, paymentId: string, subscriptionId: string, signature: string): boolean {
+  const expected = createHmac("sha256", keySecret).update(`${paymentId}|${subscriptionId}`).digest("hex");
   return safeEqualHex(expected, signature);
 }
 

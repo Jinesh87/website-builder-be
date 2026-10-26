@@ -12,6 +12,7 @@ import {
   type WebsiteGeneration,
   type WebsiteTemplate,
 } from "../../../generated/prisma/client.js";
+import { hostingAutopayService } from "../../hosting/services/hosting-autopay.service.js";
 import { hostingService } from "../../hosting/services/hosting.service.js";
 import { THEME_SEEDS } from "../../../seeder/design-library/themes.js";
 import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
@@ -746,6 +747,7 @@ export class WebsiteService {
     });
     if (!website) throw NOT_FOUND();
 
+    await hostingAutopayService.stopForWebsite(website.id);
     await prisma.$transaction(async (tx) => {
       await tx.website.update({
         where: { id: website.id },

@@ -34,6 +34,12 @@ const confirmTopupSchema = Joi.object({
   razorpaySignature: Joi.string().trim().hex().max(128).required(),
 });
 
+const confirmAutoTopupSchema = Joi.object({
+  razorpaySubscriptionId: razorpayId,
+  razorpayPaymentId: razorpayId,
+  razorpaySignature: Joi.string().trim().hex().max(128).required(),
+});
+
 const updatePaymentConfigSchema = Joi.object({
   razorpayKeyId: Joi.string()
     .trim()
@@ -58,6 +64,23 @@ walletRouter.post(
   walletController.createTopup,
 );
 walletRouter.post("/topups/verify", validate(confirmTopupSchema), walletController.confirmTopup);
+walletRouter.post(
+  "/auto-topup",
+  rateLimit({ name: "wallet-auto-topup", max: 20, windowSeconds: 60 * 60 }),
+  validate(createTopupSchema),
+  walletController.setupAutoTopup,
+);
+walletRouter.post(
+  "/auto-topup/verify",
+  rateLimit({ name: "wallet-auto-topup-verify", max: 60, windowSeconds: 60 * 60 }),
+  validate(confirmAutoTopupSchema),
+  walletController.confirmAutoTopup,
+);
+walletRouter.delete(
+  "/auto-topup",
+  rateLimit({ name: "wallet-auto-topup-cancel", max: 30, windowSeconds: 60 * 60 }),
+  walletController.cancelAutoTopup,
+);
 
 /** Super admin: Razorpay keys. */
 export const paymentSettingsRouter = Router();

@@ -16,16 +16,19 @@ import {
   WalletTransactionType,
   WebsiteOfflineReason,
   WebsiteStatus,
+  type HostingAutopay,
   type HostingConfig,
   type HostingPackage,
   type HostingPayment,
   type HostingSubscription,
 } from "../../../generated/prisma/client.js";
+import { SCHEDULED_AUTOPAY, STOPPABLE_AUTOPAY } from "../../wallet/services/autopay.js";
 import { paymentSettingsService } from "../../wallet/services/payment-settings.service.js";
 import { applyLedgerEntry, CONNECTS_PER_RUPEE, connectsForPaise, formatConnects } from "../../wallet/services/wallet.service.js";
 import { liveSiteEngineService } from "../../websites/services/live-site-engine.service.js";
 import type {
   CollectInput,
+  HostingAutopayView,
   HostingPackageView,
   HostingPaymentView,
   HostingSubscriptionView,
@@ -107,6 +110,18 @@ export function toSubscriptionView(row: SubscriptionWithPackage): HostingSubscri
     currentPeriodEnd: iso(row.currentPeriodEnd),
     graceEndsAt: iso(row.graceEndsAt),
     suspendedAt: iso(row.suspendedAt),
+  };
+}
+
+export function toAutopayView(row: HostingAutopay | null | undefined): HostingAutopayView | null {
+  if (!row || !STOPPABLE_AUTOPAY.has(row.status)) return null;
+  return {
+    status: row.status,
+    packageName: row.packageName,
+    cycle: row.cycle,
+    amountPaise: row.amountPaise,
+    startAt: iso(row.startAt),
+    nextChargeAt: iso(row.nextChargeAt),
   };
 }
 
@@ -195,6 +210,20 @@ export function assertRenewalOpen(subscription: HostingSubscription | null, now:
       "RENEWAL_NOT_OPEN",
     );
   }
+}
+
+type AutopayState = Pick<HostingSubscription, "status" | "currentPeriodEnd"> & { autopay: Pick<HostingAutopay, "status"> | null };
+
+/** A plan on scheduled autopay renews by itself; paying it another way as well would charge the client twice. */
+export function assertNotOnAutopay(subscription: AutopayState | null): void {
+  if (subscription?.status !== HostingStatus.ACTIVE || !subscription.autopay || !SCHEDULED_AUTOPAY.has(subscription.autopay.status)) {
+    return;
+  }
+  throw new AppError(
+    409,
+    `Autopay renews this plan on ${formatBillingDate(subscription.currentPeriodEnd!)}. Turn autopay off to pay another way.`,
+    "AUTOPAY_ACTIVE",
+  );
 }
 
 type PriceLevel = { quarterly: number | null; yearly: number | null };
@@ -480,7 +509,7 @@ export class HostingService {
         status: true,
         offlineReason: true,
         clientId: true,
-        hosting: { include: { package: true } },
+        hosting: { include: { package: true, autopay: true } },
         client: { select: { businessName: true, wallet: { select: { balance: true } } } },
       },
     });
@@ -518,6 +547,7 @@ export class HostingService {
         clientName: website.client.businessName,
       },
       subscription: subscription && toSubscriptionView(subscription),
+      autopay: toAutopayView(subscription?.autopay),
       packages: choices.map((pkg) => toPackageView(pkg, subscription)),
       nextPeriods: { QUARTERLY: periodFor(BillingCycle.QUARTERLY), YEARLY: periodFor(BillingCycle.YEARLY) },
       renewalOpensAt: iso(renewalOpensAt(subscription, now)),
@@ -534,6 +564,12 @@ export class HostingService {
   /** The client pays the next period from their own connects (when the platform allows it). */
   async payWithConnects(websiteId: string, plan: PlanChoice, actor: AuthUser): Promise<WebsiteHostingView> {
     await this.assertAccess(websiteId, actor);
+    assertNotOnAutopay(
+      await prisma.hostingSubscription.findUnique({
+        where: { websiteId },
+        select: { status: true, currentPeriodEnd: true, autopay: { select: { status: true } } },
+      }),
+    );
     await this.settle({ websiteId, plan, payer: HostingPayer.CLIENT, method: HostingPaymentMethod.WALLET, actorId: actor.id });
     return this.getForWebsite(websiteId, actor);
   }
@@ -560,7 +596,7 @@ export class HostingService {
   async updatePlan(websiteId: string, input: UpdatePlanInput, actor: AuthUser): Promise<WebsiteHostingView> {
     const website = await prisma.website.findFirst({
       where: { id: websiteId, ...this.scopeFor(actor) },
-      select: { id: true, name: true, clientId: true, hosting: { include: { package: true } } },
+      select: { id: true, name: true, clientId: true, hosting: { include: { package: true, autopay: { select: { status: true } } } } },
     });
     if (!website) throw WEBSITE_NOT_FOUND();
 
@@ -568,6 +604,10 @@ export class HostingService {
     const changesPrice = input.customQuarterlyPaise !== undefined || input.customYearlyPaise !== undefined;
     if (changesPrice && !isAdmin) {
       throw new AppError(403, "Only an admin can change hosting prices.", "FORBIDDEN");
+    }
+    const autopay = website.hosting?.autopay;
+    if (input.autoRenew && autopay && STOPPABLE_AUTOPAY.has(autopay.status)) {
+      throw new AppError(409, "Autopay already renews this plan. Turn it off first to renew from connects.", "AUTOPAY_ACTIVE");
     }
 
     const current = website.hosting;

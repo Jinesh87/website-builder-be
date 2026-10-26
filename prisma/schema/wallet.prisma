@@ -49,6 +49,8 @@ model PaymentOrder {
   currency          String             @default("INR") @db.VarChar(3)
   status            PaymentOrderStatus @default(CREATED)
   failureReason     String?            @db.VarChar(500)
+  /// Set when an auto top-up charged it rather than a one-off checkout.
+  razorpaySubscriptionId String?       @db.VarChar(64)
   paidAt            DateTime?          @db.Timestamptz(6)
   createdAt         DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
@@ -59,6 +61,45 @@ model PaymentOrder {
 
   @@index([clientId, createdAt])
   @@map("payment_orders")
+}
+
+/// A client's auto top-up: a Razorpay subscription that buys the same connects pack every month.
+/// One per client; setting it up again replaces the Razorpay subscription.
+model WalletAutoTopup {
+  id                     String        @id @default(uuid()) @db.Uuid
+  clientId               String        @unique @db.Uuid
+  userId                 String?       @db.Uuid
+  razorpaySubscriptionId String        @unique @db.VarChar(64)
+  connects               Int
+  amountPaise            Int
+  status                 AutopayStatus @default(CREATED)
+  /// When Razorpay charges next, as last reported by Razorpay.
+  nextChargeAt           DateTime?     @db.Timestamptz(6)
+  createdAt              DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime      @updatedAt @db.Timestamptz(6)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User?  @relation("WalletAutoTopupUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("wallet_auto_topups")
+}
+
+/// A Razorpay plan (fixed amount and interval), created once and reused by every subscription on that price.
+model RazorpayPlan {
+  id             String   @id @default(uuid()) @db.Uuid
+  /// Plans belong to a Razorpay account, so test and live keys never share one.
+  keyId          String   @db.VarChar(100)
+  razorpayPlanId String   @unique @db.VarChar(64)
+  /// Razorpay's "monthly" or "yearly".
+  period         String   @db.VarChar(10)
+  interval       Int
+  amountPaise    Int
+  currency       String   @db.VarChar(3)
+  itemName       String   @db.VarChar(100)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([keyId, period, interval, amountPaise, currency, itemName])
+  @@map("razorpay_plans")
 }
 
 /// Singleton (id = "default"), managed by the Super Admin.
@@ -113,4 +154,21 @@ enum PaymentOrderStatus {
   CREATED
   PAID
   FAILED
+}
+
+/// A Razorpay subscription's state, mirrored from Razorpay.
+enum AutopayStatus {
+  /// Waiting for the customer to approve the mandate in Checkout.
+  CREATED
+  /// Mandate approved; the first charge is scheduled.
+  AUTHENTICATED
+  ACTIVE
+  /// A charge failed and Razorpay is retrying it.
+  PENDING
+  /// Retries ran out; nothing more is charged.
+  HALTED
+  PAUSED
+  CANCELLED
+  COMPLETED
+  EXPIRED
 }
