@@ -3,6 +3,7 @@ import { prisma } from "../../../config/prisma.js";
 import { Prisma } from "../../../generated/prisma/client.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
+import { purgeShopPages } from "./shop-cache.js";
 import { readOptionSets } from "./shop.service.js";
 
 const PAGE_SIZE = 40;

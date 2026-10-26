@@ -1167,6 +1167,11 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    Pick a variant: "split-form" is the side-by-side inquiry form, "cards-hub" is department cards plus the form, "minimal-editorial" is a typographic split, "floating-glass" is a framed glass card.
    "showForm": true adds name, email and message fields. Submissions are emailed to the site owner. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one. Channel values must be that same email or phone.
    Never use "custom" blocks to imitate a contact or signup form.
+15. "products" (lists the website's real shop catalogue; do not invent products, prices or photos):
+   data: { "eyebrow": "Shop", "title": "Our products", "subtitle": "...", "layout": "grid-3"|"grid-2", "showSearch": true, "showCategoryFilter": true, "detailBase": "/product", "emptyMessage": "No products yet." }
+   "detailBase" must be the slug of the page that contains the product_detail section.
+16. "product_detail" (one product from the shop URL, with photos, option prices and stock; do not invent the product):
+   data: { "backLabel": "All products", "backHref": "/shop", "showDescription": true, "showStock": true }
 
 STOCK / DUMMY IMAGE GUIDELINES:
 - Tech / Dark Hero: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2000&q=80"

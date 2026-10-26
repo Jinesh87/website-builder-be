@@ -22,6 +22,18 @@ const optionSchema = Joi.object({
   name: Joi.string().trim().min(1).max(40).required().messages({
     "string.empty": "Name each option, such as Size or Colour",
   }),
+  listOnShop: Joi.boolean().optional(),
+  images: Joi.array()
+    .items(
+      Joi.object({
+        value: Joi.string().trim().min(1).max(40).required(),
+        images: Joi.array().items(imageSchema).max(8).required().messages({
+          "array.max": "A value can have at most 8 images",
+        }),
+      }),
+    )
+    .max(20)
+    .optional(),
   values: Joi.array()
     .items(Joi.string().trim().min(1).max(40))
     .min(1)
