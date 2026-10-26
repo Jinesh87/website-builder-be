@@ -17,6 +17,9 @@ import type {
   ShopOptionSetInput,
   ShopOptionSetView,
   ShopProductInput,
+  PublicShopList,
+  PublicShopListQuery,
+  ShopProductPage,
   ShopProductQuery,
   ShopProductView,
   ShopVariantView,
@@ -24,6 +27,7 @@ import type {
 
 const MAX_CATEGORIES = 100;
 const MAX_PRODUCTS = 500;
+const PRODUCT_PAGE_SIZES = [10, 20, 50] as const;
 const MAX_VARIANTS = 100;
 const MAX_IMAGES = 8;
 
@@ -317,30 +321,38 @@ export class ShopService {
     await prisma.shopCategory.delete({ where: { id: categoryId } });
   }
 
-  async listProducts(websiteId: string, query: ShopProductQuery, actor: AuthUser): Promise<ShopProductView[]> {
+  async listProducts(websiteId: string, query: ShopProductQuery, actor: AuthUser): Promise<ShopProductPage> {
     await this.openShop(websiteId, actor);
     const search = query.search?.trim();
+    const requestedSize = Number(query.pageSize);
+    const pageSize = PRODUCT_PAGE_SIZES.includes(requestedSize as (typeof PRODUCT_PAGE_SIZES)[number]) ? requestedSize : 20;
+    const where: Prisma.ProductWhereInput = {
+      websiteId,
+      ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+              { category: { name: { contains: search, mode: "insensitive" } } },
+              { variants: { some: { name: { contains: search, mode: "insensitive" } } } },
+              { variants: { some: { sku: { contains: search, mode: "insensitive" } } } },
+            ],
+          }
+        : {}),
+    };
+    const total = await prisma.product.count({ where });
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    const requestedPage = Number(query.page);
+    const page = Math.min(Math.max(1, Number.isFinite(requestedPage) ? Math.floor(requestedPage) : 1), pageCount);
     const products = await prisma.product.findMany({
-      where: {
-        websiteId,
-        ...(query.categoryId ? { categoryId: query.categoryId } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: "insensitive" } },
-                { description: { contains: search, mode: "insensitive" } },
-                { category: { name: { contains: search, mode: "insensitive" } } },
-                { variants: { some: { name: { contains: search, mode: "insensitive" } } } },
-                { variants: { some: { sku: { contains: search, mode: "insensitive" } } } },
-              ],
-            }
-          : {}),
-      },
+      where,
       include: productInclude,
       orderBy: { name: "asc" },
-      take: MAX_PRODUCTS,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
-    return products.map(toProduct);
+    return { products: products.map(toProduct), page, pageSize, total };
   }
 
   async createProduct(websiteId: string, input: ShopProductInput, actor: AuthUser): Promise<ShopProductView> {
@@ -650,3 +662,94 @@ function variantRows(
 }
 
 export const shopService = new ShopService();
+
+const SHOP_LIST_SORTS = ["featured", "price-low", "price-high", "name"] as const;
+export const SHOP_LIST_PAGE_SIZES = [8, 12, 24, 48] as const;
+const DEFAULT_SHOP_LIST_PAGE_SIZE = 12;
+
+type PublicListing = {
+  product: PublicShopProduct;
+  variants: PublicShopVariant[];
+  label: string;
+};
+
+/** Same card split as the storefront: each option marked `list` becomes its own card. */
+function publicListings(product: PublicShopProduct): PublicListing[] {
+  const groups = new Map<string, PublicListing>();
+  for (const variant of product.variants) {
+    const listed = variant.options.filter((option) => option.list);
+    const key = listed.length ? listed.map((option) => `${option.name.toLowerCase()}=${option.value.toLowerCase()}`).join("&") : "*";
+    const existing = groups.get(key);
+    if (existing) {
+      existing.variants.push(variant);
+      continue;
+    }
+    groups.set(key, {
+      product,
+      variants: [variant],
+      label: listed.map((option) => option.value).join(" / "),
+    });
+  }
+  if (groups.size === 0) return [{ product, variants: product.variants, label: "" }];
+  return [...groups.values()];
+}
+
+/** Search, category, and sort run before the page slice, so a page never contains the whole catalogue. */
+export function pagePublicCatalog(
+  products: PublicShopProduct[],
+  query: PublicShopListQuery,
+): { products: PublicShopProduct[]; list: PublicShopList } {
+  const categories = [...new Set(products.map((product) => product.categoryName).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right),
+  );
+  const search = (query.search ?? "").trim();
+  const needle = search.toLowerCase();
+  const wanted = (query.category ?? "").trim();
+  const category =
+    !wanted || wanted.toLowerCase() === "all" ? "All" : (categories.find((name) => name.toLowerCase() === wanted.toLowerCase()) ?? wanted);
+  const sort = SHOP_LIST_SORTS.includes(query.sort as (typeof SHOP_LIST_SORTS)[number])
+    ? (query.sort as PublicShopList["sort"])
+    : "featured";
+  const pageSize = SHOP_LIST_PAGE_SIZES.includes(query.pageSize as (typeof SHOP_LIST_PAGE_SIZES)[number])
+    ? query.pageSize!
+    : DEFAULT_SHOP_LIST_PAGE_SIZE;
+
+  let rows = products.flatMap((product) => publicListings(product));
+  if (category !== "All") {
+    rows = rows.filter((row) => row.product.categoryName.toLowerCase() === category.toLowerCase());
+  }
+  if (needle) {
+    rows = rows.filter((row) => {
+      const hay = [row.product.name, row.label, row.product.categoryName, row.product.description ?? "", ...row.variants.map((variant) => variant.name)]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }
+  if (sort === "price-low") rows = [...rows].sort((a, b) => (a.variants[0]?.pricePaise ?? 0) - (b.variants[0]?.pricePaise ?? 0));
+  if (sort === "price-high") rows = [...rows].sort((a, b) => (b.variants[0]?.pricePaise ?? 0) - (a.variants[0]?.pricePaise ?? 0));
+  if (sort === "name") rows = [...rows].sort((a, b) => a.product.name.localeCompare(b.product.name) || a.label.localeCompare(b.label));
+
+  const total = rows.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const requested = Number.isFinite(query.page) ? Math.floor(query.page!) : 1;
+  const page = Math.min(Math.max(1, requested), pageCount);
+  const slice = rows.slice((page - 1) * pageSize, page * pageSize);
+
+  const ordered: PublicShopProduct[] = [];
+  const byId = new Map<string, PublicShopProduct>();
+  for (const row of slice) {
+    let existing = byId.get(row.product.id);
+    if (!existing) {
+      existing = { ...row.product, variants: [] };
+      byId.set(row.product.id, existing);
+      ordered.push(existing);
+    }
+    existing.variants.push(...row.variants);
+  }
+
+  return {
+    products: ordered,
+    list: { search, category, sort, page, pageSize, total, categories },
+  };
+}

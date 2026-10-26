@@ -46,7 +46,7 @@ export class ShopController {
 
   listProducts = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
-      res.json({ products: await shopService.listProducts(req.params.id, req.query as unknown as ShopProductQuery, req.user!) });
+      res.json(await shopService.listProducts(req.params.id, req.query as unknown as ShopProductQuery, req.user!));
     } catch (error) {
       next(error);
     }
