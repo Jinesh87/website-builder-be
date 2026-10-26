@@ -6,7 +6,10 @@ import { MediaKind } from "../../../generated/prisma/enums.js";
 import { mediaUrl } from "../../media/services/media.service.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
+import { purgeShopPages } from "./shop-cache.js";
 import type {
+  PublicShopProduct,
+  PublicShopVariant,
   ShopCategoryInput,
   ShopCategoryView,
   ShopImageInput,
@@ -74,6 +77,72 @@ function toProduct(product: ProductRow): ShopProductView {
   };
 }
 
+function optionValues(optionSets: ShopOptionSetView[], variantName: string): { name: string; value: string; list?: boolean }[] {
+  for (const set of optionSets) {
+    if (set.options.length === 0) continue;
+    const combos = set.options.reduce<string[][]>(
+      (sets, option) => sets.flatMap((prefix) => option.values.map((value) => [...prefix, value])),
+      [[]],
+    );
+    for (const values of combos) {
+      if (values.join(" / ") === variantName) {
+        return set.options.map((option, index) => ({
+          name: option.name,
+          value: values[index] ?? "",
+          ...(option.listOnShop ? { list: true } : {}),
+        }));
+      }
+    }
+  }
+  return [];
+}
+
+/** Photos uploaded for one option value, such as every black size. Later options win. */
+function sharedValueImages(optionSets: ShopOptionSetView[], variantName: string): ShopImageView[] {
+  for (const set of optionSets) {
+    if (set.options.length === 0) continue;
+    const combos = set.options.reduce<string[][]>(
+      (sets, option) => sets.flatMap((prefix) => option.values.map((value) => [...prefix, value])),
+      [[]],
+    );
+    const match = combos.findIndex((values) => values.join(" / ") === variantName);
+    if (match < 0) continue;
+    const values = combos[match] ?? [];
+    for (let index = set.options.length - 1; index >= 0; index -= 1) {
+      const option = set.options[index];
+      const value = values[index] ?? "";
+      const photos = option?.images?.find((group) => group.value.toLowerCase() === value.toLowerCase())?.images ?? [];
+      if (photos.length > 0) return photos;
+    }
+  }
+  return [];
+}
+
+function toPublicProduct(product: ProductRow): PublicShopProduct {
+  const optionSets = readOptionSets(product.optionSets);
+  const variants: PublicShopVariant[] = product.variants.map((variant) => {
+    const own = readImages(variant.images);
+    const images = own.length > 0 ? own : sharedValueImages(optionSets, variant.name);
+    return {
+    id: variant.id,
+    name: variant.name,
+    pricePaise: variant.pricePaise,
+    quantity: variant.quantity,
+    images: images.map(({ url, alt }) => ({ url, alt })),
+    options: optionValues(optionSets, variant.name),
+    };
+  });
+  return {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    description: product.description,
+    categoryName: product.category.name,
+    images: readImages(product.images).map(({ url, alt }) => ({ url, alt })),
+    variants,
+  };
+}
+
 function readImages(value: Prisma.JsonValue): ShopImageView[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
@@ -92,10 +161,20 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
     if (typeof set.pricePaise !== "number" || !Array.isArray(set.options)) return [];
     const options = set.options.flatMap((option) => {
       if (!option || typeof option !== "object" || Array.isArray(option)) return [];
-      const row = option as { name?: unknown; values?: unknown };
+      const row = option as { name?: unknown; values?: unknown; listOnShop?: unknown; images?: unknown };
       if (typeof row.name !== "string" || !Array.isArray(row.values)) return [];
       const values = row.values.filter((item): item is string => typeof item === "string");
-      return [{ name: row.name, values }];
+      const images = Array.isArray(row.images)
+        ? row.images.flatMap((group) => {
+            if (!group || typeof group !== "object" || Array.isArray(group)) return [];
+            const photo = group as { value?: unknown; images?: unknown };
+            if (typeof photo.value !== "string" || !Array.isArray(photo.images)) return [];
+            const photos = readImages(photo.images as Prisma.JsonValue);
+            if (photos.length === 0) return [];
+            return [{ value: photo.value, images: photos }];
+          })
+        : [];
+      return [{ name: row.name, values, ...(row.listOnShop === true ? { listOnShop: true } : {}), ...(images.length ? { images } : {}) }];
     });
     const overrides = Array.isArray(set.overrides)
       ? set.overrides.flatMap((override) => {
@@ -221,6 +300,7 @@ export class ShopService {
         include: { _count: { select: { products: true } } },
       });
     });
+    purgeShopPages(websiteId);
     return { id: category.id, name: category.name, slug: category.slug, productCount: category._count.products };
   }
 
@@ -272,7 +352,7 @@ export class ShopService {
     }
     const expanded = expandOptionSets(input.optionSets);
     const images = await this.resolveImages(website.clientId, input.images ?? []);
-    await this.assertImages(website.clientId, expanded.variants.flatMap((variant) => variant.images.map((image) => image.mediaId)));
+    await this.assertImages(website.clientId, imageIds(expanded));
 
     const product = await prisma.$transaction(async (tx) => {
       const slug = await allocateSlug(tx, websiteId, input.name, "product");
@@ -292,6 +372,7 @@ export class ShopService {
       });
       return created;
     });
+    purgeShopPages(websiteId);
     return toProduct(product);
   }
 
@@ -306,7 +387,7 @@ export class ShopService {
     await this.findCategory(websiteId, input.categoryId);
     const expanded = expandOptionSets(input.optionSets);
     const images = await this.resolveImages(current.clientId, input.images ?? []);
-    await this.assertImages(current.clientId, expanded.variants.flatMap((variant) => variant.images.map((image) => image.mediaId)));
+    await this.assertImages(current.clientId, imageIds(expanded));
 
     const product = await prisma.$transaction(async (tx) => {
       const slug =
@@ -351,6 +432,7 @@ export class ShopService {
         include: productInclude,
       });
     });
+    purgeShopPages(websiteId);
     return toProduct(product);
   }
 
@@ -381,6 +463,23 @@ export class ShopService {
       }
       await tx.product.delete({ where: { id: productId } });
     });
+    purgeShopPages(websiteId);
+  }
+
+  /** Catalogue for published product sections. Empty when the shop is off. */
+  async publicCatalog(websiteId: string): Promise<PublicShopProduct[]> {
+    const website = await prisma.website.findUnique({
+      where: { id: websiteId },
+      select: { shopEnabled: true, client: { select: { shopFeatureEnabled: true } } },
+    });
+    if (!website?.shopEnabled || !website.client.shopFeatureEnabled) return [];
+    const products = await prisma.product.findMany({
+      where: { websiteId },
+      include: productInclude,
+      orderBy: { name: "asc" },
+      take: MAX_PRODUCTS,
+    });
+    return products.map(toPublicProduct);
   }
 
   private async resolveImages(clientId: string, images: ShopImageInput[]): Promise<{ mediaId: string; alt: string }[]> {
@@ -450,6 +549,13 @@ function cartesian(lists: string[][]): string[][] {
   return lists.reduce<string[][]>((sets, list) => sets.flatMap((prefix) => list.map((value) => [...prefix, value])), [[]]);
 }
 
+function imageIds(expanded: { stored: ShopOptionSetInput[]; variants: ExpandedVariant[] }): string[] {
+  return [
+    ...expanded.variants.flatMap((variant) => variant.images.map((image) => image.mediaId)),
+    ...expanded.stored.flatMap((set) => set.options.flatMap((option) => (option.images ?? []).flatMap((group) => group.images.map((image) => image.mediaId)))),
+  ];
+}
+
 export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOptionSetInput[]; variants: ExpandedVariant[] } {
   const seen = new Map<string, string>();
   const stored: ShopOptionSetInput[] = [];
@@ -457,10 +563,25 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
 
   for (const set of sets) {
     const options = set.options
-      .map((option) => ({
-        name: option.name.trim(),
-        values: option.values.map((value) => value.trim()).filter(Boolean),
-      }))
+      .map((option) => {
+        const values = option.values.map((value) => value.trim()).filter(Boolean);
+        const images = (option.images ?? [])
+          .map((group) => ({ value: group.value.trim(), images: variantImages(group.images) }))
+          .filter((group) => group.images.length > 0 && values.some((value) => value.toLowerCase() === group.value.toLowerCase()));
+        const seenValues = new Set<string>();
+        const uniqueImages = images.filter((group) => {
+          const key = group.value.toLowerCase();
+          if (seenValues.has(key)) return false;
+          seenValues.add(key);
+          return true;
+        });
+        return {
+          name: option.name.trim(),
+          values,
+          ...(option.listOnShop ? { listOnShop: true } : {}),
+          ...(uniqueImages.length > 0 ? { images: uniqueImages } : {}),
+        };
+      })
       .filter((option) => option.name || option.values.length);
     const optionNames = new Set<string>();
     for (const option of options) {

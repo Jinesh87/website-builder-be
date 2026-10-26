@@ -24,7 +24,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<{ status: numb
 
 export const siteRendererClient = {
   /** Null when the page doesn't exist; throws when the renderer is unreachable or fails. */
-  async render(snapshot: PublishSnapshot, slug: string): Promise<RenderedSitePage | null> {
+  async render(snapshot: PublishSnapshot & { shop?: unknown }, slug: string): Promise<RenderedSitePage | null> {
     const { status, body } = await call<RenderedSitePage & { error?: string }>("/render", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
