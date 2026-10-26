@@ -785,7 +785,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   hero: heroSchema,
   features: Joi.object({
     eyebrow: optionalText(100),
-    heading: text(200).required(),
+    heading: optionalText(200),
     intro: optionalText(500),
     variant: flexibleVariant(
       ["grid", "split", "pastel-icons", "minimal", "cards"],
@@ -803,6 +803,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     secondaryCta: link.optional(),
     bottomCta: link.optional(),
     iconBackgroundColor: Joi.string().max(100).allow("").optional(),
+    showDividers: Joi.boolean().optional(),
+    dividerStyle: Joi.string().valid("inset", "full").optional(),
+    dividerColor: Joi.string().max(100).allow("").optional(),
     items: Joi.array()
       .items(
         Joi.object({

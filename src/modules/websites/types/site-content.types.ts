@@ -583,7 +583,7 @@ export type SectionDataMap = {
   hero: HeroData;
   features: {
     eyebrow?: string;
-    heading: string;
+    heading?: string;
     intro?: string;
     variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards";
     iconStyle?: "pastel-circle" | "square-badge" | "minimal-accent" | "colored-circle" | "none";
@@ -607,6 +607,9 @@ export type SectionDataMap = {
     splitCta?: LinkRef;
     secondaryCta?: LinkRef;
     bottomCta?: LinkRef;
+    showDividers?: boolean;
+    dividerStyle?: "inset" | "full";
+    dividerColor?: string;
   };
   services: {
     heading: string;
