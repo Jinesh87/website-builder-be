@@ -10,14 +10,18 @@ import { formatBillingDate, formatPeriod } from "./hosting-period.js";
 
 export type HostingNoticeTarget = { clientId: string; websiteId: string; websiteName: string };
 
+/** How a plan renews by itself, if it does. */
+export type AutoRenewal = "CONNECTS" | "AUTOPAY" | null;
+
+export type AutopayStopReason = "PAYMENT_FAILED" | "STOPPED" | "PLAN_CHANGED";
+
 export type HostingEvent =
   | {
       kind: "RENEWAL_REMINDER";
       periodEnd: Date;
       /** Paise; null when the plan has no payable price yet. */
       price: number | null;
-      /** The worker will renew it from connects. */
-      renewsFromConnects: boolean;
+      renewsBy: AutoRenewal;
     }
   | {
       kind: "PAID";
@@ -31,7 +35,35 @@ export type HostingEvent =
       restored: boolean;
     }
   | { kind: "EXPIRED"; graceEndsAt: Date; price: number | null }
-  | { kind: "SUSPENDED" };
+  | { kind: "SUSPENDED" }
+  | { kind: "AUTOPAY_STOPPED"; reason: AutopayStopReason };
+
+const AUTOPAY_STOPPED_CLIENT: Record<AutopayStopReason, (site: string) => string[]> = {
+  PAYMENT_FAILED: (site) => [
+    `Razorpay couldn't take the hosting payment for ${site}, so autopay has stopped.`,
+    "Renew from the website's Hosting tab, or turn autopay on again with another card or UPI ID.",
+  ],
+  STOPPED: (site) => [
+    `Autopay for ${site} was cancelled, so hosting won't renew by itself.`,
+    "Turn it on again from the website's Hosting tab whenever you like.",
+  ],
+  PLAN_CHANGED: (site) => [
+    `Autopay for ${site} was turned off because its hosting plan or price changed.`,
+    "Turn it on again from the website's Hosting tab to approve the new amount.",
+  ],
+};
+
+const AUTOPAY_STOPPED_ADMIN: Record<AutopayStopReason, string> = {
+  PAYMENT_FAILED: "Razorpay couldn't take the payment and stopped retrying.",
+  STOPPED: "The mandate was cancelled outside the app (Razorpay or the client's bank / UPI app).",
+  PLAN_CHANGED: "The plan or price changed, so the client must approve the new amount.",
+};
+
+function renewsText(renewsBy: AutoRenewal, forAdmin: boolean): string | null {
+  if (renewsBy === "AUTOPAY") return forAdmin ? "The client's autopay will charge it." : "Autopay will charge your card or UPI on that day.";
+  if (renewsBy === "CONNECTS") return forAdmin ? "The client has enough connects for auto-renewal." : "You have enough connects, so it renews automatically.";
+  return null;
+}
 
 type Message = { title: string; body: string; heading: string; lines: string[] };
 
@@ -45,7 +77,7 @@ function paidText(event: Extract<HostingEvent, { kind: "PAID" }>): string {
 }
 
 function howPaid(event: Extract<HostingEvent, { kind: "PAID" }>): string {
-  if (event.paidBy === "SYSTEM") return "by auto-renewal from connects";
+  if (event.paidBy === "SYSTEM") return event.method === "RAZORPAY" ? "by autopay" : "by auto-renewal from connects";
   if (event.paidBy === "ADMIN") return event.method === "WALLET" ? "from the client's connects, by the admin" : "collected by the admin";
   return event.method === "RAZORPAY" ? "online by the client" : "from the client's connects";
 }
@@ -56,9 +88,7 @@ function clientMessage(event: HostingEvent, site: string): Message {
       const due = formatBillingDate(event.periodEnd);
       const lines = [
         `Hosting for ${site} renews on ${due}${priceText(event.price)}.`,
-        event.renewsFromConnects
-          ? "You have enough connects, so it renews automatically."
-          : `Renew it from the website's Hosting tab before ${due} to keep the site live.`,
+        renewsText(event.renewsBy, false) ?? `Renew it from the website's Hosting tab before ${due} to keep the site live.`,
       ];
       return { title: `${site}: hosting renews ${due}`, body: lines.join(" "), heading: "Hosting renewal coming up", lines };
     }
@@ -84,6 +114,10 @@ function clientMessage(event: HostingEvent, site: string): Message {
       ];
       return { title: `${site} is offline`, body: lines.join(" "), heading: "Your website is offline", lines };
     }
+    case "AUTOPAY_STOPPED": {
+      const lines = AUTOPAY_STOPPED_CLIENT[event.reason](site);
+      return { title: `${site}: autopay stopped`, body: lines.join(" "), heading: "Hosting autopay stopped", lines };
+    }
   }
 }
 
@@ -93,9 +127,7 @@ function adminMessage(event: HostingEvent, site: string, clientName: string): Me
     case "RENEWAL_REMINDER": {
       const lines = [
         `Hosting for ${who} renews on ${formatBillingDate(event.periodEnd)}${priceText(event.price)}.`,
-        event.renewsFromConnects
-          ? "The client has enough connects for auto-renewal."
-          : "The client renews online, or you can record a payment you collected.",
+        renewsText(event.renewsBy, true) ?? "The client renews online, or you can record a payment you collected.",
       ];
       return { title: `Renewal due: ${who}`, body: lines.join(" "), heading: "Hosting renewal coming up", lines };
     }
@@ -113,6 +145,10 @@ function adminMessage(event: HostingEvent, site: string, clientName: string): Me
     case "SUSPENDED": {
       const lines = [`${who} was taken offline because hosting wasn't paid.`];
       return { title: `Site offline: ${who}`, body: lines.join(" "), heading: "Website taken offline", lines };
+    }
+    case "AUTOPAY_STOPPED": {
+      const lines = [`Autopay for ${who} stopped. ${AUTOPAY_STOPPED_ADMIN[event.reason]}`];
+      return { title: `Autopay stopped: ${who}`, body: lines.join(" "), heading: "Hosting autopay stopped", lines };
     }
   }
 }

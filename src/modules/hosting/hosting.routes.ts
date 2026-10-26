@@ -9,6 +9,7 @@ import {
   clientParamsSchema,
   clientsOverviewQuerySchema,
   collectHostingSchema,
+  confirmAutopaySchema,
   confirmCheckoutSchema,
   packageParamsSchema,
   paymentsCsvQuerySchema,
@@ -43,6 +44,28 @@ websiteHostingRouter.post(
   rateLimit({ name: "hosting-checkout-verify", max: 60, windowSeconds: 60 * 60 }),
   validate(confirmCheckoutSchema),
   hostingController.confirmCheckout,
+);
+websiteHostingRouter.post(
+  "/autopay",
+  authorize(UserRole.CLIENT),
+  byWebsite,
+  rateLimit({ name: "hosting-autopay", max: 20, windowSeconds: 60 * 60 }),
+  hostingController.setupAutopay,
+);
+websiteHostingRouter.post(
+  "/autopay/verify",
+  authorize(UserRole.CLIENT),
+  byWebsite,
+  rateLimit({ name: "hosting-autopay-verify", max: 60, windowSeconds: 60 * 60 }),
+  validate(confirmAutopaySchema),
+  hostingController.confirmAutopay,
+);
+/** Clients and Super Admins can turn autopay off; only the client can approve a mandate. */
+websiteHostingRouter.delete(
+  "/autopay",
+  byWebsite,
+  rateLimit({ name: "hosting-autopay-cancel", max: 30, windowSeconds: 60 * 60 }),
+  hostingController.cancelAutopay,
 );
 websiteHostingRouter.post(
   "/pay",

@@ -6,9 +6,12 @@ import {
   PaymentOrderStatus,
   WalletTransactionSource,
   WalletTransactionType,
+  type AutopayStatus,
   type Prisma,
+  type WalletAutoTopup,
   type WalletTransaction,
 } from "../../../generated/prisma/client.js";
+import { STOPPABLE_AUTOPAY } from "./autopay.js";
 import { paymentSettingsService } from "./payment-settings.service.js";
 import {
   captureRazorpayPayment,
@@ -16,6 +19,7 @@ import {
   fetchRazorpayPayment,
   isValidPaymentSignature,
   isValidWebhookSignature,
+  type RazorpaySubscription,
 } from "./razorpay.client.js";
 
 export const PAYMENT_CURRENCY = "INR";
@@ -46,7 +50,26 @@ export type WalletView = {
   maxPurchase: number;
   /** Connects required before AI features. 0 means any balance above zero. */
   minAiBalance: number;
+  /** The monthly auto top-up, while it can still charge. */
+  autoTopup: AutoTopupView | null;
 };
+
+export type AutoTopupView = {
+  status: AutopayStatus;
+  connects: number;
+  amountPaise: number;
+  nextChargeAt: string | null;
+};
+
+export function toAutoTopupView(row: WalletAutoTopup | null): AutoTopupView | null {
+  if (!row || !STOPPABLE_AUTOPAY.has(row.status)) return null;
+  return {
+    status: row.status,
+    connects: row.connects,
+    amountPaise: row.amountPaise,
+    nextChargeAt: row.nextChargeAt?.toISOString() ?? null,
+  };
+}
 
 export type TopupCheckout = {
   /** Razorpay order id, passed to Checkout as `order_id`. */
@@ -105,11 +128,39 @@ export function formatInr(paise: number): string {
   return `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
+export type RazorpayWebhookPayment = {
+  id: string;
+  order_id: string | null;
+  amount: number;
+  currency?: string;
+  status?: string;
+  error_description?: string | null;
+};
+
 /** The parts of a Razorpay webhook body this app reads. */
 export type RazorpayWebhookEvent = {
   event?: string;
-  payload?: { payment?: { entity?: { id: string; order_id: string | null; amount: number; error_description?: string | null } } };
+  payload?: {
+    payment?: { entity?: RazorpayWebhookPayment };
+    subscription?: { entity?: RazorpaySubscription };
+  };
 };
+
+/** Throws unless `connects` is a whole number of packs within the purchase limits. */
+export function assertPurchasable(connects: number): void {
+  if (
+    !Number.isInteger(connects) ||
+    connects % CONNECTS_PACK_SIZE !== 0 ||
+    connects < MIN_PURCHASE_CONNECTS ||
+    connects > MAX_PURCHASE_CONNECTS
+  ) {
+    throw new AppError(
+      400,
+      `Buy connects in multiples of ${CONNECTS_PACK_SIZE}, between ${formatConnects(MIN_PURCHASE_CONNECTS)} and ${formatConnects(MAX_PURCHASE_CONNECTS)}.`,
+      "VALIDATION_ERROR",
+    );
+  }
+}
 
 export function formatConnects(connects: number): string {
   return `${connects.toLocaleString("en-IN", { maximumFractionDigits: 3 })} ${connects === 1 ? "connect" : "connects"}`;
@@ -163,10 +214,11 @@ export async function applyLedgerEntry(tx: Tx, clientId: string, entry: LedgerEn
 
 export class WalletService {
   async getWallet(clientId: string): Promise<WalletView> {
-    const [wallet, paymentsEnabled, billing] = await Promise.all([
+    const [wallet, paymentsEnabled, billing, autoTopup] = await Promise.all([
       prisma.wallet.findUnique({ where: { clientId } }),
       paymentSettingsService.isConfigured(),
       prisma.billingConfig.findUnique({ where: { id: "default" }, select: { minAiBalance: true } }),
+      prisma.walletAutoTopup.findUnique({ where: { clientId } }),
     ]);
     return {
       balance: Number(wallet?.balance ?? 0),
@@ -176,6 +228,7 @@ export class WalletService {
       minPurchase: MIN_PURCHASE_CONNECTS,
       maxPurchase: MAX_PURCHASE_CONNECTS,
       minAiBalance: Number(billing?.minAiBalance ?? 0),
+      autoTopup: toAutoTopupView(autoTopup),
     };
   }
 
@@ -204,18 +257,7 @@ export class WalletService {
   }
 
   async createTopup(clientId: string, userId: string, connects: number): Promise<TopupCheckout> {
-    if (
-      !Number.isInteger(connects) ||
-      connects % CONNECTS_PACK_SIZE !== 0 ||
-      connects < MIN_PURCHASE_CONNECTS ||
-      connects > MAX_PURCHASE_CONNECTS
-    ) {
-      throw new AppError(
-        400,
-        `Buy connects in multiples of ${CONNECTS_PACK_SIZE}, between ${formatConnects(MIN_PURCHASE_CONNECTS)} and ${formatConnects(MAX_PURCHASE_CONNECTS)}.`,
-        "VALIDATION_ERROR",
-      );
-    }
+    assertPurchasable(connects);
     const amountPaise = priceInPaise(connects);
     const keys = await paymentSettingsService.getKeys();
     const [client, user] = await Promise.all([
@@ -294,7 +336,7 @@ export class WalletService {
         type: WalletTransactionType.CREDIT,
         source: WalletTransactionSource.TOPUP,
         amount: order.connects,
-        description: `Bought ${formatConnects(order.connects)} for ${formatInr(order.amountPaise)}`,
+        description: `${order.razorpaySubscriptionId ? "Auto top-up" : "Bought"} ${formatConnects(order.connects)} for ${formatInr(order.amountPaise)}`,
         userId: order.userId,
         paymentOrderId: order.id,
       });

@@ -1,11 +1,25 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../../../common/errors/AppError.js";
 import { logger } from "../../../config/logger.js";
+import { alertUnknownSubscriptionCharge, hostingAutopayService } from "../../hosting/services/hosting-autopay.service.js";
 import { hostingCheckoutService } from "../../hosting/services/hosting-checkout.service.js";
 import { aiBillingService } from "../services/ai-billing.service.js";
 import { adminWalletService, type AdminPaymentQuery, type AdminTransactionQuery } from "../services/admin-wallet.service.js";
+import type { SubscriptionConfirmation } from "../services/autopay.js";
 import { paymentSettingsService } from "../services/payment-settings.service.js";
-import { walletService } from "../services/wallet.service.js";
+import { walletAutoTopupService } from "../services/wallet-auto-topup.service.js";
+import { walletService, type RazorpayWebhookEvent } from "../services/wallet.service.js";
+
+/** Subscription events go to whichever autopay owns the subscription; orders to the connects or hosting checkout. */
+async function applyWebhook(event: RazorpayWebhookEvent): Promise<void> {
+  if (event.event?.startsWith("subscription.")) {
+    if (await hostingAutopayService.applyWebhook(event)) return;
+    if (await walletAutoTopupService.applyWebhook(event)) return;
+    if (event.event === "subscription.charged") await alertUnknownSubscriptionCharge(event);
+    return;
+  }
+  if (!(await walletService.applyWebhook(event))) await hostingCheckoutService.applyWebhook(event);
+}
 
 function requireClient(req: Request): { clientId: string; userId: string } {
   const clientId = req.user?.clientId;
@@ -65,11 +79,38 @@ export class WalletController {
     }
   };
 
+  setupAutoTopup = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { clientId, userId } = requireClient(req);
+      const { connects } = req.body as { connects: number };
+      res.status(201).json({ checkout: await walletAutoTopupService.setup(clientId, userId, connects) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  confirmAutoTopup = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = req.body as SubscriptionConfirmation;
+      res.json({ wallet: await walletAutoTopupService.confirm(requireClient(req).clientId, input) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  cancelAutoTopup = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ wallet: await walletAutoTopupService.cancel(requireClient(req).clientId) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   webhook = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
       const event = await walletService.verifyWebhook(rawBody, req.header("x-razorpay-signature"));
-      if (!(await walletService.applyWebhook(event))) await hostingCheckoutService.applyWebhook(event);
+      await applyWebhook(event);
       res.json({ ok: true });
     } catch (error) {
       next(error);

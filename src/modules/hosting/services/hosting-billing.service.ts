@@ -9,17 +9,25 @@ import {
   Prisma,
   type HostingSubscription,
 } from "../../../generated/prisma/client.js";
+import { LIVE_AUTOPAY } from "../../wallet/services/autopay.js";
 import { connectsForPaise } from "../../wallet/services/wallet.service.js";
-import { notifyHostingInBackground, type HostingNoticeTarget } from "./hosting-notifier.js";
-import { addDays } from "./hosting-period.js";
+import { notifyHostingInBackground, type AutoRenewal, type HostingNoticeTarget } from "./hosting-notifier.js";
+import { addDays, DAY_MS } from "./hosting-period.js";
 import { hostingService, loadHostingRules, planPrice, type HostingRules } from "./hosting.service.js";
 
 const BATCH_SIZE = 100;
+
+/**
+ * How long after a period ends the worker waits for Razorpay's autopay charge before starting the grace days;
+ * the plan stays ACTIVE meanwhile rather than "expired".
+ */
+const AUTOPAY_WAIT_MS = DAY_MS;
 
 const subscriptionInclude = {
   website: { select: { name: true } },
   package: true,
   client: { select: { wallet: { select: { balance: true } } } },
+  autopay: { select: { status: true } },
 } as const satisfies Prisma.HostingSubscriptionInclude;
 
 type DueSubscription = Prisma.HostingSubscriptionGetPayload<{ include: typeof subscriptionInclude }>;
@@ -28,15 +36,25 @@ function target(subscription: DueSubscription): HostingNoticeTarget {
   return { clientId: subscription.clientId, websiteId: subscription.websiteId, websiteName: subscription.website.name };
 }
 
+function onAutopay(subscription: DueSubscription): boolean {
+  return subscription.autopay !== null && LIVE_AUTOPAY.has(subscription.autopay.status);
+}
+
 /**
  * The worker renews from connects only when the platform allows it, the client turned auto-renew on, and the
  * balance covers the price. Free plans renew regardless of balance, which AI usage can push below zero.
+ * A plan on autopay never renews from connects as well.
  */
 function renewsFromConnects(subscription: DueSubscription, rules: HostingRules): boolean {
   const price = planPrice(subscription);
-  if (price === null || !subscription.autoRenew) return false;
+  if (price === null || !subscription.autoRenew || onAutopay(subscription)) return false;
   if (price === 0) return true;
   return rules.allowConnectsPayment && Number(subscription.client.wallet?.balance ?? 0) >= connectsForPaise(price);
+}
+
+function renewsBy(subscription: DueSubscription, rules: HostingRules): AutoRenewal {
+  if (onAutopay(subscription)) return "AUTOPAY";
+  return renewsFromConnects(subscription, rules) ? "CONNECTS" : null;
 }
 
 /** Records that a notice went out for this period; false when it already had (so it is sent once). */
@@ -78,7 +96,7 @@ export class HostingBillingService {
         kind: "RENEWAL_REMINDER",
         periodEnd,
         price: planPrice(subscription),
-        renewsFromConnects: renewsFromConnects(subscription, rules),
+        renewsBy: renewsBy(subscription, rules),
       });
     }
   }
@@ -86,7 +104,12 @@ export class HostingBillingService {
   /** Ended ACTIVE plans: auto-renew from connects when possible, otherwise start the grace days. */
   private async renewDue(rules: HostingRules, now: Date): Promise<void> {
     const due = await prisma.hostingSubscription.findMany({
-      where: { status: HostingStatus.ACTIVE, currentPeriodEnd: { lte: now } },
+      where: {
+        status: HostingStatus.ACTIVE,
+        currentPeriodEnd: { lte: now },
+        // Plans waiting for their autopay charge would otherwise fill every batch.
+        NOT: { currentPeriodEnd: { gt: new Date(now.getTime() - AUTOPAY_WAIT_MS) }, autopay: { status: { in: [...LIVE_AUTOPAY] } } },
+      },
       include: subscriptionInclude,
       orderBy: { currentPeriodEnd: "asc" },
       take: BATCH_SIZE,

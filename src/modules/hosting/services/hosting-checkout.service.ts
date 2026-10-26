@@ -20,7 +20,7 @@ import type {
   WebsiteHostingView,
 } from "../types/hosting.types.js";
 import { CYCLE_LABELS } from "./hosting-period.js";
-import { assertRenewalOpen, availablePrice, hostingService } from "./hosting.service.js";
+import { assertNotOnAutopay, assertRenewalOpen, availablePrice, hostingService } from "./hosting.service.js";
 
 /** A plan that changed while the payment was in flight is re-read and the period applied again. */
 const APPLY_ATTEMPTS = 3;
@@ -35,7 +35,10 @@ const NOT_APPLIED = () =>
     "HOSTING_PAYMENT_NOT_APPLIED",
   );
 
-/** Hosting paid online: one Razorpay order per period, applied exactly once from the checkout callback or the webhook. */
+/**
+ * Hosting paid online: one Razorpay order per period, applied exactly once from the checkout callback or the webhook.
+ * Autopay charges are recorded as orders too, so they take the same path.
+ */
 export class HostingCheckoutService {
   /** Starts a Razorpay payment for the next period; a free plan is activated straight away instead. */
   async createCheckout(websiteId: string, plan: PlanChoice, actor: AuthUser): Promise<HostingCheckoutResult> {
@@ -45,12 +48,13 @@ export class HostingCheckoutService {
         id: true,
         name: true,
         clientId: true,
-        hosting: { include: { package: true } },
+        hosting: { include: { package: true, autopay: { select: { status: true } } } },
         client: { select: { businessName: true } },
       },
     });
     if (!website) throw new AppError(404, "Website not found", "WEBSITE_NOT_FOUND");
 
+    assertNotOnAutopay(website.hosting);
     assertRenewalOpen(website.hosting, new Date());
     const pkg = await prisma.hostingPackage.findUnique({ where: { id: plan.packageId } });
     const price = availablePrice(pkg, plan.cycle, website.hosting);
@@ -160,7 +164,7 @@ export class HostingCheckoutService {
       try {
         const payment = await hostingService.settle({
           websiteId: order.websiteId,
-          payer: HostingPayer.CLIENT,
+          payer: order.razorpaySubscriptionId ? HostingPayer.SYSTEM : HostingPayer.CLIENT,
           method: HostingPaymentMethod.RAZORPAY,
           actorId: order.userId,
           order: {
