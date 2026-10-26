@@ -52,6 +52,11 @@ import {
   CARDS_IMAGE_ASPECTS,
   CARDS_RADIUS_MAX,
   CARDS_VARIANTS,
+  CARDS_ICON_PLACEMENTS,
+  CARDS_ICON_ALIGNS,
+  CARDS_ICON_VARIANTS,
+  CARDS_ICON_SHAPES,
+  CARDS_ICON_SIZES,
 } from "../types/site-content.types.js";
 
 /**
@@ -896,6 +901,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       minimal: "minimal-accent",
       accent: "minimal-accent",
       floating: "floating-panel",
+      "floating-icon": "floating-icon",
+      "icon-badge": "floating-icon",
+      "seam-icon": "floating-icon",
     }),
     eyebrow: optionalText(100),
     heading: text(200).allow("").required(),
@@ -925,6 +933,16 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     showDescription: Joi.boolean().optional(),
     showPrices: Joi.boolean().optional(),
     showNumbers: Joi.boolean().optional(),
+    defaultIcon: Joi.string().max(100).allow("").optional(),
+    iconPlacement: Joi.string().valid(...CARDS_ICON_PLACEMENTS).optional(),
+    iconAlign: Joi.string().valid(...CARDS_ICON_ALIGNS).optional(),
+    iconVariant: Joi.string().valid(...CARDS_ICON_VARIANTS).optional(),
+    iconShape: Joi.string().valid(...CARDS_ICON_SHAPES).optional(),
+    iconRadius: Joi.number().integer().min(0).max(48).optional(),
+    iconSize: Joi.string().valid(...CARDS_ICON_SIZES).optional(),
+    iconBgColor: color.optional(),
+    iconColor: color.optional(),
+    iconOffsetY: Joi.number().integer().min(-50).max(50).optional(),
     button: Joi.object({
       variant: Joi.string().valid(...CARDS_BUTTON_VARIANTS).optional(),
       secondaryVariant: Joi.string().valid(...CARDS_BUTTON_VARIANTS).optional(),
@@ -950,6 +968,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           secondaryLink: link.optional(),
           backgroundColor: color.optional(),
           accentColor: color.optional(),
+          iconBgColor: color.optional(),
+          iconColor: color.optional(),
           featured: Joi.boolean().optional(),
         }),
       )
