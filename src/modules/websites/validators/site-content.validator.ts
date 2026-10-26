@@ -805,10 +805,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     items: Joi.array()
       .items(
         Joi.object({
-          icon: Joi.string().max(50).optional(),
-          iconColor: Joi.string()
-            .valid(...FEATURE_ICON_COLORS)
-            .optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
+          iconColor: Joi.string().max(40).allow("").optional(),
           backgroundColor: Joi.string().max(100).allow("").optional(),
           badge: optionalText(50),
           title: text(120).required(),
@@ -866,7 +865,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           description: text(1000).allow("").required(),
           badge: optionalText(60),
           badgeColor: Joi.string().max(30).optional(),
-          icon: Joi.string().max(50).optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           iconColor: Joi.string().max(30).optional(),
           image: image.optional(),
           price: optionalText(60),
@@ -936,7 +936,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           subtitle: optionalText(120),
           description: optionalText(800),
           image: image.optional(),
-          icon: Joi.string().max(50).allow("").optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           badge: optionalText(30),
           tags: Joi.array().items(text(40)).max(8).optional(),
           price: optionalText(50),
@@ -1297,7 +1298,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
         Joi.object({
           text: text(120).required(),
           badge: optionalText(60),
-          icon: Joi.string().valid(...ICON_NAMES).optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           link: Joi.string().max(255).optional(),
           subtext: optionalText(120),
         }),
@@ -1310,7 +1312,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
         Joi.object({
           text: text(120).required(),
           badge: optionalText(60),
-          icon: Joi.string().valid(...ICON_NAMES).optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           link: Joi.string().max(255).optional(),
           subtext: optionalText(120),
         }),

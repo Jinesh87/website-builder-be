@@ -592,8 +592,9 @@ export type SectionDataMap = {
     columns: GridColumns;
     mobileColumns: GridColumns;
     items: {
-      icon?: IconName;
-      iconColor?: FeatureIconColor;
+      icon?: IconName | string;
+      iconImage?: ImageRef;
+      iconColor?: FeatureIconColor | string;
       title: string;
       description: string;
     }[];
@@ -626,6 +627,7 @@ export type SectionDataMap = {
       badge?: string;
       badgeColor?: string;
       icon?: IconName | string;
+      iconImage?: ImageRef;
       iconColor?: string;
       image?: ImageRef;
       price?: string;
@@ -695,6 +697,7 @@ export type SectionDataMap = {
       description?: string;
       image?: ImageRef;
       icon?: IconName | string;
+      iconImage?: ImageRef;
       badge?: string;
       tags?: string[];
       price?: string;
@@ -911,14 +914,16 @@ export type SectionDataMap = {
     items: {
       text: string;
       badge?: string;
-      icon?: IconName;
+      icon?: IconName | string;
+      iconImage?: ImageRef;
       link?: string;
       subtext?: string;
     }[];
     secondaryItems?: {
       text: string;
       badge?: string;
-      icon?: IconName;
+      icon?: IconName | string;
+      iconImage?: ImageRef;
       link?: string;
       subtext?: string;
     }[];
