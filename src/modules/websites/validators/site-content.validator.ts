@@ -802,12 +802,14 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     splitCta: link.optional(),
     secondaryCta: link.optional(),
     bottomCta: link.optional(),
+    iconBackgroundColor: Joi.string().max(100).allow("").optional(),
     items: Joi.array()
       .items(
         Joi.object({
           icon: Joi.string().max(100).allow("").optional(),
           iconImage: image.optional(),
           iconColor: Joi.string().max(40).allow("").optional(),
+          iconBackgroundColor: Joi.string().max(100).allow("").optional(),
           backgroundColor: Joi.string().max(100).allow("").optional(),
           badge: optionalText(50),
           title: text(120).required(),

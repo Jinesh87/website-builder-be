@@ -591,10 +591,14 @@ export type SectionDataMap = {
     align?: "left" | "center";
     columns: GridColumns;
     mobileColumns: GridColumns;
+    iconBackgroundColor?: string;
     items: {
       icon?: IconName | string;
       iconImage?: ImageRef;
       iconColor?: FeatureIconColor | string;
+      iconBackgroundColor?: string;
+      backgroundColor?: string;
+      badge?: string;
       title: string;
       description: string;
     }[];
