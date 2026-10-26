@@ -130,7 +130,8 @@ export class MediaController {
       }
 
       const stream = req.method === "HEAD" ? null : await openObjectStream(file.storageKey, range);
-      const disposition = file.kind === MediaKind.DOCUMENT ? "attachment" : "inline";
+      const forceDownload = req.query.download === "1" || req.query.download === "true";
+      const disposition = forceDownload || file.kind === MediaKind.DOCUMENT ? "attachment" : "inline";
       res.setHeader("Content-Type", file.mimeType);
       res.setHeader("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
       res.setHeader("Last-Modified", file.updatedAt.toUTCString());

@@ -52,6 +52,11 @@ import {
   CARDS_IMAGE_ASPECTS,
   CARDS_RADIUS_MAX,
   CARDS_VARIANTS,
+  CARDS_ICON_PLACEMENTS,
+  CARDS_ICON_ALIGNS,
+  CARDS_ICON_VARIANTS,
+  CARDS_ICON_SHAPES,
+  CARDS_ICON_SIZES,
 } from "../types/site-content.types.js";
 
 /**
@@ -785,7 +790,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   hero: heroSchema,
   features: Joi.object({
     eyebrow: optionalText(100),
-    heading: text(200).required(),
+    heading: optionalText(200),
     intro: optionalText(500),
     variant: flexibleVariant(
       ["grid", "split", "pastel-icons", "minimal", "cards"],
@@ -802,13 +807,17 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     splitCta: link.optional(),
     secondaryCta: link.optional(),
     bottomCta: link.optional(),
+    iconBackgroundColor: Joi.string().max(100).allow("").optional(),
+    showDividers: Joi.boolean().optional(),
+    dividerStyle: Joi.string().valid("inset", "full").optional(),
+    dividerColor: Joi.string().max(100).allow("").optional(),
     items: Joi.array()
       .items(
         Joi.object({
-          icon: Joi.string().max(50).optional(),
-          iconColor: Joi.string()
-            .valid(...FEATURE_ICON_COLORS)
-            .optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
+          iconColor: Joi.string().max(40).allow("").optional(),
+          iconBackgroundColor: Joi.string().max(100).allow("").optional(),
           backgroundColor: Joi.string().max(100).allow("").optional(),
           badge: optionalText(50),
           title: text(120).required(),
@@ -866,7 +875,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           description: text(1000).allow("").required(),
           badge: optionalText(60),
           badgeColor: Joi.string().max(30).optional(),
-          icon: Joi.string().max(50).optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           iconColor: Joi.string().max(30).optional(),
           image: image.optional(),
           price: optionalText(60),
@@ -891,6 +901,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       minimal: "minimal-accent",
       accent: "minimal-accent",
       floating: "floating-panel",
+      "floating-icon": "floating-icon",
+      "icon-badge": "floating-icon",
+      "seam-icon": "floating-icon",
     }),
     eyebrow: optionalText(100),
     heading: text(200).allow("").required(),
@@ -920,6 +933,16 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     showDescription: Joi.boolean().optional(),
     showPrices: Joi.boolean().optional(),
     showNumbers: Joi.boolean().optional(),
+    defaultIcon: Joi.string().max(100).allow("").optional(),
+    iconPlacement: Joi.string().valid(...CARDS_ICON_PLACEMENTS).optional(),
+    iconAlign: Joi.string().valid(...CARDS_ICON_ALIGNS).optional(),
+    iconVariant: Joi.string().valid(...CARDS_ICON_VARIANTS).optional(),
+    iconShape: Joi.string().valid(...CARDS_ICON_SHAPES).optional(),
+    iconRadius: Joi.number().integer().min(0).max(48).optional(),
+    iconSize: Joi.string().valid(...CARDS_ICON_SIZES).optional(),
+    iconBgColor: color.optional(),
+    iconColor: color.optional(),
+    iconOffsetY: Joi.number().integer().min(-50).max(50).optional(),
     button: Joi.object({
       variant: Joi.string().valid(...CARDS_BUTTON_VARIANTS).optional(),
       secondaryVariant: Joi.string().valid(...CARDS_BUTTON_VARIANTS).optional(),
@@ -936,7 +959,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           subtitle: optionalText(120),
           description: optionalText(800),
           image: image.optional(),
-          icon: Joi.string().max(50).allow("").optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           badge: optionalText(30),
           tags: Joi.array().items(text(40)).max(8).optional(),
           price: optionalText(50),
@@ -944,6 +968,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           secondaryLink: link.optional(),
           backgroundColor: color.optional(),
           accentColor: color.optional(),
+          iconBgColor: color.optional(),
+          iconColor: color.optional(),
           featured: Joi.boolean().optional(),
         }),
       )
@@ -1297,7 +1323,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
         Joi.object({
           text: text(120).required(),
           badge: optionalText(60),
-          icon: Joi.string().valid(...ICON_NAMES).optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           link: Joi.string().max(255).optional(),
           subtext: optionalText(120),
         }),
@@ -1310,7 +1337,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
         Joi.object({
           text: text(120).required(),
           badge: optionalText(60),
-          icon: Joi.string().valid(...ICON_NAMES).optional(),
+          icon: Joi.string().max(100).allow("").optional(),
+          iconImage: image.optional(),
           link: Joi.string().max(255).optional(),
           subtext: optionalText(120),
         }),

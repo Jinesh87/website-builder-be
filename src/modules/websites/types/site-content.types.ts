@@ -102,6 +102,7 @@ export const CARDS_VARIANTS = [
   "horizontal-split",
   "minimal-accent",
   "floating-panel",
+  "floating-icon",
 ] as const;
 export const CARDS_CARD_STYLES = ["bordered", "shadow", "flat", "glass", "elevated"] as const;
 export const CARDS_CORNERS = ["square", "soft", "rounded", "large", "custom"] as const;
@@ -112,9 +113,14 @@ export const CARDS_HOVER_EFFECTS = ["none", "lift", "zoom", "glow"] as const;
 export const CARDS_HEADER_LAYOUTS = ["center", "left", "split"] as const;
 export const CARDS_DESCRIPTION_LINES_MAX = 8;
 export const CARDS_RADIUS_MAX = 48;
+export const CARDS_ICON_PLACEMENTS = ["inline", "float-seam", "float-top"] as const;
+export const CARDS_ICON_ALIGNS = ["left", "center", "right"] as const;
+export const CARDS_ICON_VARIANTS = ["filled", "soft", "outline", "surface"] as const;
+export const CARDS_ICON_SHAPES = ["rounded", "square", "circle", "custom"] as const;
+export const CARDS_ICON_SIZES = ["sm", "md", "lg", "xl"] as const;
 export const SECTION_BACKGROUNDS = ["default", "surface", "primary", "dark"] as const;
 export const SECTION_SPACINGS = ["none", "compact", "default", "relaxed"] as const;
-export const SECTION_ALIGNMENTS = ["center", "left"] as const;
+export const SECTION_ALIGNMENTS = ["center", "left", "right"] as const;
 export const ICON_NAMES = [
   "check",
   "star",
@@ -583,7 +589,7 @@ export type SectionDataMap = {
   hero: HeroData;
   features: {
     eyebrow?: string;
-    heading: string;
+    heading?: string;
     intro?: string;
     variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards";
     iconStyle?: "pastel-circle" | "square-badge" | "minimal-accent" | "colored-circle" | "none";
@@ -591,9 +597,14 @@ export type SectionDataMap = {
     align?: "left" | "center";
     columns: GridColumns;
     mobileColumns: GridColumns;
+    iconBackgroundColor?: string;
     items: {
-      icon?: IconName;
-      iconColor?: FeatureIconColor;
+      icon?: IconName | string;
+      iconImage?: ImageRef;
+      iconColor?: FeatureIconColor | string;
+      iconBackgroundColor?: string;
+      backgroundColor?: string;
+      badge?: string;
       title: string;
       description: string;
     }[];
@@ -602,6 +613,9 @@ export type SectionDataMap = {
     splitCta?: LinkRef;
     secondaryCta?: LinkRef;
     bottomCta?: LinkRef;
+    showDividers?: boolean;
+    dividerStyle?: "inset" | "full";
+    dividerColor?: string;
   };
   services: {
     heading: string;
@@ -626,6 +640,7 @@ export type SectionDataMap = {
       badge?: string;
       badgeColor?: string;
       icon?: IconName | string;
+      iconImage?: ImageRef;
       iconColor?: string;
       image?: ImageRef;
       price?: string;
@@ -680,6 +695,16 @@ export type SectionDataMap = {
     showDescription?: boolean;
     showPrices?: boolean;
     showNumbers?: boolean;
+    defaultIcon?: string;
+    iconPlacement?: (typeof CARDS_ICON_PLACEMENTS)[number];
+    iconAlign?: (typeof CARDS_ICON_ALIGNS)[number];
+    iconVariant?: (typeof CARDS_ICON_VARIANTS)[number];
+    iconShape?: (typeof CARDS_ICON_SHAPES)[number];
+    iconRadius?: number;
+    iconSize?: (typeof CARDS_ICON_SIZES)[number];
+    iconBgColor?: string;
+    iconColor?: string;
+    iconOffsetY?: number;
     button?: {
       variant?: (typeof CARDS_BUTTON_VARIANTS)[number];
       secondaryVariant?: (typeof CARDS_BUTTON_VARIANTS)[number];
@@ -695,6 +720,7 @@ export type SectionDataMap = {
       description?: string;
       image?: ImageRef;
       icon?: IconName | string;
+      iconImage?: ImageRef;
       badge?: string;
       tags?: string[];
       price?: string;
@@ -702,6 +728,8 @@ export type SectionDataMap = {
       secondaryLink?: LinkRef;
       backgroundColor?: string;
       accentColor?: string;
+      iconBgColor?: string;
+      iconColor?: string;
       featured?: boolean;
     }[];
   };
@@ -911,14 +939,16 @@ export type SectionDataMap = {
     items: {
       text: string;
       badge?: string;
-      icon?: IconName;
+      icon?: IconName | string;
+      iconImage?: ImageRef;
       link?: string;
       subtext?: string;
     }[];
     secondaryItems?: {
       text: string;
       badge?: string;
-      icon?: IconName;
+      icon?: IconName | string;
+      iconImage?: ImageRef;
       link?: string;
       subtext?: string;
     }[];
