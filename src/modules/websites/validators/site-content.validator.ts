@@ -57,6 +57,10 @@ import {
   CARDS_ICON_VARIANTS,
   CARDS_ICON_SHAPES,
   CARDS_ICON_SIZES,
+  CARDS_CHECKLIST_ICONS,
+  CARDS_CHECKLIST_MAX,
+  LINK_ACTION_TYPES,
+  LINK_ICON_POSITIONS,
 } from "../types/site-content.types.js";
 
 /**
@@ -94,14 +98,6 @@ export type FieldMeta = {
 const meta = (value: FieldMeta) => value;
 const locked = meta({ ai: "locked" });
 
-const link = Joi.object({
-  label: text(80).required(),
-  href: text(2048)
-    .pattern(SAFE_HREF)
-    .required()
-    .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
-}).meta(meta({ kind: "link" }));
-
 const subMenuItem = Joi.object({
   label: text(80).required(),
   href: text(2048)
@@ -119,6 +115,7 @@ const menuItem = Joi.object({
     .pattern(SAFE_HREF)
     .required()
     .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
+  description: optionalText(140),
   badge: optionalText(30),
   icon: optionalText(40),
   children: Joi.array().items(subMenuItem).max(24).optional(),
@@ -134,6 +131,24 @@ const image = Joi.object({
 })
   .allow(null)
   .meta(meta({ kind: "image" }));
+
+const link = Joi.object({
+  label: text(80).required(),
+  href: text(2048)
+    .pattern(SAFE_HREF)
+    .required()
+    .messages({ "string.pattern.base": SAFE_HREF_MESSAGE }),
+  actionType: Joi.string()
+    .valid(...LINK_ACTION_TYPES)
+    .optional(),
+  downloadFileName: optionalText(100),
+  icon: Joi.string().max(100).allow("").optional(),
+  iconImage: image.optional(),
+  iconPosition: Joi.string()
+    .valid(...LINK_ICON_POSITIONS)
+    .optional(),
+  openInNewTab: Joi.boolean().optional(),
+}).meta(meta({ kind: "link" }));
 
 /** How the header/footer combines the logo and the site name. */
 const logoDisplay = Joi.string()
@@ -971,6 +986,21 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           iconBgColor: color.optional(),
           iconColor: color.optional(),
           featured: Joi.boolean().optional(),
+          checklist: Joi.array()
+            .items(
+              Joi.alternatives().try(
+                text(500),
+                Joi.object({
+                  text: text(500).required(),
+                  icon: Joi.string()
+                    .valid(...CARDS_CHECKLIST_ICONS)
+                    .optional(),
+                }),
+              ),
+            )
+            .max(CARDS_CHECKLIST_MAX)
+            .optional()
+            .description("Do's & Don'ts points; each gets a check or cross mark."),
         }),
       )
       .max(24)

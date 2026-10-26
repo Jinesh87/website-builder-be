@@ -4,7 +4,20 @@
  */
 
 export type ImageRef = { url: string; alt: string };
-export type LinkRef = { label: string; href: string };
+export const LINK_ACTION_TYPES = ["link", "download"] as const;
+export const LINK_ICON_POSITIONS = ["left", "right"] as const;
+
+/** Mirrors LinkRef in frontend/src/site-kit/types.ts; fields missing here are dropped on save. */
+export type LinkRef = {
+  label: string;
+  href: string;
+  actionType?: (typeof LINK_ACTION_TYPES)[number];
+  downloadFileName?: string;
+  icon?: string;
+  iconImage?: ImageRef;
+  iconPosition?: (typeof LINK_ICON_POSITIONS)[number];
+  openInNewTab?: boolean;
+};
 
 /** Mirrors FONTS in frontend/src/site-kit/fonts.ts. Keys are stored in site data; only ever append. */
 export const FONT_KEYS = [
@@ -103,7 +116,10 @@ export const CARDS_VARIANTS = [
   "minimal-accent",
   "floating-panel",
   "floating-icon",
+  "dos-donts",
 ] as const;
+export const CARDS_CHECKLIST_ICONS = ["check", "cross", "x"] as const;
+export const CARDS_CHECKLIST_MAX = 30;
 export const CARDS_CARD_STYLES = ["bordered", "shadow", "flat", "glass", "elevated"] as const;
 export const CARDS_CORNERS = ["square", "soft", "rounded", "large", "custom"] as const;
 export const CARDS_BUTTON_VARIANTS = ["filled", "outline", "soft", "ghost", "link"] as const;
@@ -731,6 +747,7 @@ export type SectionDataMap = {
       iconBgColor?: string;
       iconColor?: string;
       featured?: boolean;
+      checklist?: Array<string | { text: string; icon?: (typeof CARDS_CHECKLIST_ICONS)[number] }>;
     }[];
   };
   testimonials: {
