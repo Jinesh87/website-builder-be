@@ -4,8 +4,8 @@ import { prisma } from "../../../config/prisma.js";
 import { siteRendererClient, type RenderedSitePage } from "./site-renderer.client.js";
 import { siteCacheService, type CachedPagePayload } from "./site-cache.service.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
-import { shopService } from "../../shop/services/shop.service.js";
-import type { PublicShopProduct } from "../../shop/types/shop.types.js";
+import { shopService, pagePublicCatalog } from "../../shop/services/shop.service.js";
+import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 
@@ -13,6 +13,7 @@ type ShopRender = {
   products: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
+  list?: PublicShopList;
   live: true;
 };
 
@@ -370,7 +371,13 @@ Sitemap: ${domain}/sitemap.xml
   }
 
   /** `basePath` is the URL prefix in preview mode ("/live/<subdomain>"); empty when served on the site's own host. */
-  async renderPage(identifier: string, pathSlug: string, basePath = "", selection: Record<string, string> = {}): Promise<CachedPage> {
+  async renderPage(
+    identifier: string,
+    pathSlug: string,
+    basePath = "",
+    selection: Record<string, string> = {},
+    listQuery: PublicShopListQuery = {},
+  ): Promise<CachedPage> {
     // 1. Trailing slash canonical redirect (e.g., /about/ -> /about)
     if (pathSlug.length > 1 && pathSlug.endsWith("/")) {
       const canonicalSlug = pathSlug.replace(/\/+$/, "");
@@ -398,15 +405,30 @@ Sitemap: ${domain}/sitemap.xml
     const picked = Object.entries(selection)
       .filter(([, value]) => value)
       .sort(([left], [right]) => left.localeCompare(right));
-    const pageRoute = `${basePath}${cleanSlug}${picked.length ? `?${new URLSearchParams(picked).toString()}` : ""}`;
+    const listParams = new URLSearchParams();
+    if (listQuery.search) listParams.set("q", listQuery.search);
+    if (listQuery.category) listParams.set("cat", listQuery.category);
+    if (listQuery.sort && listQuery.sort !== "featured") listParams.set("sort", listQuery.sort);
+    if (listQuery.page && listQuery.page > 1) listParams.set("page", String(listQuery.page));
+    if (listQuery.pageSize && listQuery.pageSize !== 12) listParams.set("per", String(listQuery.pageSize));
+    const listText = listParams.toString();
+    const optionText = picked.length ? new URLSearchParams(picked).toString() : "";
+    const queryText = [optionText, listText].filter(Boolean).join("&");
+    const pageRoute = `${basePath}${cleanSlug}${queryText ? `?${queryText}` : ""}`;
 
     // Multi-tier L1 Memory + L2 Redis cached resolution with single-flight stampede protection
     return siteCacheService.getOrRender(identifier, pageRoute, async () => {
-      return this.renderPageInternal(identifier, cleanSlug, basePath, selection);
+      return this.renderPageInternal(identifier, cleanSlug, basePath, selection, listQuery);
     });
   }
 
-  private async renderPageInternal(identifier: string, cleanSlug: string, basePath = "", selection: Record<string, string> = {}): Promise<CachedPage> {
+  private async renderPageInternal(
+    identifier: string,
+    cleanSlug: string,
+    basePath = "",
+    selection: Record<string, string> = {},
+    listQuery: PublicShopListQuery = {},
+  ): Promise<CachedPage> {
     const website = await this.resolveWebsite(identifier);
     if (!website || !website.liveVersion) {
       const notFoundHtml = this.renderNotFoundHtml(identifier);
@@ -439,9 +461,12 @@ Sitemap: ${domain}/sitemap.xml
       const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
+    const isList = !resolved.productSlug && targetPage.sections.some((section) => section.type === "products");
+    const paged = isList ? pagePublicCatalog(products, listQuery) : null;
     const shop: ShopRender = {
-      products,
+      products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
       ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
+      ...(paged ? { list: paged.list } : {}),
       ...(Object.keys(selection).length > 0 ? { selection } : {}),
       live: true,
     };

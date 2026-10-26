@@ -88,6 +88,8 @@ export const shopProductSchema = Joi.object({
 export const shopProductQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).allow("").optional(),
   categoryId: Joi.string().guid().optional(),
+  page: Joi.number().integer().min(1).default(1),
+  pageSize: Joi.number().integer().valid(10, 20, 50).default(20),
 });
 
 export const shopCategoryParamsSchema = Joi.object({

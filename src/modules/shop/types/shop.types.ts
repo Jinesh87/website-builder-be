@@ -55,6 +55,34 @@ export type ShopCategoryInput = {
 export type ShopProductQuery = {
   search?: string;
   categoryId?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type ShopProductPage = {
+  products: ShopProductView[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+/** Query string of a published product list: `q`, `cat`, `sort`, `page`, `per`. */
+export type PublicShopListQuery = {
+  search?: string;
+  category?: string;
+  sort?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type PublicShopList = {
+  search: string;
+  category: string;
+  sort: "featured" | "price-low" | "price-high" | "name";
+  page: number;
+  pageSize: number;
+  total: number;
+  categories: string[];
 };
 
 export type ShopVariantView = {
