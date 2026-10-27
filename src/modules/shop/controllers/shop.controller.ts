@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { shopCustomersService, type ShopCustomerQuery } from "../services/shop-customers.service.js";
 import { shopInventoryService } from "../services/shop-inventory.service.js";
 import { shopPaymentService, type UpdateShopPaymentInput } from "../services/shop-payment.service.js";
 import { shopService } from "../services/shop.service.js";
@@ -7,6 +8,7 @@ import type { ShopCategoryInput, ShopProductInput, ShopProductQuery } from "../t
 type WebsiteParams = { id: string };
 type CategoryParams = WebsiteParams & { categoryId: string };
 type ProductParams = WebsiteParams & { productId: string };
+type CustomerParams = WebsiteParams & { customerId: string };
 
 export class ShopController {
   listCategories = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
@@ -117,6 +119,22 @@ export class ShopController {
       const search = typeof req.query.search === "string" ? req.query.search : undefined;
       const page = Number(req.query.page) || 1;
       res.json(await shopInventoryService.log(req.params.id, search, page, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listCustomers = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await shopCustomersService.list(req.params.id, req.query as unknown as ShopCustomerQuery, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getCustomer = async (req: Request<CustomerParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ customer: await shopCustomersService.get(req.params.id, req.params.customerId, req.user!) });
     } catch (error) {
       next(error);
     }

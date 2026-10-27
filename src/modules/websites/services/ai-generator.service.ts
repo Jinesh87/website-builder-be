@@ -1172,6 +1172,24 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    "detailBase" must be the slug of the page that contains the product_detail section.
 16. "product_detail" (one product from the shop URL, with photos, option prices and stock; do not invent the product):
    data: { "backLabel": "All products", "backHref": "/shop", "showDescription": true, "showStock": true }
+17. "auth" (shopper login / register / forgot password / OTP; use on a dedicated "/login" page):
+   data: {
+     "variant": "diagonal-split"|"gradient-spotlight"|"illustration-frame"|"glass-aurora"|"dark-wave"|"product-showcase"|"minimal-editorial"|"bento-grid"|"fullbleed-sheet"|"tabbed-compact",
+     "defaultView": "login"|"register",
+     "brandName": "<business name>",
+     "formPosition": "left"|"right",
+     "minHeight": "screen",
+     "social": { "enabled": false, "label": "Or continue with", "style": "icons", "position": "bottom", "providers": [] },
+     "login": { "heading": "Welcome back", "subheading": "...", "fields": [{ "name": "email", "label": "Email", "type": "email", "placeholder": "...", "required": true, "width": "full" }, { "name": "password", "label": "Password", "type": "password", "placeholder": "...", "required": true, "width": "full" }], "submitLabel": "Log in", "showRemember": true, "rememberLabel": "Remember me", "forgotLabel": "Forgot password?", "switchPrompt": "Don't have an account?", "switchLabel": "Sign up" },
+     "register": { "enabled": true, "heading": "Create an account", "subheading": "...", "fields": [{ "name": "fullName", "label": "Full name", "type": "text", "placeholder": "...", "required": true, "width": "full" }, { "name": "email", "label": "Email", "type": "email", "placeholder": "...", "required": true, "width": "full" }, { "name": "password", "label": "Password", "type": "password", "placeholder": "...", "required": true, "width": "full" }], "submitLabel": "Sign up", "showTerms": false, "switchPrompt": "Already have an account?", "switchLabel": "Log in" },
+     "forgot": { "enabled": true, "heading": "Reset your password", "subheading": "...", "fields": [{ "name": "email", "label": "Email", "type": "email", "placeholder": "...", "required": true, "width": "full" }], "submitLabel": "Send reset link", "backLabel": "Back to log in", "successHeading": "Check your inbox", "successText": "..." },
+     "otp": { "enabled": true, "heading": "Verify it's you", "subheading": "...", "length": 6, "submitLabel": "Verify code", "resendLabel": "Resend code", "resendSeconds": 45, "requireOnLogin": false, "requireOnRegister": true, "requireOnForgot": false },
+     "panel": { "heading": "...", "text": "..." },
+     "successHeading": "You're signed in",
+     "successText": "...",
+     "successLink": { "label": "Continue to shop", "href": "/shop" }
+   }
+   Keep social.enabled false unless the owner asked for social login. Prefer brandName from the brand facts.
 
 STOCK / DUMMY IMAGE GUIDELINES:
 - Tech / Dark Hero: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2000&q=80"
