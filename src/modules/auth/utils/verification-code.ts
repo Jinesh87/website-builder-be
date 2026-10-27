@@ -7,11 +7,12 @@ export const RESEND_COOLDOWN_SECONDS = 45;
 const MAX_ATTEMPTS = 5;
 
 /** Each purpose has its own keys, so a signup code can never confirm an email change (or the reverse). */
-export type VerificationPurpose = "signup" | "email-change";
+export type VerificationPurpose = "signup" | "email-change" | "shop-signup";
 
 const KEY_PREFIX: Record<VerificationPurpose, string> = {
   signup: "auth:verify",
   "email-change": "auth:email-change",
+  "shop-signup": "shop:verify",
 };
 
 const codeKey = (userId: string, purpose: VerificationPurpose) => `${KEY_PREFIX[purpose]}:code:${userId}`;
