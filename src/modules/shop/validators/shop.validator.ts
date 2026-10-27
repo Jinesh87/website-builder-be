@@ -143,3 +143,13 @@ export const shopInventoryAdjustSchema = Joi.object({
   }),
   note: Joi.string().trim().max(300).allow("").optional(),
 });
+
+export const shopCustomerQuerySchema = Joi.object({
+  search: Joi.string().trim().max(120).allow("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+});
+
+export const shopCustomerParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  customerId: Joi.string().guid().required(),
+});

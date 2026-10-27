@@ -28,6 +28,7 @@ export const AI_CREATABLE_TYPES = [
   "custom",
   "products",
   "product_detail",
+  "auth",
 ] as const satisfies readonly SectionType[];
 
 export type AiCreatableType = (typeof AI_CREATABLE_TYPES)[number];

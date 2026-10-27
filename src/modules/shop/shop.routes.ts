@@ -7,6 +7,8 @@ import { shopController } from "./controllers/shop.controller.js";
 import {
   shopCategoryParamsSchema,
   shopCategorySchema,
+  shopCustomerParamsSchema,
+  shopCustomerQuerySchema,
   shopInventoryAdjustSchema,
   shopInventoryLogQuerySchema,
   shopInventoryParamsSchema,
@@ -53,6 +55,9 @@ shopRouter.patch(
   shopController.setInventory,
 );
 shopRouter.get("/inventory/log", websiteParams, validate(shopInventoryLogQuerySchema, "query"), shopController.inventoryLog);
+
+shopRouter.get("/customers", websiteParams, validate(shopCustomerQuerySchema, "query"), shopController.listCustomers);
+shopRouter.get("/customers/:customerId", validate(shopCustomerParamsSchema, "params"), shopController.getCustomer);
 
 shopRouter.get("/payments", websiteParams, shopController.getPaymentConfig);
 shopRouter.put("/payments", websiteParams, validate(shopPaymentSchema), shopController.updatePaymentConfig);

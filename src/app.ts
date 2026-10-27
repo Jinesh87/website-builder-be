@@ -27,6 +27,7 @@ import publicTemplatesRouter from "./modules/websites/public-template.routes.js"
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
 import templateCategoriesRouter from "./modules/websites/template-category.routes.js";
 import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
+import shopAuthRouter from "./modules/shop/shop-auth.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
 import contactRouter from "./modules/contact/contact.routes.js";
 import {
@@ -106,6 +107,7 @@ app.use("/api/pricing", publicPricingRouter);
 app.use("/api/internal/domains", domainSyncRouter);
 app.use("/api/websites/:id/domains", websiteDomainsRouter);
 app.use("/api/websites/:id/hosting", websiteHostingRouter);
+app.use("/api/shop/:websiteId/auth", shopAuthRouter);
 app.use("/api/websites/:id/shop", shopRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);

@@ -272,11 +272,14 @@ RULES & CROSS-PAGE REASONING
   5. Never generate only a single section when the user asked for a complete page, website, or menu.
   6. SHOP / PRODUCT / ECOMMERCE PAGES ("product page", "shop page", "catalogue", "store"):
      Do NOT clarify and do NOT build a services or cards grid of made-up products. The catalogue is live.
-     Create two pages when they are not already in SITE PAGES:
+     Create three pages when they are not already in SITE PAGES:
      - "Shop" slug "/shop", showInNav true: a short hero plus one "products" section. products data is only eyebrow, title, subtitle, layout "grid-3", showSearch true, showCategoryFilter true, detailBase "/product", emptyMessage. It lists the real products.
      - "Product" slug "/product", showInNav false: one "product_detail" section with backLabel "All products", backHref "/shop", showDescription true, showStock true. A product opens at /product/its-slug.
+     - "Login" slug "/login", showInNav false: one "auth" section (shopper login / register / forgot password). Prefer variant "diagonal-split", social.enabled false, brandName from brand facts, successLink to "/shop".
      Also emit "update_navigation" so the header menu includes { "label": "Shop", "href": "/shop" }, keeping the existing items.
-     If the owner is already on the Shop page, use "replace_page" for that page instead of creating a duplicate.`;
+     If the owner is already on the Shop page, use "replace_page" for that page instead of creating a duplicate.
+  7. LOGIN / SIGN UP / ACCOUNT PAGES ("login page", "sign up", "register", "customer account"):
+     Create or replace "Login" at slug "/login", showInNav false, with a single "auth" section. Do not put auth on the home page.`;
 
 /** What the AI sees of the page: the section types whose fields it gets, and which sections it sees in full. */
 export type PromptScope = { types: EditableSectionType[]; fullIds: Set<string>; pageJson: string };

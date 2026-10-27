@@ -17,10 +17,12 @@ test("builds a shop list page and a product detail page", () => {
   } as unknown as WebsiteDetail);
 
   assert.ok(suggestion);
-  assert.equal(suggestion.createdPages?.map((page) => page.slug).join(","), "/shop,/product");
+  assert.equal(suggestion.createdPages?.map((page) => page.slug).join(","), "/shop,/product,/login");
   assert.equal(suggestion.createdPages?.[0]?.sections.some((section) => section.type === "products"), true);
   assert.equal(suggestion.createdPages?.[1]?.sections[0]?.type, "product_detail");
   assert.equal(suggestion.createdPages?.[1]?.showInNav, false);
+  assert.equal(suggestion.createdPages?.[2]?.sections[0]?.type, "auth");
+  assert.equal(suggestion.createdPages?.[2]?.showInNav, false);
   assert.deepEqual(suggestion.navigationPatch?.headerMenu, [
     { label: "Home", href: "/" },
     { label: "Shop", href: "/shop" },
