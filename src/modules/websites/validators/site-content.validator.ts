@@ -814,6 +814,23 @@ export const heroSchema = Joi.object({
   bannerBottomShape: Joi.string().valid("none", "curved", "wave", "normal", "slant", "tilt", "arch").optional(),
   bannerCurveDepth: Joi.number().min(0).max(300).optional(),
   bottomDividerColor: optionalText(50),
+  vintagePolaroids: Joi.array()
+    .items(
+      Joi.object({
+        image: image.required(),
+        caption: optionalText(120),
+        rotation: Joi.number().min(-15).max(15).optional(),
+      }),
+    )
+    .max(2)
+    .optional(),
+  topStrip: Joi.object({
+    left: optionalText(120),
+    center: optionalText(120),
+    right: optionalText(120),
+  }).optional(),
+  sunburstTitleWhite: optionalText(100),
+  circularPortrait: image.optional(),
   bannerTopBar: Joi.object({
     enabled: Joi.boolean().optional(),
     logoText: optionalText(100),
@@ -832,7 +849,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     heading: optionalText(200),
     intro: optionalText(500),
     variant: flexibleVariant(
-      ["grid", "split", "pastel-icons", "minimal", "cards"],
+      ["grid", "split", "pastel-icons", "minimal", "cards", "editorial-process", "colored-pillars", "polaroid-grid"],
       "grid",
       { "cards-grid": "cards", "icons": "pastel-icons" },
     ),
@@ -880,6 +897,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
         "interactive-list",
         "horizontal-cards",
         "minimal-numbered",
+        "editorial-specs",
       ],
       "cards-grid",
       { "bento": "bento-grid", "cards": "cards-grid", "split": "split-showcase" },
@@ -925,6 +943,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           secondaryLink: link.optional(),
           backgroundColor: Joi.string().max(100).allow("").optional(),
           featured: Joi.boolean().optional(),
+          stampHighlight: Joi.boolean().optional(),
         }),
       )
       .max(24)
@@ -1125,12 +1144,13 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   cta: Joi.object({
     variant: flexibleVariant(
-      ["centered-card", "split-visual", "floating-card", "minimal-editorial"],
+      ["centered-card", "split-visual", "floating-card", "minimal-editorial", "vintage-story", "vintage-banner"],
       "centered-card",
       { "centered": "centered-card", "split": "split-visual", "floating": "floating-card", "minimal": "minimal-editorial" },
     ),
     eyebrow: optionalText(80),
     heading: text(200).required(),
+    italicText: optionalText(120),
     text: optionalText(500),
     button: link.required(),
     secondaryButton: link.optional(),
@@ -1189,6 +1209,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     showHeader: Joi.boolean().optional().meta(locked),
   }),
   text: Joi.object({
+    variant: Joi.string().valid("default", "pull-quote").optional(),
     heading: optionalText(200),
     body: text(20000).allow("").required(),
   }),
@@ -1210,6 +1231,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     bullets: Joi.array().items(text(200)).max(8).required(),
     image: image.optional(),
     imagePosition: Joi.string().valid("left", "right").required(),
+    imageStyle: Joi.string().valid("plain", "polaroid").optional(),
+    imageTapeLabel: optionalText(80),
     cta: link.optional(),
   }),
   stats: Joi.object({
@@ -1408,6 +1431,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   auth: authDataSchema,
   custom: customDataSchema,
   blog: Joi.object({
+    variant: Joi.string().valid("default", "vintage-journal").optional(),
     eyebrow: optionalText(120),
     title: text(160).required(),
     subtitle: optionalText(320),
