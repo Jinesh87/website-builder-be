@@ -6,6 +6,7 @@ import type { CreatedPageEdit, NavigationPatchEdit, UpdatedPageEdit } from "./se
 
 const SHOP_SLUG = "/shop";
 const PRODUCT_SLUG = "/product";
+const LOGIN_SLUG = "/login";
 
 /** A request to add the shop catalogue, not a rewrite of existing marketing copy. */
 export function isShopPageRequest(prompt: string): boolean {
@@ -63,6 +64,93 @@ function detailSections(): SectionEnvelope[] {
   ];
 }
 
+function loginSections(business: string): SectionEnvelope[] {
+  const email = {
+    name: "email",
+    label: "Email",
+    type: "email",
+    placeholder: "Enter your email address",
+    required: true,
+    width: "full",
+  };
+  const password = {
+    name: "password",
+    label: "Password",
+    type: "password",
+    placeholder: "Enter your password",
+    required: true,
+    width: "full",
+  };
+  return [
+    section("auth", {
+      variant: "diagonal-split",
+      defaultView: "login",
+      brandName: business,
+      formPosition: "right",
+      minHeight: "screen",
+      inputStyle: "outline",
+      buttonShape: "rounded",
+      headingSize: "md",
+      showLabels: true,
+      showFieldIcons: false,
+      showPasswordToggle: true,
+      animation: "fade",
+      backgroundMotion: true,
+      social: { enabled: false, label: "Or continue with", style: "icons", position: "bottom", providers: [] },
+      login: {
+        heading: "Welcome back",
+        subheading: "Sign in to your account to continue shopping.",
+        fields: [email, password],
+        submitLabel: "Log in",
+        showRemember: true,
+        rememberLabel: "Remember me",
+        forgotLabel: "Forgot password?",
+        switchPrompt: "Don't have an account?",
+        switchLabel: "Sign up",
+      },
+      register: {
+        enabled: true,
+        heading: "Create an account",
+        subheading: "Save your details so you can purchase from this shop.",
+        fields: [
+          { name: "fullName", label: "Full name", type: "text", placeholder: "Your name", required: true, width: "full" },
+          email,
+          password,
+        ],
+        submitLabel: "Sign up",
+        showTerms: false,
+        switchPrompt: "Already have an account?",
+        switchLabel: "Log in",
+      },
+      forgot: {
+        enabled: true,
+        heading: "Reset your password",
+        subheading: "Enter the email linked to your account and we'll send you a reset link.",
+        fields: [email],
+        submitLabel: "Send reset link",
+        backLabel: "Back to log in",
+        successHeading: "Check your inbox",
+        successText: "If an account exists for that email, a reset link is on its way.",
+      },
+      otp: {
+        enabled: true,
+        heading: "Verify it's you",
+        subheading: "Enter the verification code we just sent to your email.",
+        length: 6,
+        submitLabel: "Verify code",
+        resendLabel: "Resend code",
+        resendSeconds: 45,
+        requireOnLogin: false,
+        requireOnRegister: true,
+        requireOnForgot: false,
+      },
+      successHeading: "You're signed in",
+      successText: "Your account is ready. Continue shopping.",
+      successLink: { label: "Continue to shop", href: SHOP_SLUG },
+    }),
+  ];
+}
+
 /**
  * Builds the shop list page and the product detail page without asking the model.
  * The model was answering these requests with an empty chat reply.
@@ -105,6 +193,7 @@ export function shopPagesSuggestion(prompt: string, website: WebsiteDetail | und
 
   place("Shop", SHOP_SLUG, true, shopSections(business), `Browse products from ${business}.`);
   place("Product", PRODUCT_SLUG, false, detailSections(), `Product details, options and stock at ${business}.`);
+  place("Login", LOGIN_SLUG, false, loginSections(business), `Sign in or create an account at ${business}.`);
 
   const menu = [...(website?.draft.header.menu ?? [])];
   const hasShop = menu.some((item) => pathKey(item.href) === pathKey(SHOP_SLUG) || pathKey(item.label) === "shop");
@@ -118,7 +207,7 @@ export function shopPagesSuggestion(prompt: string, website: WebsiteDetail | und
     created.length > 0 ? `Created ${created.join(" and ")}` : "",
     updated.length > 0 ? `Updated ${updated.join(" and ")}` : "",
     navigationPatch ? "Added Shop to the header menu." : "",
-    "The shop page lists your products. Each one opens on the product page with its options, price and stock.",
+    "The shop page lists your products. Each one opens on the product page with its options, price and stock. Shoppers sign in on the Login page.",
   ]
     .filter(Boolean)
     .join(". ")

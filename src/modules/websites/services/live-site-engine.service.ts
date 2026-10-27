@@ -4,15 +4,18 @@ import { prisma } from "../../../config/prisma.js";
 import { siteRendererClient, type RenderedSitePage } from "./site-renderer.client.js";
 import { siteCacheService, type CachedPagePayload } from "./site-cache.service.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
-import { shopService } from "../../shop/services/shop.service.js";
-import type { PublicShopProduct } from "../../shop/types/shop.types.js";
+import { shopService, pagePublicCatalog } from "../../shop/services/shop.service.js";
+import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 
 type ShopRender = {
+  websiteId: string;
+  authHref?: string;
   products: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
+  list?: PublicShopList;
   live: true;
 };
 
@@ -46,6 +49,106 @@ function resolvePublishedPage(
   matches.sort((left, right) => right.length - left.length);
   const best = matches[0];
   return best ? { page: best.page, productSlug: best.productSlug } : null;
+}
+
+/** Shop sites always expose /login for shoppers, even when the published snapshot never added an auth page. */
+function withShopLoginPage(pages: PublishSnapshot["pages"], businessName: string): PublishSnapshot["pages"] {
+  if (pages.some((page) => page.sections.some((section) => section.type === "auth"))) return pages;
+  if (pages.some((page) => page.slug === "/login" || page.slug === "login")) return pages;
+  const email = {
+    name: "email",
+    label: "Email",
+    type: "email" as const,
+    placeholder: "Enter your email address",
+    required: true,
+    width: "full" as const,
+  };
+  const password = {
+    name: "password",
+    label: "Password",
+    type: "password" as const,
+    placeholder: "Enter your password",
+    required: true,
+    width: "full" as const,
+  };
+  return [
+    ...pages,
+    {
+      id: "shop-login",
+      name: "Login",
+      slug: "/login",
+      pageType: "CUSTOM" as const,
+      showInNav: false,
+      seoTitle: `Login | ${businessName}`,
+      seoDescription: `Sign in or create an account at ${businessName}.`,
+      sections: [
+        {
+          id: "shop-login-auth",
+          type: "auth" as const,
+          hidden: false,
+          settings: { background: "default" as const, hideOnMobile: false },
+          data: {
+            variant: "diagonal-split",
+            defaultView: "login",
+            brandName: businessName,
+            formPosition: "right",
+            minHeight: "screen",
+            social: { enabled: false, label: "Or continue with", style: "icons", position: "bottom", providers: [] },
+            login: {
+              heading: "Welcome back",
+              subheading: "Sign in to your account to continue shopping.",
+              fields: [email, password],
+              submitLabel: "Log in",
+              showRemember: true,
+              rememberLabel: "Remember me",
+              forgotLabel: "Forgot password?",
+              switchPrompt: "Don't have an account?",
+              switchLabel: "Sign up",
+            },
+            register: {
+              enabled: true,
+              heading: "Create an account",
+              subheading: "Save your details so you can purchase from this shop.",
+              fields: [
+                { name: "fullName", label: "Full name", type: "text" as const, placeholder: "Your name", required: true, width: "full" as const },
+                email,
+                password,
+              ],
+              submitLabel: "Sign up",
+              showTerms: false,
+              switchPrompt: "Already have an account?",
+              switchLabel: "Log in",
+            },
+            forgot: {
+              enabled: true,
+              heading: "Reset your password",
+              subheading: "Enter the email linked to your account and we'll send you a reset link.",
+              fields: [email],
+              submitLabel: "Send reset link",
+              backLabel: "Back to log in",
+              successHeading: "Check your inbox",
+              successText: "If an account exists for that email, a reset link is on its way.",
+            },
+            otp: {
+              enabled: true,
+              heading: "Verify it's you",
+              subheading: "Enter the verification code we just sent to your email.",
+              length: 6,
+              submitLabel: "Verify code",
+              resendLabel: "Resend code",
+              resendSeconds: 45,
+              requireOnLogin: false,
+              requireOnRegister: true,
+              requireOnForgot: false,
+            },
+            successHeading: "You're signed in",
+            successText: "Your account is ready. Continue shopping.",
+            successLink: { label: "Continue to shop", href: "/shop" },
+          },
+        } as PublishSnapshot["pages"][number]["sections"][number],
+      ],
+    },
+  ];
 }
 
 /** On localhost the site lives under /live/<subdomain>. Root links like /shop would otherwise hit the API. */
@@ -119,6 +222,8 @@ const renderStateSelect = {
   contactPhone: true,
   address: true,
   logoMediaId: true,
+  shopEnabled: true,
+  client: { select: { shopFeatureEnabled: true } },
   domains: {
     where: { status: DomainStatus.ACTIVE },
     orderBy: { isPrimary: "desc" as const },
@@ -370,7 +475,13 @@ Sitemap: ${domain}/sitemap.xml
   }
 
   /** `basePath` is the URL prefix in preview mode ("/live/<subdomain>"); empty when served on the site's own host. */
-  async renderPage(identifier: string, pathSlug: string, basePath = "", selection: Record<string, string> = {}): Promise<CachedPage> {
+  async renderPage(
+    identifier: string,
+    pathSlug: string,
+    basePath = "",
+    selection: Record<string, string> = {},
+    listQuery: PublicShopListQuery = {},
+  ): Promise<CachedPage> {
     // 1. Trailing slash canonical redirect (e.g., /about/ -> /about)
     if (pathSlug.length > 1 && pathSlug.endsWith("/")) {
       const canonicalSlug = pathSlug.replace(/\/+$/, "");
@@ -398,15 +509,30 @@ Sitemap: ${domain}/sitemap.xml
     const picked = Object.entries(selection)
       .filter(([, value]) => value)
       .sort(([left], [right]) => left.localeCompare(right));
-    const pageRoute = `${basePath}${cleanSlug}${picked.length ? `?${new URLSearchParams(picked).toString()}` : ""}`;
+    const listParams = new URLSearchParams();
+    if (listQuery.search) listParams.set("q", listQuery.search);
+    if (listQuery.category) listParams.set("cat", listQuery.category);
+    if (listQuery.sort && listQuery.sort !== "featured") listParams.set("sort", listQuery.sort);
+    if (listQuery.page && listQuery.page > 1) listParams.set("page", String(listQuery.page));
+    if (listQuery.pageSize && listQuery.pageSize !== 12) listParams.set("per", String(listQuery.pageSize));
+    const listText = listParams.toString();
+    const optionText = picked.length ? new URLSearchParams(picked).toString() : "";
+    const queryText = [optionText, listText].filter(Boolean).join("&");
+    const pageRoute = `${basePath}${cleanSlug}${queryText ? `?${queryText}` : ""}`;
 
     // Multi-tier L1 Memory + L2 Redis cached resolution with single-flight stampede protection
     return siteCacheService.getOrRender(identifier, pageRoute, async () => {
-      return this.renderPageInternal(identifier, cleanSlug, basePath, selection);
+      return this.renderPageInternal(identifier, cleanSlug, basePath, selection, listQuery);
     });
   }
 
-  private async renderPageInternal(identifier: string, cleanSlug: string, basePath = "", selection: Record<string, string> = {}): Promise<CachedPage> {
+  private async renderPageInternal(
+    identifier: string,
+    cleanSlug: string,
+    basePath = "",
+    selection: Record<string, string> = {},
+    listQuery: PublicShopListQuery = {},
+  ): Promise<CachedPage> {
     const website = await this.resolveWebsite(identifier);
     if (!website || !website.liveVersion) {
       const notFoundHtml = this.renderNotFoundHtml(identifier);
@@ -427,24 +553,34 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     const snapshot = website.liveVersion.snapshot as unknown as PublishSnapshot;
-    const resolved = resolvePublishedPage(snapshot.pages, cleanSlug);
+    const shopOpen = Boolean(website.shopEnabled && website.client.shopFeatureEnabled);
+    const pages = shopOpen ? withShopLoginPage(snapshot.pages, website.businessName || website.name) : snapshot.pages;
+    const resolved = resolvePublishedPage(pages, cleanSlug);
     if (!resolved) {
       const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
     const targetPage = resolved.page;
-    const products = await shopService.publicCatalog(website.id);
+    const products = shopOpen ? await shopService.publicCatalog(website.id) : [];
     const activeProduct = resolved.productSlug ? products.find((product) => product.slug === resolved.productSlug) : undefined;
     if (resolved.productSlug && !activeProduct) {
       const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
-    const shop: ShopRender = {
-      products,
-      ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
-      ...(Object.keys(selection).length > 0 ? { selection } : {}),
-      live: true,
-    };
+    const isList = !resolved.productSlug && targetPage.sections.some((section) => section.type === "products");
+    const paged = isList ? pagePublicCatalog(products, listQuery) : null;
+    const authPage = pages.find((page) => page.sections.some((section) => section.type === "auth"));
+    const shop: ShopRender | undefined = shopOpen
+      ? {
+          websiteId: website.id,
+          authHref: authPage ? (authPage.slug === "/" ? "/" : authPage.slug) : "/login",
+          products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
+          ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
+          ...(paged ? { list: paged.list } : {}),
+          ...(Object.keys(selection).length > 0 ? { selection } : {}),
+          live: true,
+        }
+      : undefined;
 
     const domain = this.getPublicDomain(website);
     const publicPath = resolved.productSlug ? cleanSlug : targetPage.slug;
@@ -634,7 +770,7 @@ Sitemap: ${domain}/sitemap.xml
 
     const htmlLang = escapeHtml(String(siteLang));
 
-    const siteKitPage = await this.renderWithSiteKit({ ...snapshot, shop }, targetPage.slug, identifier);
+    const siteKitPage = await this.renderWithSiteKit({ ...snapshot, pages, shop }, targetPage.slug, identifier);
     if (siteKitPage) {
       const assetQuery = `?v=${encodeURIComponent(siteKitPage.assetsVersion)}`;
       const body = prefixLocalHrefs(siteKitPage.body, basePath);

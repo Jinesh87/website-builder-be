@@ -88,6 +88,8 @@ export const shopProductSchema = Joi.object({
 export const shopProductQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).allow("").optional(),
   categoryId: Joi.string().guid().optional(),
+  page: Joi.number().integer().min(1).default(1),
+  pageSize: Joi.number().integer().valid(10, 20, 50).default(20),
 });
 
 export const shopCategoryParamsSchema = Joi.object({
@@ -140,4 +142,14 @@ export const shopInventoryAdjustSchema = Joi.object({
     "number.base": "Enter how many to add",
   }),
   note: Joi.string().trim().max(300).allow("").optional(),
+});
+
+export const shopCustomerQuerySchema = Joi.object({
+  search: Joi.string().trim().max(120).allow("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+});
+
+export const shopCustomerParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  customerId: Joi.string().guid().required(),
 });

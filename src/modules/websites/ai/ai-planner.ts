@@ -18,6 +18,7 @@ const SECTION_CATALOG = `
 - contact: contact details (email, phone, address, hours) plus an inquiry form with name, email and message fields that is emailed to the site owner (split-form, cards-hub, minimal-editorial, floating-glass).
 - products: the live shop catalogue (search, category filter, photo, price). It reads the website's products; do not invent product cards inside it.
 - product_detail: one product from the shop, with its photos, option prices and stock. It reads the product in the URL; do not invent a product inside it.
+- auth: shopper login / register / forgot-password screen (diagonal-split, gradient-spotlight, illustration-frame, glass-aurora, dark-wave, product-showcase, minimal-editorial, bento-grid, fullbleed-sheet, tabbed-compact). Put it on its own "/login" page; do not invent social OAuth providers that are not real.
 - custom: STATIC free-form layout built from headings, text, badges, buttons, images, icons, lists, cards, stacks and grids. It cannot slide, auto-scroll, expand, play video or submit forms.`;
 
 export const PLANNER_SYSTEM_PROMPT = `You are the intent planner for a visual website builder.
@@ -79,7 +80,8 @@ PAGES
   - Pricing / plans: compact hero, "pricing", "faq", "cta".
   - Gallery / portfolio: compact hero, "carousel" (image-gallery or image-coverflow), "testimonials", "cta".
   - Contact / reservations / location: compact hero, "contact" (details plus the inquiry form), "faq", optional "cta".
-  - Shop / product / catalogue / ecommerce: this is not a marketing page and not a services grid. Create two pages in one plan. "Shop" at slug "/shop" with sectionTypes ["hero", "products"] (the products section lists the real catalogue). "Product" at slug "/product" with sectionTypes ["product_detail"], showInNav false (each product opens at /product/its-slug). Add "Shop" to the header menu with href "/shop". Never invent product names, prices or photos in these sections.
+  - Shop / product / catalogue / ecommerce: this is not a marketing page and not a services grid. Create three pages in one plan. "Shop" at slug "/shop" with sectionTypes ["hero", "products"] (the products section lists the real catalogue). "Product" at slug "/product" with sectionTypes ["product_detail"], showInNav false (each product opens at /product/its-slug). "Login" at slug "/login" with sectionTypes ["auth"], showInNav false. Add "Shop" to the header menu with href "/shop". Never invent product names, prices or photos in these sections.
+  - Login / sign up / account / register: create or replace a "Login" page at slug "/login" with sectionTypes ["auth"], showInNav false. Do not put auth on the home page.
   - Team, careers, events, blog, FAQ or other pages: choose sections that directly serve that page's topic.
 - Several pages in one request: emit one "create_page" per page (at most ${MAX_PAGES_PER_REQUEST} per request; if more are asked for, build the first ${MAX_PAGES_PER_REQUEST} and say in "reply" that the rest can be built next), each with its own sectionTypes and instruction, plus ONE "update_navigation" op if the menu should change.
 
