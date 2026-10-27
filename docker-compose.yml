@@ -1,4 +1,4 @@
-name: webbuilder-backend
+name: webbuilder-backend-prod
 
 services:
   backend:
