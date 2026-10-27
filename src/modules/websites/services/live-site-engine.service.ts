@@ -1070,8 +1070,31 @@ Sitemap: ${domain}/sitemap.xml
                 ? (d.secondaryButton as Record<string, unknown>)
                 : null;
 
+          const btnTertiary =
+            d.tertiaryCta && typeof d.tertiaryCta === "object"
+              ? (d.tertiaryCta as Record<string, unknown>)
+              : null;
+
           const primaryHref = btnPrimary?.href ? resolveSafeHref(String(btnPrimary.href), availableSlugs) : "#";
           const secondaryHref = btnSecondary?.href ? resolveSafeHref(String(btnSecondary.href), availableSlugs) : "#";
+
+          const primaryVideo = btnPrimary && (btnPrimary.actionType === "video" || Boolean(btnPrimary.videoUrl));
+          const primaryAttrs = primaryVideo
+            ? ` data-wb-video-modal="true" data-wb-video-url="${escapeHtml(String(btnPrimary.videoUrl || btnPrimary.href || ""))}" data-wb-video-title="${escapeHtml(String(btnPrimary.videoTitle || btnPrimary.label || ""))}" role="button"`
+            : "";
+
+          const secondaryVideo = btnSecondary && (btnSecondary.actionType === "video" || Boolean(btnSecondary.videoUrl));
+          const secondaryAttrs = secondaryVideo
+            ? ` data-wb-video-modal="true" data-wb-video-url="${escapeHtml(String(btnSecondary.videoUrl || btnSecondary.href || ""))}" data-wb-video-title="${escapeHtml(String(btnSecondary.videoTitle || btnSecondary.label || ""))}" role="button"`
+            : "";
+
+          const tertVideoUrl = String(
+            btnTertiary?.videoUrl ||
+              (btnTertiary?.href && btnTertiary.href !== "#demo" && btnTertiary.href !== "#"
+                ? btnTertiary.href
+                : "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"),
+          );
+          const tertTitle = String(btnTertiary?.videoTitle || btnTertiary?.label || "Demo Video");
 
           const effectiveHeading = heading || `Welcome to ${siteName}`;
           const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
@@ -1086,12 +1109,17 @@ Sitemap: ${domain}/sitemap.xml
               <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                 ${
                   btnPrimary?.label
-                    ? `<a href="${escapeHtml(primaryHref)}" class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnPrimary.label))}</a>`
+                    ? `<a href="${escapeHtml(primaryHref)}"${primaryAttrs} class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnPrimary.label))}</a>`
                     : ""
                 }
                 ${
                   btnSecondary?.label
-                    ? `<a href="${escapeHtml(secondaryHref)}" class="btn-secondary" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnSecondary.label))}</a>`
+                    ? `<a href="${escapeHtml(secondaryHref)}"${secondaryAttrs} class="btn-secondary" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnSecondary.label))}</a>`
+                    : ""
+                }
+                ${
+                  btnTertiary?.label
+                    ? `<a href="${escapeHtml(tertVideoUrl)}" class="btn-secondary" data-wb-video-modal="true" data-wb-video-url="${escapeHtml(tertVideoUrl)}" data-wb-video-title="${escapeHtml(tertTitle)}" role="button" style="font-size: 1rem; padding: 0.8rem 2.2rem; display: inline-flex; align-items: center; gap: 0.5rem;"><span style="display:inline-block;width:0.8em;height:0.8em;border-radius:50%;background:currentColor;opacity:0.85"></span>${escapeHtml(String(btnTertiary.label))}</a>`
                     : ""
                 }
               </div>
