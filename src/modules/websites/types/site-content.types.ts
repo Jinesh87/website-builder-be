@@ -520,6 +520,11 @@ export type SectionSettings = {
   fontSize?: SectionFontSize;
   headingSize?: SectionFontSize;
   bodySize?: SectionFontSize;
+  containerWidth?: string;
+  headingWeight?: string;
+  headingItalic?: boolean;
+  bodyWeight?: string;
+  bodyItalic?: boolean;
 };
 
 export type HeroFloatingCard = {

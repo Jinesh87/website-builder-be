@@ -556,6 +556,19 @@ export const sectionSettingsSchema = Joi.object({
   bodySize: Joi.string()
     .max(30)
     .optional(),
+  containerWidth: Joi.string()
+    .max(30)
+    .optional(),
+  headingWeight: Joi.string()
+    .max(30)
+    .optional(),
+  headingItalic: Joi.boolean()
+    .optional(),
+  bodyWeight: Joi.string()
+    .max(30)
+    .optional(),
+  bodyItalic: Joi.boolean()
+    .optional(),
 });
 
 /** Style of the site-wide header/footer; the editor writes it from the shared header/footer section. */
