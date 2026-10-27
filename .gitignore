@@ -5,3 +5,7 @@ src/generated/
 *.log
 .DS_Store
 uploads/
+
+Dockerfile
+docker-compose.yml
+.dockerignore
