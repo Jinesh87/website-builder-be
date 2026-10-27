@@ -190,7 +190,41 @@ export const SECTION_TYPES = [
   "blog_detail",
   "products",
   "product_detail",
+  "account",
 ] as const;
+
+/** Mirrors frontend/src/site-kit/types.ts. Stored in site data, so values are only ever appended. */
+export const ACCOUNT_VARIANTS = ["sidebar-tabs", "top-tabs", "overview-cards", "minimal-list", "dark-panel"] as const;
+export const ACCOUNT_PREVIEWS = ["member", "guest"] as const;
+
+export type AccountData = {
+  variant: (typeof ACCOUNT_VARIANTS)[number];
+  /** Which state the editor canvas shows; visitors always get the real one. */
+  preview?: (typeof ACCOUNT_PREVIEWS)[number];
+  heading?: string;
+  subheading?: string;
+  showOrders?: boolean;
+  showCart?: boolean;
+  showProfile?: boolean;
+  showPassword?: boolean;
+  ordersLabel?: string;
+  cartLabel?: string;
+  profileLabel?: string;
+  passwordLabel?: string;
+  logoutLabel?: string;
+  saveLabel?: string;
+  emptyOrdersText?: string;
+  emptyCartText?: string;
+  /** Page that holds the login section, such as "/login". */
+  loginHref?: string;
+  /** Page that lists the products, linked from empty states. */
+  shopHref?: string;
+  /** Sends logged-out visitors straight to the login page instead of showing the prompt. */
+  redirectWhenLoggedOut?: boolean;
+  guestHeading?: string;
+  guestText?: string;
+  guestButtonLabel?: string;
+};
 
 export const AUTH_VARIANTS = [
   "diagonal-split",
@@ -1071,6 +1105,7 @@ export type SectionDataMap = {
   blog_detail: BlogDetailData;
   products: ProductsData;
   product_detail: ProductDetailData;
+  account: AccountData;
 };
 
 export const BLOG_DETAIL_DESIGNS = [

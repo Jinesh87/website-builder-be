@@ -34,6 +34,7 @@ export const GENERATED_SECTION_TYPES = [
   "products",
   "product_detail",
   "auth",
+  "account",
 ] as const;
 export type GeneratedSectionType = (typeof GENERATED_SECTION_TYPES)[number];
 
