@@ -496,6 +496,16 @@ export type SectionCustomColors = {
   gradientTo?: string;
 };
 
+export const SECTION_FONT_SIZES = [
+  "small",
+  "default",
+  "normal",
+  "medium",
+  "large",
+  "huge",
+] as const;
+export type SectionFontSize = (typeof SECTION_FONT_SIZES)[number];
+
 export type SectionSettings = {
   background: (typeof SECTION_BACKGROUNDS)[number];
   hideOnMobile: boolean;
@@ -507,6 +517,9 @@ export type SectionSettings = {
   customColors?: SectionCustomColors;
   /** Overrides the theme font for this section only. */
   font?: FontKey;
+  fontSize?: SectionFontSize;
+  headingSize?: SectionFontSize;
+  bodySize?: SectionFontSize;
 };
 
 export type HeroFloatingCard = {

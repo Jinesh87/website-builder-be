@@ -547,6 +547,15 @@ export const sectionSettingsSchema = Joi.object({
   font: Joi.string()
     .valid(...FONT_KEYS)
     .optional(),
+  fontSize: Joi.string()
+    .max(30)
+    .optional(),
+  headingSize: Joi.string()
+    .max(30)
+    .optional(),
+  bodySize: Joi.string()
+    .max(30)
+    .optional(),
 });
 
 /** Style of the site-wide header/footer; the editor writes it from the shared header/footer section. */
