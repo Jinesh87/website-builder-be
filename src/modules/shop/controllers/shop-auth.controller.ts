@@ -77,6 +77,33 @@ export class ShopAuthController {
     }
   };
 
+  account = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json(await shopAuthService.account(req.params.websiteId, req.shopCustomer!.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateProfile = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        customer: await shopAuthService.updateProfile(req.params.websiteId, req.shopCustomer!.id, req.body),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changePassword = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      await shopAuthService.changePassword(req.params.websiteId, req.shopCustomer!.id, req.body.currentPassword, req.body.newPassword);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
   forgotPassword = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       await shopAuthService.requestPasswordReset(req.params.websiteId, req.body.email);

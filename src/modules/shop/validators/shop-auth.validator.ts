@@ -45,3 +45,15 @@ export const shopResetPasswordSchema = Joi.object({
   token: Joi.string().trim().min(20).max(200).required(),
   password: password.required(),
 });
+
+export const shopProfileUpdateSchema = Joi.object({
+  fullName: Joi.string().trim().min(2).max(120).optional(),
+  phone: phone,
+})
+  .min(1)
+  .messages({ "object.min": "Add at least one profile field to update" });
+
+export const shopChangePasswordSchema = Joi.object({
+  currentPassword: Joi.string().min(1).max(200).required(),
+  newPassword: password.required(),
+});

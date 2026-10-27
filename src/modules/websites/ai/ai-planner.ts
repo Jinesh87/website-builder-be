@@ -18,7 +18,8 @@ const SECTION_CATALOG = `
 - contact: contact details (email, phone, address, hours) plus an inquiry form with name, email and message fields that is emailed to the site owner (split-form, cards-hub, minimal-editorial, floating-glass).
 - products: the live shop catalogue (search, category filter, photo, price). It reads the website's products; do not invent product cards inside it.
 - product_detail: one product from the shop, with its photos, option prices and stock. It reads the product in the URL; do not invent a product inside it.
-- auth: shopper login / register / forgot-password screen (diagonal-split, gradient-spotlight, illustration-frame, glass-aurora, dark-wave, product-showcase, minimal-editorial, bento-grid, fullbleed-sheet, tabbed-compact). Put it on its own "/login" page; do not invent social OAuth providers that are not real.
+- auth: shopper login / register / forgot-password screen (diagonal-split, gradient-spotlight, illustration-frame, glass-aurora, dark-wave, product-showcase, minimal-editorial, bento-grid, fullbleed-sheet, tabbed-compact). Put it on a dedicated "/login" page; logged-in shoppers land on "/account". Do not invent social OAuth providers that are not real.
+- account: the signed-in customer's own page: orders, cart and profile (edit details, change password, log out). Visitors who aren't signed in see a configurable sign-in prompt instead. Layouts: sidebar-tabs, top-tabs, overview-cards, minimal-list, dark-panel. Put it on a dedicated "/account" page; it reads the customer's real data, so never invent orders or names inside it.
 - custom: STATIC free-form layout built from headings, text, badges, buttons, images, icons, lists, cards, stacks and grids. It cannot slide, auto-scroll, expand, play video or submit forms.`;
 
 export const PLANNER_SYSTEM_PROMPT = `You are the intent planner for a visual website builder.
@@ -62,9 +63,12 @@ RULES & CROSS-PAGE REASONING
 - "reply" must describe only what your ops actually change. If nothing needs to change (for example the link is already in the menu), use intent "chat" and say so.
 
 NAVIGATION REQUESTS (users describe these casually, often with typos or in Malayalam/Manglish)
-- "add X option / icon / link / tab / item / button to the header / navbar / nav / top menu", "link X page in the header", "X page-ilekku redirect cheyyanam", "header-il X venam" all mean: add a header menu item labelled X (Title Case, e.g. "Menu") whose href is the slug of page X from "site.pages", matched by name or slug (e.g. "Menu" -> "/menu"). Plan it as ONE update_navigation op whose headerMenu is site.headerMenu plus the new item. Do not use "update" on the header section for menu links.
+- "add X option / icon / link / tab / item to the header / navbar / nav / top menu / menu bar", "link X page in the header", "in header i need X", "X page-ilekku redirect cheyyanam", "header-il X venam" all mean: add a header menu item labelled X (Title Case, e.g. "Menu") whose href is the slug of page X from "site.pages", matched by name or slug (e.g. "Menu" -> "/menu"). Plan it as ONE update_navigation op whose headerMenu is site.headerMenu plus the new item. Do not use "update" on the header section for menu links.
+- "this page", "current page", "here" in such a request mean "site.currentPage": use its slug as the href and its name as the label.
+- "add a button in the nav / header to X", "nav button for this page", "header cta to X" -> headerCta: { "label": X's name or the label the user gave, "href": X's slug }. Keep headerMenu null unless they also asked to change the menu.
 - "remove / hide X from the header" -> headerMenu without that item. "rename X to Y" -> same href, new label. "move X first / after Y" -> reordered headerMenu.
 - "change the header button / Get Started button to X (linking to Y)" -> headerCta.
+- A header request is always intent "edit" with an update_navigation op; never answer it with "clarify" when the page is in site.pages or is site.currentPage.
 - If page X does not exist yet and the user clearly wants it, add a create_page op for it in the same plan and link to its slug. If it is unclear whether they want a new page, ask with "clarify".
 - If the item is already in site.headerMenu with the right link, reply that it is already there (intent "chat").
 
@@ -80,8 +84,9 @@ PAGES
   - Pricing / plans: compact hero, "pricing", "faq", "cta".
   - Gallery / portfolio: compact hero, "carousel" (image-gallery or image-coverflow), "testimonials", "cta".
   - Contact / reservations / location: compact hero, "contact" (details plus the inquiry form), "faq", optional "cta".
-  - Shop / product / catalogue / ecommerce: this is not a marketing page and not a services grid. Create three pages in one plan. "Shop" at slug "/shop" with sectionTypes ["hero", "products"] (the products section lists the real catalogue). "Product" at slug "/product" with sectionTypes ["product_detail"], showInNav false (each product opens at /product/its-slug). "Login" at slug "/login" with sectionTypes ["auth"], showInNav false. Add "Shop" to the header menu with href "/shop". Never invent product names, prices or photos in these sections.
-  - Login / sign up / account / register: create or replace a "Login" page at slug "/login" with sectionTypes ["auth"], showInNav false. Do not put auth on the home page.
+  - Shop / product / catalogue / ecommerce: this is not a marketing page and not a services grid. Create four pages in one plan. "Shop" at slug "/shop" with sectionTypes ["hero", "products"] (the products section lists the real catalogue). "Product" at slug "/product" with sectionTypes ["product_detail"], showInNav false (each product opens at /product/its-slug). "Login" at slug "/login" with sectionTypes ["auth"], showInNav false. "Account" at slug "/account" with sectionTypes ["account"], showInNav false. Add "Shop" to the header menu with href "/shop". Never invent product names, prices or photos in these sections.
+  - Login / sign up / register: "Login" ("/login") with sectionTypes ["auth"], showInNav false; also "Account" ("/account") with sectionTypes ["account"] when it doesn't exist. Do not put auth on the home page.
+  - Account / my account / customer dashboard / my orders page: "Account" ("/account") with sectionTypes ["account"], showInNav false. The instruction names the layout (sidebar-tabs, top-tabs, overview-cards, minimal-list or dark-panel) and which panels to show (orders, cart, profile, password); to restyle an existing account page, use "update" on its account section with the layout and copy changes.
   - Team, careers, events, blog, FAQ or other pages: choose sections that directly serve that page's topic.
 - Several pages in one request: emit one "create_page" per page (at most ${MAX_PAGES_PER_REQUEST} per request; if more are asked for, build the first ${MAX_PAGES_PER_REQUEST} and say in "reply" that the rest can be built next), each with its own sectionTypes and instruction, plus ONE "update_navigation" op if the menu should change.
 
