@@ -4,7 +4,7 @@
  */
 
 export type ImageRef = { url: string; alt: string };
-export const LINK_ACTION_TYPES = ["link", "download"] as const;
+export const LINK_ACTION_TYPES = ["link", "download", "video"] as const;
 export const LINK_ICON_POSITIONS = ["left", "right"] as const;
 
 /** Mirrors LinkRef in frontend/src/site-kit/types.ts; fields missing here are dropped on save. */
@@ -13,6 +13,8 @@ export type LinkRef = {
   href: string;
   actionType?: (typeof LINK_ACTION_TYPES)[number];
   downloadFileName?: string;
+  videoUrl?: string;
+  videoTitle?: string;
   icon?: string;
   iconImage?: ImageRef;
   iconPosition?: (typeof LINK_ICON_POSITIONS)[number];

@@ -142,6 +142,8 @@ const link = Joi.object({
     .valid(...LINK_ACTION_TYPES)
     .optional(),
   downloadFileName: optionalText(100),
+  videoUrl: optionalText(2048),
+  videoTitle: optionalText(200),
   icon: Joi.string().max(100).allow("").optional(),
   iconImage: image.optional(),
   iconPosition: Joi.string()
