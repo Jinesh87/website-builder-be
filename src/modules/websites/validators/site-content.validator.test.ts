@@ -28,6 +28,28 @@ test("button icons and download settings survive saving", () => {
   assert.deepEqual(value.data.secondaryButton, downloadButton);
 });
 
+test("video demo buttons survive saving with videoUrl and actionType", () => {
+  const videoButton = {
+    label: "Watch 2-min demo",
+    href: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    actionType: "video",
+    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    videoTitle: "Platform Demo",
+    icon: "play",
+    iconPosition: "left",
+  };
+  const section = {
+    id: "cta-2",
+    type: "cta",
+    hidden: false,
+    settings,
+    data: { heading: "Experience Our Platform", button: videoButton },
+  };
+  const { value, error } = sectionSchema.validate(section, OPTIONS);
+  assert.equal(error, undefined);
+  assert.deepEqual(value.data.button, videoButton);
+});
+
 test("button links stay limited to safe options", () => {
   const withButton = (secondaryButton: object) => ({
     id: "cta-1",
