@@ -64,35 +64,124 @@ const footer: FooterData = {
   ],
 };
 
-const filmVault = section("cards", {
-  variant: "film-vault",
-  eyebrow: "CONTACT SHEET — RECENT WORK",
-  heading: "",
-  columns: 4,
-  mobileColumns: 1,
-  items: [
-    {
-      title: "Midnight Radio",
-      description: "Concert stage lights and beams",
-      image: photo("1540039155733-5bb30b53aa14", "Midnight Radio stage lighting", 1000),
-    },
-    {
-      title: "Fields of Gold",
-      description: "Golden hour sunlit meadow",
-      image: photo("1500534314209-a25ddb2bd429", "Fields of Gold sunlit meadow", 1000),
-    },
-    {
-      title: "The Late Show",
-      description: "Cinema projector beam and theater seats",
-      image: photo("1489599849927-2ee91cede3ba", "The Late Show cinema theatre", 1000),
-    },
-    {
-      title: "Brick Lane Session",
-      description: "Vintage studio brick wall",
-      image: photo("1495578942200-c5f5d2137def", "Brick Lane session texture", 1000),
-    },
-  ],
-});
+const filmVault = section(
+  "cards",
+  {
+    variant: "film-vault",
+    eyebrow: "PORTFOLIO",
+    heading: "OUR WORK",
+    intro:
+      "Music videos, brand films, weddings and short films. Swipe the strip and press play on any frame.",
+    columns: 4,
+    mobileColumns: 1,
+    items: [
+      {
+        title: "MIDNIGHT RADIO",
+        badge: "MUSIC VIDEO • 03:45",
+        subtitle: "MUSIC VIDEOS",
+        description: "Broadcast commercial captured on vintage anamorphic lenses.",
+        image: photo("1540039155733-5bb30b53aa14", "Midnight Radio stage lighting", 1000),
+      },
+      {
+        title: "GOLDEN BREW CO.",
+        badge: "BRAND FILM • 01:20",
+        subtitle: "BRAND FILMS",
+        description: "Sensory commercial series for artisanal coffee roasters.",
+        image: photo("1514432324607-a09d9b4aefdd", "Artisanal espresso coffee cup", 1000),
+      },
+      {
+        title: "FIELD OF GOLD",
+        badge: "WEDDING • 05:10",
+        subtitle: "WEDDINGS & EVENTS",
+        description: "Documentary portrait of rural artisans and master woodworkers.",
+        image: photo("1500382017468-9049fed747ef", "Field of gold sunlit meadow", 1000),
+      },
+      {
+        title: "THE LATE SHOW",
+        badge: "SHORT FILM • 12:40",
+        subtitle: "SHORT FILMS",
+        description: "Feature film prologue filmed on Kodak 35mm vision stock.",
+        image: photo("1489599849927-2ee91cede3ba", "The Late Show cinema theatre", 1000),
+      },
+      {
+        title: "BRICK LANE SESSION",
+        badge: "MUSIC VIDEO • 04:15",
+        subtitle: "MUSIC VIDEOS",
+        description: "Studio live performance recorded direct to analog tape.",
+        image: photo("1495578942200-c5f5d2137def", "Brick Lane session texture", 1000),
+      },
+      {
+        title: "THE CRAFTSMAN",
+        badge: "DOCUMENTARY • 08:30",
+        subtitle: "SHORT FILMS",
+        description: "Intimate character study of master Japanese wood joinery.",
+        image: photo("1581091226825-a6a2a5aee158", "Master craftsman at work", 1000),
+      },
+      {
+        title: "NEON DREAMS",
+        badge: "BRAND FILM • 02:05",
+        subtitle: "BRAND FILMS",
+        description: "Night drive through Tokyo captured on 500T film stock.",
+        image: photo("1509198397868-475647b2a1e5", "Neon city lights reflections", 1000),
+      },
+      {
+        title: "SUMMER OF 96",
+        badge: "SHORT FILM • 15:20",
+        subtitle: "SHORT FILMS",
+        description: "Coming-of-age road movie across California coastal highway.",
+        image: photo("1469854523086-cc02fe5d8800", "Vintage road trip through desert", 1000),
+      },
+    ],
+  },
+  { background: "dark" },
+);
+
+const whatWeShootSection = section(
+  "services",
+  {
+    variant: "editorial-specs",
+    heading: "WHAT WE SHOOT",
+    columns: 3,
+    mobileColumns: 1,
+    items: [
+      {
+        title: "MUSIC VIDEOS",
+        description: "Concept, performance and story for artists and labels.",
+      },
+      {
+        title: "BRAND FILMS",
+        description: "Commercials and brand stories with a classic feel.",
+      },
+      {
+        title: "WEDDINGS & EVENTS",
+        description: "Celebrations and launches, filmed like cinema.",
+      },
+      {
+        title: "SHORT FILMS",
+        description: "Script to screen for festivals and online release.",
+      },
+      {
+        title: "DOCUMENTARIES",
+        description: "Real people and real stories, told with warmth.",
+      },
+      {
+        title: "POST-PRODUCTION",
+        description: "Editing, colour grading, sound and film looks.",
+      },
+    ],
+  },
+  { background: "dark" },
+);
+
+const rollCameraCta = section(
+  "cta",
+  {
+    variant: "vintage-banner",
+    heading: "ROLL CAMERA?",
+    button: { label: "START A PROJECT", href: "/contact" },
+  },
+  { background: "dark" },
+);
 
 const quoteSection = section(
   "text",
@@ -153,15 +242,15 @@ export const VIDEO_PRODUCTION: BusinessTemplate = businessTemplate({
           secondaryCta: { label: "Watch showreel", href: "/work" },
           topStrip: {
             left: "VOL. 01 — THE EDITORIAL ISSUE",
-            center: "VINTAGE FILMS & ADS COMPANY",
+            center: "COURTESY: VINTAGE FILM COMPANY",
             right: "MUSIC • FILMS • EVENTS • FILM",
           },
-          image: photo("1688876100018-501f6b9393b8", "Photographer on set", 1200),
+          image: photo("1485846234645-a62644f84728", "Director with vintage camera on tripod", 1200),
           secondaryImage: photo("1514432324607-a09d9b4aefdd", "Espresso coffee cup", 1200),
           vintagePolaroids: [
             {
-              image: photo("1688876100018-501f6b9393b8", "Photographer on set", 1200),
-              caption: "On location, frame 07",
+              image: photo("1485846234645-a62644f84728", "Director with vintage camera on tripod", 1200),
+              caption: "Up for views, press 12",
               rotation: -2,
             },
             {
@@ -182,7 +271,6 @@ export const VIDEO_PRODUCTION: BusinessTemplate = businessTemplate({
             {
               title: "Brand films & ads",
               description: "Commercials with a cinema spirit and pulse",
-              stampHighlight: true,
             },
             { title: "Weddings & events", description: "Celebrations filmed like cinema" },
             { title: "Short films", description: "Stories to scream, feel & relate" },
@@ -371,49 +459,9 @@ export const VIDEO_PRODUCTION: BusinessTemplate = businessTemplate({
       name: "Work",
       slug: "/work",
       sections: [
-        section("hero", {
-          variant: "minimal-typography",
-          eyebrow: "PORTFOLIO ARCHIVE",
-          heading: "Every frame earns its place",
-          subheading:
-            "A showcase of music videos, commercials, brand documentaries and cinema productions.",
-          primaryCta: { label: "Start a project", href: "/contact" },
-        }),
         filmVault,
-        section(
-          "cards",
-          {
-            variant: "polaroid-grid",
-            heading: "Featured Frames",
-            columns: 4,
-            mobileColumns: 1,
-            items: [
-              {
-                title: "Midnight Radio",
-                description: "Broadcast commercial captured on vintage anamorphic lenses.",
-                image: photo("1540039155733-5bb30b53aa14", "Concert stage lights", 800),
-              },
-              {
-                title: "The Late Show",
-                description: "Feature film prologue filmed on Kodak 35mm vision stock.",
-                image: photo("1489599849927-2ee91cede3ba", "Cinema projector", 800),
-              },
-              {
-                title: "Fields of Gold",
-                description: "Documentary portrait of rural artisans and master woodworkers.",
-                image: photo("1500534314209-a25ddb2bd429", "Fields of gold", 800),
-              },
-              {
-                title: "Espresso Session",
-                description: "Sensory commercial series for artisanal coffee roasters.",
-                image: photo("1514432324607-a09d9b4aefdd", "Coffee cup", 800),
-              },
-            ],
-          },
-          { background: "dark" },
-        ),
-        quoteSection,
-        storyCta,
+        whatWeShootSection,
+        rollCameraCta,
       ],
     },
     {
