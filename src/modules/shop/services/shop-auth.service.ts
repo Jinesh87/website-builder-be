@@ -23,7 +23,10 @@ import {
   type VerifyCodeResult,
 } from "../../auth/utils/verification-code.js";
 import { consumeShopPasswordResetToken, createShopPasswordResetToken, SHOP_RESET_TOKEN_TTL_SECONDS } from "../utils/shop-password-reset.js";
+import { mediaUrl } from "../../media/services/media.service.js";
 import type {
+  ShopAddToCartInput,
+  ShopCartItemSummary,
   ShopCustomerAccountView,
   ShopAuthResult,
   ShopProfileUpdateInput,
@@ -269,12 +272,99 @@ export class ShopAuthService {
 
   async account(websiteId: string, customerId: string): Promise<ShopCustomerAccountView> {
     const customer = await this.me(websiteId, customerId);
-    // Checkout/cart persistence is added in a follow-up phase. Keep the contract stable now.
     return {
       customer,
       orders: [],
-      cartItems: [],
+      cartItems: await this.listCart(websiteId, customerId),
     };
+  }
+
+  async listCart(websiteId: string, customerId: string): Promise<ShopCartItemSummary[]> {
+    await this.me(websiteId, customerId);
+    const rows = await prisma.shopCartItem.findMany({
+      where: { websiteId, customerId },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        product: { select: { id: true, name: true, images: true } },
+        variant: { select: { id: true, name: true, pricePaise: true, quantity: true, images: true } },
+      },
+    });
+    return rows.map((row) => toCartItemSummary(row));
+  }
+
+  /** Adds a variant to the shopper's cart, or bumps quantity when that line already exists. */
+  async addToCart(websiteId: string, customerId: string, input: ShopAddToCartInput): Promise<ShopCartItemSummary[]> {
+    const customer = await prisma.shopCustomer.findFirst({
+      where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
+      select: { id: true, clientId: true },
+    });
+    if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+
+    const quantity = Math.max(1, Math.min(99, Math.floor(input.quantity ?? 1)));
+    const variant = await prisma.productVariant.findFirst({
+      where: { id: input.variantId, product: { websiteId } },
+      select: {
+        id: true,
+        name: true,
+        pricePaise: true,
+        quantity: true,
+        productId: true,
+        product: { select: { id: true, name: true } },
+      },
+    });
+    if (!variant) throw new AppError(404, "That product is no longer available.", "VARIANT_NOT_FOUND");
+    if (variant.quantity <= 0) throw new AppError(400, "This item is out of stock.", "OUT_OF_STOCK");
+
+    const existing = await prisma.shopCartItem.findUnique({
+      where: { customerId_variantId: { customerId: customer.id, variantId: variant.id } },
+      select: { id: true, quantity: true },
+    });
+    const nextQty = Math.min(99, (existing?.quantity ?? 0) + quantity);
+    if (nextQty > variant.quantity) {
+      throw new AppError(400, `Only ${variant.quantity} left in stock.`, "INSUFFICIENT_STOCK");
+    }
+
+    if (existing) {
+      await prisma.shopCartItem.update({ where: { id: existing.id }, data: { quantity: nextQty } });
+    } else {
+      await prisma.shopCartItem.create({
+        data: {
+          websiteId,
+          clientId: customer.clientId,
+          customerId: customer.id,
+          productId: variant.productId,
+          variantId: variant.id,
+          quantity,
+        },
+      });
+    }
+    return this.listCart(websiteId, customerId);
+  }
+
+  async updateCartItem(websiteId: string, customerId: string, itemId: string, quantity: number): Promise<ShopCartItemSummary[]> {
+    await this.me(websiteId, customerId);
+    const qty = Math.max(1, Math.min(99, Math.floor(quantity)));
+    const item = await prisma.shopCartItem.findFirst({
+      where: { id: itemId, websiteId, customerId },
+      include: { variant: { select: { quantity: true } } },
+    });
+    if (!item) throw new AppError(404, "That cart item was not found.", "CART_ITEM_NOT_FOUND");
+    if (qty > item.variant.quantity) {
+      throw new AppError(400, `Only ${item.variant.quantity} left in stock.`, "INSUFFICIENT_STOCK");
+    }
+    await prisma.shopCartItem.update({ where: { id: item.id }, data: { quantity: qty } });
+    return this.listCart(websiteId, customerId);
+  }
+
+  async removeCartItem(websiteId: string, customerId: string, itemId: string): Promise<ShopCartItemSummary[]> {
+    await this.me(websiteId, customerId);
+    const item = await prisma.shopCartItem.findFirst({
+      where: { id: itemId, websiteId, customerId },
+      select: { id: true },
+    });
+    if (!item) throw new AppError(404, "That cart item was not found.", "CART_ITEM_NOT_FOUND");
+    await prisma.shopCartItem.delete({ where: { id: item.id } });
+    return this.listCart(websiteId, customerId);
   }
 
   async updateProfile(websiteId: string, customerId: string, input: ShopProfileUpdateInput): Promise<ShopCustomerView> {
@@ -421,6 +511,35 @@ export class ShopAuthService {
       data: { revokedAt: new Date() },
     });
   }
+}
+
+type CartRow = {
+  id: string;
+  quantity: number;
+  productId: string;
+  product: { id: string; name: string; images: Prisma.JsonValue };
+  variant: { id: string; name: string; pricePaise: number; quantity: number; images: Prisma.JsonValue };
+};
+
+function firstImageUrl(images: Prisma.JsonValue): string | undefined {
+  if (!Array.isArray(images) || images.length === 0) return undefined;
+  const first = images[0];
+  if (!first || typeof first !== "object" || Array.isArray(first)) return undefined;
+  const mediaId = (first as { mediaId?: unknown }).mediaId;
+  return typeof mediaId === "string" && mediaId ? mediaUrl(mediaId) : undefined;
+}
+
+function toCartItemSummary(row: CartRow): ShopCartItemSummary {
+  return {
+    id: row.id,
+    productId: row.productId,
+    variantId: row.variant.id,
+    productName: row.product.name,
+    variantName: row.variant.name,
+    quantity: row.quantity,
+    pricePaise: row.variant.pricePaise,
+    imageUrl: firstImageUrl(row.variant.images) ?? firstImageUrl(row.product.images),
+  };
 }
 
 export const shopAuthService = new ShopAuthService();

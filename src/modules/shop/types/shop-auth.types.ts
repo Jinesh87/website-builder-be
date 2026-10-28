@@ -20,11 +20,21 @@ export type ShopOrderSummary = {
 export type ShopCartItemSummary = {
   id: string;
   productId: string;
+  variantId: string;
   productName: string;
   variantName: string;
   quantity: number;
   pricePaise: number;
   imageUrl?: string;
+};
+
+export type ShopAddToCartInput = {
+  variantId: string;
+  quantity?: number;
+};
+
+export type ShopUpdateCartItemInput = {
+  quantity: number;
 };
 
 export type ShopCustomerAccountView = {

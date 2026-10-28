@@ -1,5 +1,5 @@
 # Must differ per environment on the same server (e.g. staging vs prod), or one stack replaces the other.
-name: ${COMPOSE_PROJECT_NAME:-webbuilder-backend}
+name: ${COMPOSE_PROJECT_NAME:-webbuilder-backend-prod}
 
 services:
   backend:
