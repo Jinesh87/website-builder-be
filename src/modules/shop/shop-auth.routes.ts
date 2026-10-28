@@ -4,13 +4,16 @@ import { validate } from "../../common/middleware/validate.js";
 import { shopAuthController } from "./controllers/shop-auth.controller.js";
 import { authenticateShopCustomer } from "./middleware/authenticate-shop-customer.js";
 import {
+  shopAddToCartSchema,
   shopAuthWebsiteParamsSchema,
+  shopCartItemParamsSchema,
   shopChangePasswordSchema,
   shopEmailOnlySchema,
   shopLoginSchema,
   shopProfileUpdateSchema,
   shopResetPasswordSchema,
   shopSignupSchema,
+  shopUpdateCartItemSchema,
   shopVerifyEmailSchema,
 } from "./validators/shop-auth.validator.js";
 
@@ -81,6 +84,29 @@ shopAuthRouter.post(
   rateLimit({ name: "shop-reset-password", max: 10, windowSeconds: 15 * MINUTE }),
   validate(shopResetPasswordSchema),
   shopAuthController.resetPassword,
+);
+
+shopAuthRouter.get("/cart", websiteParams, authenticateShopCustomer, shopAuthController.listCart);
+shopAuthRouter.post(
+  "/cart",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-add-to-cart", max: 60, windowSeconds: MINUTE }),
+  validate(shopAddToCartSchema),
+  shopAuthController.addToCart,
+);
+shopAuthRouter.patch(
+  "/cart/:itemId",
+  validate(shopCartItemParamsSchema, "params"),
+  authenticateShopCustomer,
+  validate(shopUpdateCartItemSchema),
+  shopAuthController.updateCartItem,
+);
+shopAuthRouter.delete(
+  "/cart/:itemId",
+  validate(shopCartItemParamsSchema, "params"),
+  authenticateShopCustomer,
+  shopAuthController.removeCartItem,
 );
 
 export default shopAuthRouter;
