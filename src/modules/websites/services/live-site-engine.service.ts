@@ -8,10 +8,12 @@ import { shopService, pagePublicCatalog } from "../../shop/services/shop.service
 import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
+import { shopPage } from "../ai/shop-pages.js";
 
 type ShopRender = {
   websiteId: string;
   authHref?: string;
+  accountHref?: string;
   products: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
@@ -51,104 +53,29 @@ function resolvePublishedPage(
   return best ? { page: best.page, productSlug: best.productSlug } : null;
 }
 
-/** Shop sites always expose /login for shoppers, even when the published snapshot never added an auth page. */
-function withShopLoginPage(pages: PublishSnapshot["pages"], businessName: string): PublishSnapshot["pages"] {
-  if (pages.some((page) => page.sections.some((section) => section.type === "auth"))) return pages;
-  if (pages.some((page) => page.slug === "/login" || page.slug === "login")) return pages;
-  const email = {
-    name: "email",
-    label: "Email",
-    type: "email" as const,
-    placeholder: "Enter your email address",
-    required: true,
-    width: "full" as const,
-  };
-  const password = {
-    name: "password",
-    label: "Password",
-    type: "password" as const,
-    placeholder: "Enter your password",
-    required: true,
-    width: "full" as const,
-  };
-  return [
-    ...pages,
-    {
-      id: "shop-login",
-      name: "Login",
-      slug: "/login",
+/** Shop sites always expose /login and /account for shoppers, even if the snapshot never added those pages. */
+function withShopperAuthPages(pages: PublishSnapshot["pages"], businessName: string): PublishSnapshot["pages"] {
+  type SnapshotPage = PublishSnapshot["pages"][number];
+  const hasLogin = pages.some((page) => page.slug === "/login" || page.slug === "login" || page.sections.some((s) => s.type === "auth"));
+  const hasAccount = pages.some((page) => page.slug === "/account" || page.slug === "account" || page.sections.some((s) => s.type === "account"));
+  if (hasLogin && hasAccount) return pages;
+  const next = [...pages];
+  const add = (kind: "login" | "account") => {
+    const page = shopPage(kind, businessName);
+    next.push({
+      id: `shop-${kind}`,
+      name: page.name,
+      slug: page.slug,
       pageType: "CUSTOM" as const,
       showInNav: false,
-      seoTitle: `Login | ${businessName}`,
-      seoDescription: `Sign in or create an account at ${businessName}.`,
-      sections: [
-        {
-          id: "shop-login-auth",
-          type: "auth" as const,
-          hidden: false,
-          settings: { background: "default" as const, hideOnMobile: false },
-          data: {
-            variant: "diagonal-split",
-            defaultView: "login",
-            brandName: businessName,
-            formPosition: "right",
-            minHeight: "screen",
-            social: { enabled: false, label: "Or continue with", style: "icons", position: "bottom", providers: [] },
-            login: {
-              heading: "Welcome back",
-              subheading: "Sign in to your account to continue shopping.",
-              fields: [email, password],
-              submitLabel: "Log in",
-              showRemember: true,
-              rememberLabel: "Remember me",
-              forgotLabel: "Forgot password?",
-              switchPrompt: "Don't have an account?",
-              switchLabel: "Sign up",
-            },
-            register: {
-              enabled: true,
-              heading: "Create an account",
-              subheading: "Save your details so you can purchase from this shop.",
-              fields: [
-                { name: "fullName", label: "Full name", type: "text" as const, placeholder: "Your name", required: true, width: "full" as const },
-                email,
-                password,
-              ],
-              submitLabel: "Sign up",
-              showTerms: false,
-              switchPrompt: "Already have an account?",
-              switchLabel: "Log in",
-            },
-            forgot: {
-              enabled: true,
-              heading: "Reset your password",
-              subheading: "Enter the email linked to your account and we'll send you a reset link.",
-              fields: [email],
-              submitLabel: "Send reset link",
-              backLabel: "Back to log in",
-              successHeading: "Check your inbox",
-              successText: "If an account exists for that email, a reset link is on its way.",
-            },
-            otp: {
-              enabled: true,
-              heading: "Verify it's you",
-              subheading: "Enter the verification code we just sent to your email.",
-              length: 6,
-              submitLabel: "Verify code",
-              resendLabel: "Resend code",
-              resendSeconds: 45,
-              requireOnLogin: false,
-              requireOnRegister: true,
-              requireOnForgot: false,
-            },
-            successHeading: "You're signed in",
-            successText: "Your account is ready. Continue shopping.",
-            successLink: { label: "Continue to shop", href: "/shop" },
-          },
-        } as PublishSnapshot["pages"][number]["sections"][number],
-      ],
-    },
-  ];
+      seoTitle: page.seoTitle ?? null,
+      seoDescription: page.seoDescription ?? null,
+      sections: page.sections as unknown as SnapshotPage["sections"],
+    } as SnapshotPage);
+  };
+  if (!hasLogin) add("login");
+  if (!hasAccount) add("account");
+  return next;
 }
 
 /** On localhost the site lives under /live/<subdomain>. Root links like /shop would otherwise hit the API. */
@@ -554,7 +481,7 @@ Sitemap: ${domain}/sitemap.xml
 
     const snapshot = website.liveVersion.snapshot as unknown as PublishSnapshot;
     const shopOpen = Boolean(website.shopEnabled && website.client.shopFeatureEnabled);
-    const pages = shopOpen ? withShopLoginPage(snapshot.pages, website.businessName || website.name) : snapshot.pages;
+    const pages = shopOpen ? withShopperAuthPages(snapshot.pages, website.businessName || website.name) : snapshot.pages;
     const resolved = resolvePublishedPage(pages, cleanSlug);
     if (!resolved) {
       const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
@@ -570,10 +497,12 @@ Sitemap: ${domain}/sitemap.xml
     const isList = !resolved.productSlug && targetPage.sections.some((section) => section.type === "products");
     const paged = isList ? pagePublicCatalog(products, listQuery) : null;
     const authPage = pages.find((page) => page.sections.some((section) => section.type === "auth"));
+    const accountPage = pages.find((page) => page.sections.some((section) => section.type === "account"));
     const shop: ShopRender | undefined = shopOpen
       ? {
           websiteId: website.id,
           authHref: authPage ? (authPage.slug === "/" ? "/" : authPage.slug) : "/login",
+          accountHref: accountPage ? (accountPage.slug === "/" ? "/" : accountPage.slug) : "/account",
           products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
           ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
           ...(paged ? { list: paged.list } : {}),
@@ -1141,8 +1070,31 @@ Sitemap: ${domain}/sitemap.xml
                 ? (d.secondaryButton as Record<string, unknown>)
                 : null;
 
+          const btnTertiary =
+            d.tertiaryCta && typeof d.tertiaryCta === "object"
+              ? (d.tertiaryCta as Record<string, unknown>)
+              : null;
+
           const primaryHref = btnPrimary?.href ? resolveSafeHref(String(btnPrimary.href), availableSlugs) : "#";
           const secondaryHref = btnSecondary?.href ? resolveSafeHref(String(btnSecondary.href), availableSlugs) : "#";
+
+          const primaryVideo = btnPrimary && (btnPrimary.actionType === "video" || Boolean(btnPrimary.videoUrl));
+          const primaryAttrs = primaryVideo
+            ? ` data-wb-video-modal="true" data-wb-video-url="${escapeHtml(String(btnPrimary.videoUrl || btnPrimary.href || ""))}" data-wb-video-title="${escapeHtml(String(btnPrimary.videoTitle || btnPrimary.label || ""))}" role="button"`
+            : "";
+
+          const secondaryVideo = btnSecondary && (btnSecondary.actionType === "video" || Boolean(btnSecondary.videoUrl));
+          const secondaryAttrs = secondaryVideo
+            ? ` data-wb-video-modal="true" data-wb-video-url="${escapeHtml(String(btnSecondary.videoUrl || btnSecondary.href || ""))}" data-wb-video-title="${escapeHtml(String(btnSecondary.videoTitle || btnSecondary.label || ""))}" role="button"`
+            : "";
+
+          const tertVideoUrl = String(
+            btnTertiary?.videoUrl ||
+              (btnTertiary?.href && btnTertiary.href !== "#demo" && btnTertiary.href !== "#"
+                ? btnTertiary.href
+                : "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"),
+          );
+          const tertTitle = String(btnTertiary?.videoTitle || btnTertiary?.label || "Demo Video");
 
           const effectiveHeading = heading || `Welcome to ${siteName}`;
           const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
@@ -1157,12 +1109,17 @@ Sitemap: ${domain}/sitemap.xml
               <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                 ${
                   btnPrimary?.label
-                    ? `<a href="${escapeHtml(primaryHref)}" class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnPrimary.label))}</a>`
+                    ? `<a href="${escapeHtml(primaryHref)}"${primaryAttrs} class="btn-cta" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnPrimary.label))}</a>`
                     : ""
                 }
                 ${
                   btnSecondary?.label
-                    ? `<a href="${escapeHtml(secondaryHref)}" class="btn-secondary" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnSecondary.label))}</a>`
+                    ? `<a href="${escapeHtml(secondaryHref)}"${secondaryAttrs} class="btn-secondary" style="font-size: 1rem; padding: 0.8rem 2.2rem;">${escapeHtml(String(btnSecondary.label))}</a>`
+                    : ""
+                }
+                ${
+                  btnTertiary?.label
+                    ? `<a href="${escapeHtml(tertVideoUrl)}" class="btn-secondary" data-wb-video-modal="true" data-wb-video-url="${escapeHtml(tertVideoUrl)}" data-wb-video-title="${escapeHtml(tertTitle)}" role="button" style="font-size: 1rem; padding: 0.8rem 2.2rem; display: inline-flex; align-items: center; gap: 0.5rem;"><span style="display:inline-block;width:0.8em;height:0.8em;border-radius:50%;background:currentColor;opacity:0.85"></span>${escapeHtml(String(btnTertiary.label))}</a>`
                     : ""
                 }
               </div>

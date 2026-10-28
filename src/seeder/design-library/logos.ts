@@ -181,24 +181,35 @@ export const MARKETING_AGENCY_LOGO = createSvgLogo(
   "Orbit Marketing Agency Logo",
 );
 
-/** 10. Video Production · Velvet (ID 2143) */
-export const VIDEO_PRODUCTION_LOGO = createSvgLogo(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 40" width="220" height="40" fill="none">` +
+/** 10. Video Production · Vintage Reels (ID 2143) */
+export const VINTAGE_REELS_LOGO = createSvgLogo(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 44" width="240" height="44" fill="none">` +
     `<defs>` +
-    `<linearGradient id="vid-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">` +
-    `<stop offset="0%" stop-color="#D07AF0"/>` +
-    `<stop offset="100%" stop-color="#9333EA"/>` +
+    `<linearGradient id="vr-gold" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">` +
+    `<stop offset="0%" stop-color="#F3C878"/>` +
+    `<stop offset="50%" stop-color="#DE9E2E"/>` +
+    `<stop offset="100%" stop-color="#B87B18"/>` +
     `</linearGradient>` +
     `</defs>` +
-    `<rect x="2" y="2" width="36" height="36" rx="9" fill="url(#vid-grad)"/>` +
-    `<rect x="10" y="12" width="14" height="16" rx="3" fill="#1A1020"/>` +
-    `<path d="M25 15L30 12V28L25 25V15Z" fill="#1A1020"/>` +
-    `<polygon points="15,16 21,20 15,24" fill="#FFFFFF"/>` +
-    `<text x="46" y="21" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="800" fill="#F6EEF9" letter-spacing="-0.2">VELVET FILMS</text>` +
-    `<text x="47" y="32" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif" font-size="8" font-weight="700" fill="#D07AF0" letter-spacing="2.4">CINEMATIC STUDIO</text>` +
+    `<circle cx="20" cy="22" r="17" stroke="url(#vr-gold)" stroke-width="2" fill="#14100E"/>` +
+    `<circle cx="20" cy="22" r="6" stroke="url(#vr-gold)" stroke-width="1.6" fill="#14100E"/>` +
+    `<circle cx="20" cy="11.5" r="2.2" fill="url(#vr-gold)"/>` +
+    `<circle cx="29" cy="16.8" r="2.2" fill="url(#vr-gold)"/>` +
+    `<circle cx="29" cy="27.2" r="2.2" fill="url(#vr-gold)"/>` +
+    `<circle cx="20" cy="32.5" r="2.2" fill="url(#vr-gold)"/>` +
+    `<circle cx="11" cy="27.2" r="2.2" fill="url(#vr-gold)"/>` +
+    `<circle cx="11" cy="16.8" r="2.2" fill="url(#vr-gold)"/>` +
+    `<line x1="20" y1="5" x2="20" y2="9" stroke="url(#vr-gold)" stroke-width="1.2"/>` +
+    `<line x1="35" y1="22" x2="31" y2="22" stroke="url(#vr-gold)" stroke-width="1.2"/>` +
+    `<line x1="20" y1="39" x2="20" y2="35" stroke="url(#vr-gold)" stroke-width="1.2"/>` +
+    `<line x1="5" y1="22" x2="9" y2="22" stroke="url(#vr-gold)" stroke-width="1.2"/>` +
+    `<text x="46" y="21" font-family="'Playfair Display', Georgia, serif" font-size="14.5" font-weight="700" fill="#FAF5EE" letter-spacing="1">VINTAGE REELS</text>` +
+    `<text x="47" y="32" font-family="'Manrope', -apple-system, BlinkMacSystemFont, sans-serif" font-size="8" font-weight="700" fill="#DE9E2E" letter-spacing="3.2">ENTERTAINMENT</text>` +
     `</svg>`,
-  "Velvet Films Logo",
+  "Vintage Reels Entertainment Logo",
 );
+
+export const VIDEO_PRODUCTION_LOGO = VINTAGE_REELS_LOGO;
 
 /** 11. Plumbing · Fresh (ID 2144) */
 export const PLUMBING_LOGO = createSvgLogo(

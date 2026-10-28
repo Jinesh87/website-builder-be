@@ -24,7 +24,9 @@ import {
 } from "../../auth/utils/verification-code.js";
 import { consumeShopPasswordResetToken, createShopPasswordResetToken, SHOP_RESET_TOKEN_TTL_SECONDS } from "../utils/shop-password-reset.js";
 import type {
+  ShopCustomerAccountView,
   ShopAuthResult,
+  ShopProfileUpdateInput,
   ShopCustomerView,
   ShopLoginInput,
   ShopSignupInput,
@@ -263,6 +265,51 @@ export class ShopAuthService {
     });
     if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
     return toPublicCustomer(customer);
+  }
+
+  async account(websiteId: string, customerId: string): Promise<ShopCustomerAccountView> {
+    const customer = await this.me(websiteId, customerId);
+    // Checkout/cart persistence is added in a follow-up phase. Keep the contract stable now.
+    return {
+      customer,
+      orders: [],
+      cartItems: [],
+    };
+  }
+
+  async updateProfile(websiteId: string, customerId: string, input: ShopProfileUpdateInput): Promise<ShopCustomerView> {
+    const existing = await prisma.shopCustomer.findFirst({
+      where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
+      select: { id: true },
+    });
+    if (!existing) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    const fullName = input.fullName?.trim();
+    const phone = input.phone?.trim();
+    const updated = await prisma.shopCustomer.update({
+      where: { id: existing.id },
+      data: {
+        ...(fullName ? { fullName } : {}),
+        ...(input.phone !== undefined ? { phone: phone || null } : {}),
+      },
+    });
+    return toPublicCustomer(updated);
+  }
+
+  /** A signed-in shopper picks a new password after proving the current one. Other sessions are signed out. */
+  async changePassword(websiteId: string, customerId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const customer = await prisma.shopCustomer.findFirst({
+      where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
+      select: { id: true, passwordHash: true },
+    });
+    if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    if (!(await verifyPassword(currentPassword, customer.passwordHash))) {
+      throw new AppError(400, "Your current password is incorrect.", "INVALID_CREDENTIALS");
+    }
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.$transaction([
+      prisma.shopCustomer.update({ where: { id: customer.id }, data: { passwordHash } }),
+      prisma.shopCustomerRefreshToken.updateMany({ where: { customerId: customer.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
   }
 
   async requestPasswordReset(websiteId: string, rawEmail: string): Promise<void> {

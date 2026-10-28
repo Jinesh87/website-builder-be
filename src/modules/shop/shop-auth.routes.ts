@@ -5,8 +5,10 @@ import { shopAuthController } from "./controllers/shop-auth.controller.js";
 import { authenticateShopCustomer } from "./middleware/authenticate-shop-customer.js";
 import {
   shopAuthWebsiteParamsSchema,
+  shopChangePasswordSchema,
   shopEmailOnlySchema,
   shopLoginSchema,
+  shopProfileUpdateSchema,
   shopResetPasswordSchema,
   shopSignupSchema,
   shopVerifyEmailSchema,
@@ -50,6 +52,22 @@ shopAuthRouter.post(
 shopAuthRouter.post("/refresh", websiteParams, shopAuthController.refresh);
 shopAuthRouter.post("/logout", websiteParams, shopAuthController.logout);
 shopAuthRouter.get("/me", websiteParams, authenticateShopCustomer, shopAuthController.me);
+shopAuthRouter.get("/account", websiteParams, authenticateShopCustomer, shopAuthController.account);
+shopAuthRouter.patch(
+  "/profile",
+  websiteParams,
+  authenticateShopCustomer,
+  validate(shopProfileUpdateSchema),
+  shopAuthController.updateProfile,
+);
+shopAuthRouter.post(
+  "/change-password",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-change-password", max: 10, windowSeconds: 15 * MINUTE }),
+  validate(shopChangePasswordSchema),
+  shopAuthController.changePassword,
+);
 shopAuthRouter.post(
   "/forgot-password",
   websiteParams,
