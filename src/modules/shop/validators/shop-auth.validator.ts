@@ -38,7 +38,7 @@ export const shopEmailOnlySchema = Joi.object({
 export const shopLoginSchema = Joi.object({
   email: email.required(),
   password: Joi.string().min(1).max(200).required(),
-  remember: Joi.boolean().default(false),
+  remember: Joi.boolean().default(true),
 });
 
 export const shopResetPasswordSchema = Joi.object({
