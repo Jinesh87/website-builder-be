@@ -57,3 +57,17 @@ export const shopChangePasswordSchema = Joi.object({
   currentPassword: Joi.string().min(1).max(200).required(),
   newPassword: password.required(),
 });
+
+export const shopAddToCartSchema = Joi.object({
+  variantId: Joi.string().guid().required(),
+  quantity: Joi.number().integer().min(1).max(99).default(1),
+});
+
+export const shopUpdateCartItemSchema = Joi.object({
+  quantity: Joi.number().integer().min(1).max(99).required(),
+});
+
+export const shopCartItemParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+  itemId: Joi.string().guid().required(),
+});

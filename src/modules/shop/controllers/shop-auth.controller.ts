@@ -120,6 +120,51 @@ export class ShopAuthController {
       next(error);
     }
   };
+
+  listCart = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        cartItems: await shopAuthService.listCart(req.params.websiteId, req.shopCustomer!.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addToCart = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        cartItems: await shopAuthService.addToCart(req.params.websiteId, req.shopCustomer!.id, req.body),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateCartItem = async (req: Request<WebsiteParams & { itemId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        cartItems: await shopAuthService.updateCartItem(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          req.params.itemId,
+          req.body.quantity,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  removeCartItem = async (req: Request<WebsiteParams & { itemId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        cartItems: await shopAuthService.removeCartItem(req.params.websiteId, req.shopCustomer!.id, req.params.itemId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const shopAuthController = new ShopAuthController();
