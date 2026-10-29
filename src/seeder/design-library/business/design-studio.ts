@@ -195,8 +195,7 @@ export const DESIGN_STUDIO: BusinessTemplate = businessTemplate({
               { title: "+38% revenue", subtitle: "Peel & Co. rebrand", icon: "chart" },
               { title: "120+ brands", subtitle: "Launched since 2014", icon: "rocket" },
             ],
-          },
-          { customColors: { gradientFrom: "#FF5A36", gradientTo: "#FFB199" } },
+          }
         ),
         capabilities,
         section("services", {

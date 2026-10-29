@@ -146,7 +146,6 @@ const menuShowcase = section(
         description: "Chili butter, parsley, toasted sourdough crumbs.",
         image: photo("1544025162-d76694265947", "Oysters and small plates", 1000),
         badge: "Raw bar",
-        badgeColor: "pink",
         price: "$24",
       },
       {
@@ -154,7 +153,6 @@ const menuShowcase = section(
         description: "Cherry jus, charred endive, black pepper honey.",
         image: photo("1543353071-087092ec393a", "Elegant restaurant main course", 1000),
         badge: "Signature",
-        badgeColor: "red",
         price: "$42",
       },
       {
@@ -162,7 +160,6 @@ const menuShowcase = section(
         description: "Whipped ricotta, rosemary oil, pickled shallot.",
         image: photo("1504674900247-0877df9cc836", "Seasonal restaurant plate", 1000),
         badge: "Vegetarian",
-        badgeColor: "green",
         price: "$18",
       },
     ],
@@ -337,8 +334,7 @@ export const RESTAURANT: BusinessTemplate = businessTemplate({
             minHeight: "tall",
             contentAlign: "left",
             bottomShape: "curve",
-          },
-          { customColors: { gradientFrom: "#C2416B", gradientTo: "#F6D3A5" } },
+          }
         ),
         menuTicker,
         diningServices,

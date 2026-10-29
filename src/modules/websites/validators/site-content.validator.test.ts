@@ -88,3 +88,44 @@ test("Do's & Don'ts cards keep their variant, checklist points and bottom button
   assert.deepEqual(value.data.items[1].checklist, section.data.items[1].checklist);
   assert.deepEqual(value.data.bottomCta, section.data.bottomCta);
 });
+
+test("film cards keep an uploaded video or a YouTube link, and can omit the video", () => {
+  const film = (videoUrl?: string) => ({
+    id: "cards-film",
+    type: "cards",
+    hidden: false,
+    settings,
+    data: {
+      variant: "film-vault",
+      heading: "OUR WORK",
+      columns: 4,
+      mobileColumns: 1,
+      items: [
+        {
+          title: "MIDNIGHT RADIO",
+          subtitle: "MUSIC VIDEOS",
+          badge: "03:45",
+          description: "Broadcast commercial.",
+          ...(videoUrl ? { videoUrl } : {}),
+        },
+      ],
+    },
+  });
+
+  const youtube = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const uploaded = "https://api.example.com/api/media/files/0f8fad5b-d9cb-469f-a165-70867728950e";
+  const file = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+
+  for (const videoUrl of [youtube, uploaded, file, "/bannervid.mp4"]) {
+    const { value, error } = sectionSchema.validate(film(videoUrl), OPTIONS);
+    assert.equal(error, undefined, videoUrl);
+    assert.equal(value.data.items[0].videoUrl, videoUrl);
+  }
+
+  const cleared = sectionSchema.validate(film(), OPTIONS);
+  assert.equal(cleared.error, undefined);
+  assert.equal(cleared.value.data.items[0].videoUrl, undefined);
+
+  const rejected = sectionSchema.validate(film("https://vimeo.com/123456789"), OPTIONS);
+  assert.ok(rejected.error);
+});

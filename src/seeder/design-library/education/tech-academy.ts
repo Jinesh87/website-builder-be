@@ -229,25 +229,21 @@ export const TECH_ACADEMY: BusinessTemplate = businessTemplate({
             items: [
               {
                 icon: "bolt",
-                iconColor: "indigo",
                 title: "1:1 Staff Mentorship",
                 description: "Weekly architecture reviews and code audits with Staff Engineers from top Silicon Valley tech companies.",
               },
               {
                 icon: "code",
-                iconColor: "cyan",
                 title: "Production Infrastructure",
                 description: "Each fellow receives dedicated GPU clusters and AWS/GCP credits to deploy live, high-traffic systems.",
               },
               {
                 icon: "shield",
-                iconColor: "blue",
                 title: "Zero-to-One Capstone",
                 description: "Build an open-source tool or commercial prototype reviewed by venture capitalists and engineering directors.",
               },
               {
                 icon: "rocket",
-                iconColor: "purple",
                 title: "Lifetime Alumni Network",
                 description: "Private Discord, invite-only hackathons, continuing education masterclasses, and executive angel syndicates.",
               },
@@ -504,19 +500,16 @@ export const TECH_ACADEMY: BusinessTemplate = businessTemplate({
             items: [
               {
                 icon: "chat",
-                iconColor: "indigo",
                 title: "1. Online Application",
                 description: "Share your background, GitHub profile, and a brief statement on why you want to master AI systems (10 mins).",
               },
               {
                 icon: "code",
-                iconColor: "cyan",
                 title: "2. Technical Take-Home Sprint",
                 description: "A pragmatic 90-minute asynchronous coding challenge reflecting real production systems, not leetcode riddles.",
               },
               {
                 icon: "user",
-                iconColor: "purple",
                 title: "3. Architecture Interview",
                 description: "A 30-minute collaborative design session with a faculty mentor to discuss your code and career trajectory.",
               },

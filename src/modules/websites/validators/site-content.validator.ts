@@ -77,6 +77,9 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 /** Only these hosts are embedded, and only via an iframe src the renderer builds itself. */
 export const SAFE_VIDEO_URL =
   /^https:\/\/(?:(?:www\.|m\.)?youtube\.com\/watch\?v=[\w-]{6,20}(?:&\S*)?|youtu\.be\/[\w-]{6,20}(?:\?\S*)?|(?:www\.)?vimeo\.com\/\d{6,12}(?:\?\S*)?)$/i;
+/** Film cards: a YouTube link, an uploaded media file, or a direct mp4/webm/ogg file. */
+export const UPLOAD_OR_YOUTUBE_VIDEO_URL =
+  /^(?:https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)[\w-]{6,}(?:[^\s]*)?|youtu\.be\/[\w-]{6,}(?:\?\S*)?)|https?:\/\/\S+\/api\/media\/files\/[A-Za-z0-9_-]+(?:\?\S*)?|https?:\/\/\S+\.(?:mp4|webm|ogg)(?:\?\S*)?|\/(?!\/)\S+\.(?:mp4|webm|ogg)(?:\?\S*)?)$/i;
 const ANCHOR = /^[a-z][a-z0-9-]{0,39}$/;
 
 const text = (max: number) => Joi.string().trim().max(max);
@@ -1031,6 +1034,11 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
           iconBgColor: color.optional(),
           iconColor: color.optional(),
           featured: Joi.boolean().optional(),
+          videoUrl: optionalText(2048)
+            .pattern(UPLOAD_OR_YOUTUBE_VIDEO_URL)
+            .messages({
+              "string.pattern.base": "Upload a video or paste a YouTube link",
+            }),
           checklist: Joi.array()
             .items(
               Joi.alternatives().try(
@@ -1171,10 +1179,15 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     variant: flexibleVariant(
       CONTACT_VARIANTS,
       "split-form",
-      { "split": "split-form", "cards": "cards-hub", "minimal": "minimal-editorial", "floating": "floating-glass" },
+      { "split": "split-form", "cards": "cards-hub", "minimal": "minimal-editorial", "floating": "floating-glass", "clapper": "clapper-slate" },
     ),
     eyebrow: optionalText(80),
     heading: text(200).required(),
+    solidHeading: optionalText(100),
+    outlineHeading: optionalText(100),
+    recText: optionalText(100),
+    timecode: optionalText(50),
+    timecodeMode: Joi.string().valid("live", "static").optional(),
     text: optionalText(500),
     email: optionalText(255).meta(meta({ fact: "contactEmail" })),
     phone: optionalText(32).meta(meta({ fact: "contactPhone" })),
@@ -1185,6 +1198,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     submitLabel: text(40).required(),
     formHeading: optionalText(120),
     serviceOptions: Joi.array().items(text(60)).max(8).optional(),
+    budgetOptions: Joi.array().items(text(60)).max(10).optional(),
+    sceneTakeLabel: optionalText(100),
+    socialLinksText: optionalText(200),
     channels: Joi.array()
       .items(
         Joi.object({
@@ -1436,6 +1452,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     variant: Joi.string().valid("default", "vintage-journal").optional(),
     eyebrow: optionalText(120),
     title: text(160).required(),
+    italicTitle: optionalText(100),
     subtitle: optionalText(320),
     categories: Joi.array().items(text(60)).max(20).optional(),
     layout: Joi.string().valid("grid-3", "grid-2", "magazine").optional(),
