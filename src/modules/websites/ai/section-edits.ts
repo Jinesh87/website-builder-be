@@ -615,12 +615,16 @@ export function compileEdits(ops: readonly EditOp[], env: EditEnv): CompiledEdit
   };
 
   const outcomes: EditOutcome[] = [];
+  // Page, navigation and theme operations don't produce canvas ops; they count as applied when they changed one of these.
+  const siteState = () => [createdPages.length, updatedPages.length, deletedPageIds.length, navigationPatch, themePatch] as const;
   ops.forEach((op, at) => {
     const label = `ops[${op.index ?? at}]`;
     const appliedBefore = applied.length;
+    const siteBefore = siteState();
     const errorsBefore = resolver.errors.length;
     compileOne(op, label);
-    outcomes.push({ op, applied: applied.length > appliedBefore, problems: resolver.errors.slice(errorsBefore) });
+    const siteChanged = siteState().some((value, i) => value !== siteBefore[i]);
+    outcomes.push({ op, applied: applied.length > appliedBefore || siteChanged, problems: resolver.errors.slice(errorsBefore) });
   });
 
   function compileOne(op: EditOp, label: string): void {

@@ -6,6 +6,9 @@ import { MediaKind } from "../../../generated/prisma/enums.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { mediaService } from "../../media/services/media.service.js";
 import { describeCatalog, describeSectionTypes } from "../ai/field-catalog.js";
+import { describeNavLink, ensureNavLink, navIntent } from "../ai/nav-intent.js";
+import type { NavPage } from "../ai/navigation.js";
+import { ACCOUNT_SLUG, businessNameOf, findShopPage, shopPage } from "../ai/shop-pages.js";
 import {
   MAX_PAGE_SECTIONS,
   compileEdits,
@@ -246,8 +249,8 @@ RULES & CROSS-PAGE REASONING
 - The Home page (slug "/") is the website's primary landing page. When the owner asks to create, build, or redesign a "landing page", "homepage", "home", or "complete website", and the active page is Home (or has slug "/"), you MUST build directly on the active page using "replace_page" or "add" operations. NEVER create a separate page named "/landing-page" or "/home" when on the Home page.
 - ACTIVE PAGE AWARENESS: If the current active page in the editor matches the requested page (e.g. active page is "Menu" or has slug "/menu", and the owner asks to "create menu page", "build menu page", "generate menu", etc.), you MUST build directly on the active page using "replace_page". NEVER use "create_page" for a page that is already the [CURRENT PAGE] or already exists in SITE PAGES.
 - If the current active page has 0 content sections or only a single hero, and the owner asks to build or design a page/website, always build directly on the active page using "replace_page" so they can see and edit it immediately on their canvas.
-- NAVIGATION REDIRECTION: When the owner asks to "add redirection from the header menu link", "link the menu in the header", or link navigation items:
-  You MUST emit an "update_navigation" operation with "headerMenu" updating existing items so the target link (e.g. "Menu") has href: "/menu". Preserve all existing valid links (e.g. Home "/", About "/about", Contact "/contact").
+- HEADER NAVIGATION: When the owner asks to add, link, show or put something in the header, nav, navbar or menu bar ("add a button in nav to this page", "in header i need login", "put About in the menu", "link the Menu item to the menu page"):
+  You MUST answer with "edit" and one "update_navigation" operation. "this page" / "current page" means the [CURRENT PAGE] in SITE PAGES. A "button" is "headerCta": { "label", "href" }; anything else is a new item appended to "headerMenu" (send the full menu: every existing item unchanged plus the new one). The href is the target page's slug exactly as listed in SITE PAGES. If the page doesn't exist yet (e.g. a login or account page), add a "create_page" for it in the same reply, then link it. Never answer a header request with "chat" or "clarify".
 - FULL COMPLETE PAGE & MULTI-PAGE GENERATION:
   When the owner asks to create, build, generate, redesign or complete a page (e.g. "creat complete matching menu page", "build landing page", "create about page", "generate complete page"):
   1. DO NOT use "clarify". DO NOT ask "What sections do you want?".
@@ -272,14 +275,16 @@ RULES & CROSS-PAGE REASONING
   5. Never generate only a single section when the user asked for a complete page, website, or menu.
   6. SHOP / PRODUCT / ECOMMERCE PAGES ("product page", "shop page", "catalogue", "store"):
      Do NOT clarify and do NOT build a services or cards grid of made-up products. The catalogue is live.
-     Create three pages when they are not already in SITE PAGES:
+     Create four pages when they are not already in SITE PAGES:
      - "Shop" slug "/shop", showInNav true: a short hero plus one "products" section. products data is only eyebrow, title, subtitle, layout "grid-3", showSearch true, showCategoryFilter true, detailBase "/product", emptyMessage. It lists the real products.
      - "Product" slug "/product", showInNav false: one "product_detail" section with backLabel "All products", backHref "/shop", showDescription true, showStock true. A product opens at /product/its-slug.
-     - "Login" slug "/login", showInNav false: one "auth" section (shopper login / register / forgot password). Prefer variant "diagonal-split", social.enabled false, brandName from brand facts, successLink to "/shop".
+     - "Login" slug "/login", showInNav false: one "auth" section (shopper login / register / forgot password). Prefer variant "diagonal-split", social.enabled false, brandName from brand facts, successLink to "/account".
+     - "Account" slug "/account", showInNav false: one "account" section (the signed-in customer's orders, cart and profile; visitors who aren't signed in see a sign-in prompt). Set loginHref "/login" and shopHref "/shop".
      Also emit "update_navigation" so the header menu includes { "label": "Shop", "href": "/shop" }, keeping the existing items.
      If the owner is already on the Shop page, use "replace_page" for that page instead of creating a duplicate.
-  7. LOGIN / SIGN UP / ACCOUNT PAGES ("login page", "sign up", "register", "customer account"):
-     Create or replace "Login" at slug "/login", showInNav false, with a single "auth" section. Do not put auth on the home page.`;
+  7. LOGIN / SIGN UP / ACCOUNT PAGES ("login page", "sign up", "register", "customer account", "account page", "my orders"):
+     "Login" ("/login") holds one "auth" section; "Account" ("/account") holds one "account" section. Create whichever is missing (both showInNav false); when the owner is on one of them, use "replace_page" or "update" instead. Do not put auth or account sections on the home page.
+     The "account" section is a template the owner configures: "variant" picks the layout (sidebar-tabs, top-tabs, overview-cards, minimal-list, dark-panel); showOrders/showCart/showProfile/showPassword choose the panels; the heading, tab labels, empty-state texts and the guest prompt (guestHeading, guestText, guestButtonLabel) are editable copy. It only ever shows a customer their own data, so never write orders or customer names into it.`;
 
 /** What the AI sees of the page: the section types whose fields it gets, and which sections it sees in full. */
 export type PromptScope = { types: EditableSectionType[]; fullIds: Set<string>; pageJson: string };
@@ -443,15 +448,21 @@ function describeOp(op: EditOp, sections: SectionEnvelope[]): string {
  * What the suggestion really does, written after the operations were applied and checked:
  * only applied operations are reported as done, and the ones that failed are named.
  */
-function describeResult(attempt: Attempt, sections: SectionEnvelope[], seo: boolean, generatedImages: number): string {
+function describeResult(attempt: Attempt, sections: SectionEnvelope[], seo: boolean, generatedImages: number, navNotes: string[] = []): string {
   const done = attempt.compiled.outcomes.filter((outcome) => outcome.applied).map((outcome) => describeOp(outcome.op, sections));
+  const createdByNav = new Set(navNotes.filter((note) => note.startsWith("Created the")).map((note) => note));
   if (attempt.compiled.createdPages.length > 0) {
-    done.push(...attempt.compiled.createdPages.map((p) => `Created the "${p.name}" page (${p.slug}) with ${p.sections.length} sections.`));
+    done.push(
+      ...attempt.compiled.createdPages
+        .map((p) => `Created the "${p.name}" page (${p.slug}).`)
+        .filter((line) => !createdByNav.has(line)),
+    );
   }
   if (attempt.compiled.updatedPages.length > 0) {
     done.push(`Updated ${attempt.compiled.updatedPages.length} other page(s).`);
   }
-  if (attempt.compiled.navigationPatch?.headerMenu) {
+  const describedNav = attempt.compiled.outcomes.some((outcome) => outcome.applied && outcome.op.op === "update_navigation");
+  if (attempt.compiled.navigationPatch?.headerMenu && navNotes.length === 0 && !describedNav) {
     done.push(`Updated header navigation menu.`);
   }
   const failed = [
@@ -557,6 +568,54 @@ function imageSourceQuestion(options: SiteCopilotOptions, attempt: Attempt, cont
   };
 }
 
+/** Pages the header can link to: the site's pages plus the ones this reply creates. */
+function navPages(options: SiteCopilotOptions, compiled: CompiledEdits): NavPage[] {
+  return [
+    ...options.website.draft.pages.map((page) => ({ name: page.name, slug: page.slug })),
+    ...compiled.createdPages.map((page) => ({ name: page.name, slug: page.slug })),
+  ];
+}
+
+/**
+ * Makes sure a header request ("add a button in nav to this page", "in header i need login") ends
+ * with that link in the header, creating the login/account page when the owner asks for one that
+ * doesn't exist yet. Returns the owner-facing lines for what was added.
+ */
+function applyNavIntent(options: SiteCopilotOptions, compiled: CompiledEdits): string[] {
+  const current = options.website.draft.pages.find((page) => page.id === options.pageId);
+  const intent = navIntent(options.prompt, navPages(options, compiled), current ? { name: current.name, slug: current.slug } : null);
+  if (!intent) return [];
+
+  const notes: string[] = [];
+  let link: { label: string; href: string };
+  if (intent.target.kind === "page") {
+    link = { label: intent.target.page.name, href: intent.target.page.slug };
+  } else {
+    const business = businessNameOf(options.website);
+    const page = shopPage(intent.target.shopPage, business);
+    compiled.createdPages.push(page);
+    if (intent.target.shopPage === "login" && !findShopPage("account", options.website.draft.pages) && !compiled.createdPages.some((p) => p.slug === ACCOUNT_SLUG)) {
+      compiled.createdPages.push(shopPage("account", business));
+    }
+    link = { label: page.name, href: page.slug };
+    notes.push(`Created the "${page.name}" page (${page.slug}).`);
+  }
+
+  const header = options.website.draft.header;
+  const before = compiled.navigationPatch;
+  const menu = header.menu ?? options.website.draft.pages.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug }));
+  compiled.navigationPatch = ensureNavLink(intent, { menu, cta: header.cta?.href ? header.cta : undefined }, before, link);
+  if (compiled.navigationPatch !== before) notes.push(describeNavLink(intent, link));
+  return notes;
+}
+
+/** Whether the prompt is a header request this editor can carry out without the model's help. */
+export function hasResolvableNavIntent(options: SiteCopilotOptions): boolean {
+  const current = options.website.draft.pages.find((page) => page.id === options.pageId);
+  const pages = options.website.draft.pages.map((page) => ({ name: page.name, slug: page.slug }));
+  return navIntent(options.prompt, pages, current ? { name: current.name, slug: current.slug } : null) !== null;
+}
+
 /** Turns checked edits into a reviewable suggestion. */
 export function toCopilotSuggestion(
   options: SiteCopilotOptions,
@@ -568,30 +627,8 @@ export function toCopilotSuggestion(
   const seo = parseSeo(reply.seo, context.page);
   const sections = pageSections(options);
 
-  const hasNavRequest =
-    /\b(redirection|redirect|link\w*|header|nav\w*)\b/i.test(options.prompt) &&
-    /\b(men\w*)\b/i.test(options.prompt);
-  if (hasNavRequest) {
-    const currentMenu =
-      compiled.navigationPatch?.headerMenu ??
-      options.website.draft.header.menu ??
-      options.website.draft.pages.filter((p) => p.showInNav).map((p) => ({ label: p.name, href: p.slug }));
-    const normalize = (s: string) => s.trim().toLowerCase().replace(/^\/+/, "");
-    const menuIdx = currentMenu.findIndex((m) => normalize(m.label) === "menu" || normalize(m.href) === "menu");
-    if (menuIdx >= 0 && currentMenu[menuIdx]?.href !== "/menu") {
-      const nextMenu = [...currentMenu];
-      nextMenu[menuIdx] = { ...nextMenu[menuIdx]!, href: "/menu" };
-      compiled.navigationPatch = {
-        ...(compiled.navigationPatch ?? {}),
-        headerMenu: nextMenu,
-      };
-    } else if (menuIdx < 0) {
-      compiled.navigationPatch = {
-        ...(compiled.navigationPatch ?? {}),
-        headerMenu: [...currentMenu, { label: "Menu", href: "/menu" }],
-      };
-    }
-  }
+  // Header navigation requests always end with the link the owner asked for, whatever the model planned.
+  const navNotes = applyNavIntent(options, compiled);
 
   const hasCrossPage =
     compiled.createdPages.length > 0 ||
@@ -624,7 +661,7 @@ export function toCopilotSuggestion(
   const base = {
     id: randomUUID(),
     prompt: options.prompt,
-    summary: describeResult(attempt, sections, Boolean(seo), generatedImages),
+    summary: [...navNotes, describeResult(attempt, sections, Boolean(seo), generatedImages, navNotes)].filter(Boolean).join(" "),
     seo,
     createdPages: compiled.createdPages,
     updatedPages: compiled.updatedPages,
@@ -677,12 +714,15 @@ export async function runCopilot(
 ): Promise<AiSuggestionPayload> {
   let raw = await ask(messages);
   let attempt = check(raw, options, context);
-  const isMenuRequest = /\b(men\w*|food|dish\w*|dining|restaurant|culinary|cafe|bar|bistro|bakery)\b/i.test(options.prompt);
+  // A header/menu-bar request is a navigation edit, not a restaurant menu or a page build.
+  const isNavRequest = hasResolvableNavIntent(options);
+  const isMenuRequest = !isNavRequest && /\b(men\w*|food|dish\w*|dining|restaurant|culinary|cafe|bar|bistro|bakery)\b/i.test(options.prompt);
   const isCompletePageRequest =
-    isMenuRequest ||
-    /\b(compl\w*|creat\w*|build\w*|make\w*|generat\w*|redesign\w*|rebuild\w*|all\s+sections?|full\s+page|full\s+website|whole\s+page|landing\s*page|website|about|contact|services?|pricing)\b/i.test(
-      options.prompt,
-    );
+    !isNavRequest &&
+    (isMenuRequest ||
+      /\b(compl\w*|creat\w*|build\w*|make\w*|generat\w*|redesign\w*|rebuild\w*|all\s+sections?|full\s+page|full\s+website|whole\s+page|landing\s*page|website|about|contact|services?|pricing)\b/i.test(
+        options.prompt,
+      ));
 
   if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {
     if (isCompletePageRequest) {
@@ -774,6 +814,11 @@ Generate all sections now using "replace_page" and "update_navigation".`,
       ]);
       attempt = check(raw, options, context);
     }
+  }
+
+  // A header link the editor can add itself is never answered with a question or a chat reply.
+  if (attempt.reply.intent !== "edit" && hasResolvableNavIntent(options)) {
+    attempt = check({ intent: "edit", reply: "", ops: [] }, options, context);
   }
 
   if (attempt.reply.intent === "clarify" && attempt.reply.clarification) {

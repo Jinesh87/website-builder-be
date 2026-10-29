@@ -1,5 +1,7 @@
 import Joi from "joi";
 import {
+  ACCOUNT_PREVIEWS,
+  ACCOUNT_VARIANTS,
   AUTH_ANIMATIONS,
   AUTH_FIELD_TYPES,
   AUTH_SOCIAL_PROVIDERS,
@@ -1480,6 +1482,33 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     backHref: Joi.string().trim().max(200).allow("").optional(),
     showDescription: Joi.boolean().optional(),
     showStock: Joi.boolean().optional(),
+  }),
+  account: Joi.object({
+    variant: flexibleVariant(ACCOUNT_VARIANTS, "sidebar-tabs"),
+    preview: Joi.string()
+      .valid(...ACCOUNT_PREVIEWS)
+      .optional()
+      .meta({ ai: "locked" } satisfies FieldMeta),
+    heading: optionalText(160),
+    subheading: optionalText(320),
+    showOrders: Joi.boolean().optional(),
+    showCart: Joi.boolean().optional(),
+    showProfile: Joi.boolean().optional(),
+    showPassword: Joi.boolean().optional(),
+    ordersLabel: optionalText(40),
+    cartLabel: optionalText(40),
+    profileLabel: optionalText(40),
+    passwordLabel: optionalText(40),
+    logoutLabel: optionalText(40),
+    saveLabel: optionalText(40),
+    emptyOrdersText: optionalText(200),
+    emptyCartText: optionalText(200),
+    loginHref: Joi.string().trim().max(200).pattern(SAFE_HREF).allow("").optional().description("Page with the login section, such as /login"),
+    shopHref: Joi.string().trim().max(200).pattern(SAFE_HREF).allow("").optional().description("Page that lists the products, such as /shop"),
+    redirectWhenLoggedOut: Joi.boolean().optional(),
+    guestHeading: optionalText(160),
+    guestText: optionalText(320),
+    guestButtonLabel: optionalText(60),
   }),
   blog_detail: Joi.object({
     design: Joi.string().valid(...BLOG_DETAIL_DESIGNS).required(),

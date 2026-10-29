@@ -54,16 +54,24 @@ export function getRefreshToken(req: Request): string | undefined {
   return (req.cookies as Record<string, string | undefined> | undefined)?.[REFRESH_COOKIE];
 }
 
+/**
+ * Shop buyer sessions always use persistent cookies. Access is short-lived; the
+ * client refreshes it via /auth/refresh. `remember` still controls how long the
+ * refresh cookie lasts (full refresh TTL vs one day) so "Remember me" remains useful.
+ */
 export function setShopAuthCookies(res: Response, tokens: AuthTokens, remember: boolean): void {
+  const refreshMaxAge = remember
+    ? parseDurationMs(env.JWT_REFRESH_EXPIRES_IN)
+    : Math.min(parseDurationMs(env.JWT_REFRESH_EXPIRES_IN), 24 * 60 * 60 * 1000);
   res.cookie(SHOP_ACCESS_COOKIE, tokens.accessToken, {
     ...baseCookieOptions(),
     path: "/",
-    ...(remember ? { maxAge: parseDurationMs(env.JWT_ACCESS_EXPIRES_IN) } : {}),
+    maxAge: parseDurationMs(env.JWT_ACCESS_EXPIRES_IN),
   });
   res.cookie(SHOP_REFRESH_COOKIE, tokens.refreshToken, {
     ...baseCookieOptions(),
     path: SHOP_REFRESH_COOKIE_PATH,
-    ...(remember ? { maxAge: parseDurationMs(env.JWT_REFRESH_EXPIRES_IN) } : {}),
+    maxAge: refreshMaxAge,
   });
 }
 

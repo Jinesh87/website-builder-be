@@ -38,10 +38,36 @@ export const shopEmailOnlySchema = Joi.object({
 export const shopLoginSchema = Joi.object({
   email: email.required(),
   password: Joi.string().min(1).max(200).required(),
-  remember: Joi.boolean().default(false),
+  remember: Joi.boolean().default(true),
 });
 
 export const shopResetPasswordSchema = Joi.object({
   token: Joi.string().trim().min(20).max(200).required(),
   password: password.required(),
+});
+
+export const shopProfileUpdateSchema = Joi.object({
+  fullName: Joi.string().trim().min(2).max(120).optional(),
+  phone: phone,
+})
+  .min(1)
+  .messages({ "object.min": "Add at least one profile field to update" });
+
+export const shopChangePasswordSchema = Joi.object({
+  currentPassword: Joi.string().min(1).max(200).required(),
+  newPassword: password.required(),
+});
+
+export const shopAddToCartSchema = Joi.object({
+  variantId: Joi.string().guid().required(),
+  quantity: Joi.number().integer().min(1).max(99).default(1),
+});
+
+export const shopUpdateCartItemSchema = Joi.object({
+  quantity: Joi.number().integer().min(1).max(99).required(),
+});
+
+export const shopCartItemParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+  itemId: Joi.string().guid().required(),
 });

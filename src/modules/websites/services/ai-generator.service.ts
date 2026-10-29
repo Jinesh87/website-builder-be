@@ -24,7 +24,9 @@ import {
   type NavPage,
 } from "../ai/navigation.js";
 import { sanitizeCustomData } from "../ai/custom-section.js";
+import { describeNavLink, ensureNavLink, navIntent } from "../ai/nav-intent.js";
 import { repairSection } from "../ai/repair-section.js";
+import { ACCOUNT_SLUG, businessNameOf, findShopPage, shopPage } from "../ai/shop-pages.js";
 import { CONTACT_VARIANTS, CUSTOM_LIMITS, FEATURE_ICON_COLORS, HERO_VARIANTS, ICON_NAMES } from "../types/site-content.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { aiBillingService } from "../../wallet/services/ai-billing.service.js";
@@ -1187,9 +1189,20 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
      "panel": { "heading": "...", "text": "..." },
      "successHeading": "You're signed in",
      "successText": "...",
-     "successLink": { "label": "Continue to shop", "href": "/shop" }
+     "successLink": { "label": "Continue to account", "href": "/account" }
    }
    Keep social.enabled false unless the owner asked for social login. Prefer brandName from the brand facts.
+18. "account" (the signed-in customer's own page: real orders, cart and profile; use on a dedicated "/account" page; never invent orders or customer names):
+   data: {
+     "variant": "sidebar-tabs"|"top-tabs"|"overview-cards"|"minimal-list"|"dark-panel",
+     "heading": "My account", "subheading": "...",
+     "showOrders": true, "showCart": true, "showProfile": true, "showPassword": true,
+     "ordersLabel": "Orders", "cartLabel": "Cart", "profileLabel": "Profile", "passwordLabel": "Password", "logoutLabel": "Log out", "saveLabel": "Save changes",
+     "emptyOrdersText": "You haven't placed any orders yet.", "emptyCartText": "Your cart is empty.",
+     "loginHref": "/login", "shopHref": "/shop", "redirectWhenLoggedOut": false,
+     "guestHeading": "Sign in to see your account", "guestText": "...", "guestButtonLabel": "Log in"
+   }
+   Visitors who aren't signed in see the guest prompt (or are sent to loginHref when redirectWhenLoggedOut is true).
 
 STOCK / DUMMY IMAGE GUIDELINES:
 - Tech / Dark Hero: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=2000&q=80"
@@ -1796,7 +1809,7 @@ export class AiGeneratorService {
         }
       : undefined;
 
-    const plan = await this.plan(
+    let plan = await this.plan(
       prompt,
       currentSections,
       currentSection?.id ?? sectionId,
@@ -1819,6 +1832,14 @@ export class AiGeneratorService {
       };
     }
 
+    const navPagesNow: NavPage[] = sitePages.map((p) => ({ name: p.name, slug: p.slug }));
+    const navCurrent: NavPage | null = currentPage ? { name: currentPage.name, slug: currentPage.slug } : null;
+    const headerIntent = navIntent(prompt, navPagesNow, navCurrent);
+
+    if ((plan.intent !== "edit" || plan.ops.length === 0) && headerIntent) {
+      // The model didn't plan the header link, but the request names a page we know: add it ourselves.
+      plan = { intent: "edit", reply: "", ops: [] };
+    }
     if (plan.intent !== "edit" || plan.ops.length === 0) {
       const reply =
         plan.intent === "edit" || !plan.reply
@@ -1955,18 +1976,46 @@ export class AiGeneratorService {
       newNavPages: createdPages.filter((p) => p.showInNav).map(toNavPage),
       pages: [...sitePages.map(toNavPage), ...createdPages.map(toNavPage)],
     });
-    const navigationPatch: NavigationPatchEdit | undefined =
+    let navigationPatch: NavigationPatchEdit | undefined =
       nav.headerMenu || nav.headerCta
         ? {
             ...(nav.headerMenu ? { headerMenu: nav.headerMenu } : {}),
             ...(nav.headerCta ? { headerCta: nav.headerCta } : {}),
           }
         : undefined;
+
+    // A header request ends with the link the owner asked for, even when the planner left it out.
+    const navNotes: string[] = [];
+    const finalIntent = headerIntent ?? navIntent(prompt, [...navPagesNow, ...createdPages.map(toNavPage)], navCurrent);
+    if (finalIntent) {
+      let link: { label: string; href: string };
+      if (finalIntent.target.kind === "page") {
+        link = { label: finalIntent.target.page.name, href: finalIntent.target.page.slug };
+      } else {
+        const business = businessNameOf(website);
+        const page = shopPage(finalIntent.target.shopPage, business);
+        createdPages.push(page);
+        if (finalIntent.target.shopPage === "login" && !findShopPage("account", sitePages) && !createdPages.some((p) => p.slug === ACCOUNT_SLUG)) {
+          createdPages.push(shopPage("account", business));
+        }
+        link = { label: page.name, href: page.slug };
+        navNotes.push(`Created the "${page.name}" page (${page.slug}).`);
+      }
+      const ensured = ensureNavLink(finalIntent, { menu: currentMenu, cta: currentCta }, navigationPatch, link);
+      if (ensured !== navigationPatch) {
+        navigationPatch = ensured;
+        navNotes.push(describeNavLink(finalIntent, link));
+      }
+    }
+    const navChange = {
+      ...(navigationPatch?.headerMenu ? { headerMenu: navigationPatch.headerMenu as MenuItem[] } : {}),
+      ...(navigationPatch?.headerCta?.href ? { headerCta: { label: navigationPatch.headerCta.label ?? "", href: navigationPatch.headerCta.href } } : {}),
+    };
     const syncHeaders = (sections: SectionEnvelope[]): SectionEnvelope[] =>
-      navigationPatch ? sections.map((s) => withNavigation(s, nav)) : sections;
+      navigationPatch ? sections.map((s) => withNavigation(s, navChange)) : sections;
 
     const unresolvedNote =
-      nav.unresolved.length > 0
+      nav.unresolved.length > 0 && !finalIntent
         ? `I couldn't find a page for ${nav.unresolved.join(", ")}, so I left that link out. Create the page first or tell me which page it should open.`
         : "";
 
@@ -1991,13 +2040,14 @@ export class AiGeneratorService {
     }
 
     const notes = [
+      ...navNotes,
       failedPages.length > 0 ? `I couldn't build ${failedPages.join(", ")} this time; ask me again to retry.` : "",
       plan.deferredPages?.length ? `Ask me to continue to build ${plan.deferredPages.join(", ")}.` : "",
       unresolvedNote,
     ].filter(Boolean);
     const baseSummary =
       plan.reply ||
-      (createdPages.length > 0 ? `Created ${createdPages.map((p) => p.name).join(", ")}` : "Updated the page");
+      (navNotes.length > 0 ? "" : createdPages.length > 0 ? `Created ${createdPages.map((p) => p.name).join(", ")}` : "Updated the page");
     const summary = [baseSummary, ...notes].join(" ");
 
     const hasCrossPage = createdPages.length > 0 || updatedPages.length > 0 || Boolean(navigationPatch);
