@@ -44,6 +44,8 @@ import {
   SPACING_SIZES,
   type SectionType,
   BLOG_DETAIL_DESIGNS,
+  BLOG_SHARE_PLATFORMS,
+  BLOG_SOCIAL_PLATFORMS,
   CARDS_BUTTON_SIZES,
   CARDS_BUTTON_VARIANTS,
   CARDS_CARD_STYLES,
@@ -81,6 +83,8 @@ export const SAFE_VIDEO_URL =
 export const UPLOAD_OR_YOUTUBE_VIDEO_URL =
   /^(?:https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)[\w-]{6,}(?:[^\s]*)?|youtu\.be\/[\w-]{6,}(?:\?\S*)?)|https?:\/\/\S+\/api\/media\/files\/[A-Za-z0-9_-]+(?:\?\S*)?|https?:\/\/\S+\.(?:mp4|webm|ogg)(?:\?\S*)?|\/(?!\/)\S+\.(?:mp4|webm|ogg)(?:\?\S*)?)$/i;
 const ANCHOR = /^[a-z][a-z0-9-]{0,39}$/;
+/** Blog social profiles: a full http(s)/mailto link, a bare domain, @handle, email or phone (no other schemes). */
+const BLOG_SOCIAL_URL = /^(https?:\/\/\S+|mailto:\S+|\+?[0-9][0-9 ()-]{5,}|[^\s:]+)$/i;
 
 const text = (max: number) => Joi.string().trim().max(max);
 const optionalText = (max: number) => text(max).allow("").optional();
@@ -136,6 +140,23 @@ const image = Joi.object({
 })
   .allow(null)
   .meta(meta({ kind: "image" }));
+
+const blogSocialLinks = Joi.array()
+  .items(
+    Joi.object({
+      platform: Joi.string()
+        .valid(...BLOG_SOCIAL_PLATFORMS)
+        .required(),
+      url: text(255)
+        .pattern(BLOG_SOCIAL_URL)
+        .allow("")
+        .required()
+        .messages({ "string.pattern.base": "Social links must be a web address, @handle, phone number or email" }),
+    }),
+  )
+  .max(16)
+  .optional()
+  .meta(locked);
 
 const link = Joi.object({
   label: text(80).required(),
@@ -1529,16 +1550,17 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   blog_detail: Joi.object({
     design: Joi.string().valid(...BLOG_DETAIL_DESIGNS).required(),
-    title: text(240).required(),
+    title: text(240).allow("").required(),
     subtitle: optionalText(400),
-    category: text(80).required(),
-    date: text(80).required(),
-    authorName: text(120).required(),
+    category: optionalText(80),
+    date: optionalText(80),
+    authorName: optionalText(120),
     authorRole: optionalText(120),
     authorAvatar: image.optional(),
     authorBio: optionalText(500),
-    readTime: text(60).required(),
-    coverImage: image.required(),
+    authorSocialLinks: blogSocialLinks,
+    readTime: optionalText(60),
+    coverImage: image.optional(),
     coverImageCaption: optionalText(200),
     content: Joi.array()
       .items(
@@ -1556,6 +1578,12 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .required(),
     tags: Joi.array().items(text(60)).max(20).optional(),
     showShareButtons: Joi.boolean().optional(),
+    sharePlatforms: Joi.array()
+      .items(Joi.string().valid(...BLOG_SHARE_PLATFORMS))
+      .unique()
+      .optional(),
+    socialLinks: blogSocialLinks,
+    socialLinksTitle: optionalText(60),
     showAuthorBio: Joi.boolean().optional(),
     showNewsletter: Joi.boolean().optional(),
     newsletterTitle: optionalText(160),

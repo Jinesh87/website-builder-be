@@ -1172,6 +1172,38 @@ export const BLOG_DETAIL_DESIGNS = [
 
 export type BlogDetailDesign = (typeof BLOG_DETAIL_DESIGNS)[number];
 
+export const BLOG_SOCIAL_PLATFORMS = [
+  "facebook",
+  "instagram",
+  "twitter",
+  "linkedin",
+  "youtube",
+  "tiktok",
+  "threads",
+  "pinterest",
+  "whatsapp",
+  "telegram",
+  "github",
+  "website",
+  "email",
+] as const;
+
+export const BLOG_SHARE_PLATFORMS = [
+  "twitter",
+  "linkedin",
+  "facebook",
+  "whatsapp",
+  "telegram",
+  "pinterest",
+  "email",
+  "copy",
+] as const;
+
+type BlogSocialLink = {
+  platform: (typeof BLOG_SOCIAL_PLATFORMS)[number];
+  url: string;
+};
+
 export type BlogPostItem = {
   id: string;
   title: string;
@@ -1245,12 +1277,16 @@ export type BlogDetailData = {
   authorRole?: string;
   authorAvatar?: ImageRef;
   authorBio?: string;
+  authorSocialLinks?: BlogSocialLink[];
   readTime: string;
-  coverImage: ImageRef;
+  coverImage?: ImageRef;
   coverImageCaption?: string;
   content: BlogContentSection[];
   tags: string[];
   showShareButtons?: boolean;
+  sharePlatforms?: (typeof BLOG_SHARE_PLATFORMS)[number][];
+  socialLinks?: BlogSocialLink[];
+  socialLinksTitle?: string;
   showAuthorBio?: boolean;
   showNewsletter?: boolean;
   newsletterTitle?: string;
