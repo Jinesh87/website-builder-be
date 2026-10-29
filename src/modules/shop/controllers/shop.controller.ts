@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { shopCustomersService, type ShopCustomerQuery } from "../services/shop-customers.service.js";
 import { shopInventoryService } from "../services/shop-inventory.service.js";
+import { shopOrdersService, type ShopOrderQuery, type ShopOrderStatusLabel } from "../services/shop-orders.service.js";
 import { shopPaymentService, type UpdateShopPaymentInput } from "../services/shop-payment.service.js";
 import { shopService } from "../services/shop.service.js";
 import type { ShopCategoryInput, ShopProductInput, ShopProductQuery } from "../types/shop.types.js";
@@ -9,6 +10,7 @@ type WebsiteParams = { id: string };
 type CategoryParams = WebsiteParams & { categoryId: string };
 type ProductParams = WebsiteParams & { productId: string };
 type CustomerParams = WebsiteParams & { customerId: string };
+type OrderParams = WebsiteParams & { orderId: string };
 
 export class ShopController {
   listCategories = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
@@ -135,6 +137,37 @@ export class ShopController {
   getCustomer = async (req: Request<CustomerParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ customer: await shopCustomersService.get(req.params.id, req.params.customerId, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listOrders = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await shopOrdersService.list(req.params.id, req.query as unknown as ShopOrderQuery, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getOrder = async (req: Request<OrderParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ order: await shopOrdersService.get(req.params.id, req.params.orderId, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateOrderStatus = async (req: Request<OrderParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        order: await shopOrdersService.updateStatus(
+          req.params.id,
+          req.params.orderId,
+          req.body.status as ShopOrderStatusLabel,
+          req.user!,
+        ),
+      });
     } catch (error) {
       next(error);
     }

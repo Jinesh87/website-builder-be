@@ -35,6 +35,7 @@ import type {
   ShopSignupInput,
   ShopVerificationDispatch,
 } from "../types/shop-auth.types.js";
+import { shopCheckoutService } from "./shop-checkout.service.js";
 
 const dummyPasswordHash = hashPassword(randomUUID());
 
@@ -274,7 +275,7 @@ export class ShopAuthService {
     const customer = await this.me(websiteId, customerId);
     return {
       customer,
-      orders: [],
+      orders: await shopCheckoutService.listCustomerOrders(websiteId, customerId),
       cartItems: await this.listCart(websiteId, customerId),
     };
   }

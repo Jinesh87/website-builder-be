@@ -8,13 +8,68 @@ export type ShopCustomerView = {
   createdAt: string;
 };
 
+export type ShopOrderStatusLabel =
+  | "pending"
+  | "paid"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "failed"
+  | "cancelled";
+
+export type ShopRefundStatusLabel = "none" | "pending" | "processed" | "failed";
+
 export type ShopOrderSummary = {
   id: string;
   number: string;
-  status: "pending" | "paid" | "failed" | "cancelled";
+  status: ShopOrderStatusLabel;
+  refundStatus: ShopRefundStatusLabel;
   totalPaise: number;
   currency: "INR";
   createdAt: string;
+  refundedAt: string | null;
+};
+
+export type ShopOrderTimelineEventView = {
+  id: string;
+  status: string;
+  actorType: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type ShopOrderItemView = {
+  id: string;
+  productName: string;
+  variantName: string;
+  unitPricePaise: number;
+  quantity: number;
+  lineTotalPaise: number;
+};
+
+export type ShopOrderDetailView = ShopOrderSummary & {
+  items: ShopOrderItemView[];
+  timeline: ShopOrderTimelineEventView[];
+  failureReason: string | null;
+  paidAt: string | null;
+  updatedAt: string;
+};
+
+export type ShopCheckoutSession = {
+  orderId: string;
+  orderNumber: string;
+  keyId: string;
+  razorpayOrderId: string;
+  amountPaise: number;
+  currency: string;
+  businessName: string;
+  prefill: { name: string; email?: string; contact?: string };
+};
+
+export type ShopCheckoutConfirmation = {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
 };
 
 export type ShopCartItemSummary = {
