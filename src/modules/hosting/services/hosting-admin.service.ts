@@ -184,7 +184,12 @@ export class HostingAdminService {
     if (!before) throw new AppError(404, "Package not found", "PACKAGE_NOT_FOUND");
 
     const prices = before.isCustom
-      ? { quarterlyPricePaise: 0, yearlyPricePaise: 0 }
+      ? {
+          quarterlyPricePaise: 0,
+          yearlyPricePaise: 0,
+          startingQuarterlyPaise: input.startingQuarterlyPaise ?? before.startingQuarterlyPaise,
+          startingYearlyPaise: input.startingYearlyPaise ?? before.startingYearlyPaise,
+        }
       : { quarterlyPricePaise: input.quarterlyPricePaise, yearlyPricePaise: input.yearlyPricePaise };
     const features = [...new Set(input.features.map((feature) => feature.trim()).filter(Boolean))];
     const after = { ...before, ...prices, active: input.active };

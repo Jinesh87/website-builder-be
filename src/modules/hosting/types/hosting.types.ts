@@ -24,6 +24,8 @@ export type HostingPackageView = {
   /** No list price: contact sales, unless a price is agreed for the website. */
   isCustom: boolean;
   prices: CyclePrices;
+  /** Custom package only: the display-only "starting from" price; null = not shown (always null on listed packages). */
+  startingFrom: CyclePrices;
 };
 
 export type AdminHostingPackageView = HostingPackageView & {
@@ -185,6 +187,9 @@ export type UpdatePackageInput = {
   /** Ignored for the custom package. */
   quarterlyPricePaise: number;
   yearlyPricePaise: number;
+  /** Custom package only; 0 = no "starting from" price shown. Omitted = unchanged. */
+  startingQuarterlyPaise?: number;
+  startingYearlyPaise?: number;
   featured: boolean;
   active: boolean;
 };

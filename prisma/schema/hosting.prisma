@@ -16,23 +16,26 @@ model HostingConfig {
 
 /// A package on the pricing page and at checkout. The set is fixed (basic = Starter, standard = Dedicated, custom); the Super Admin edits them.
 model HostingPackage {
-  id                  String   @id @default(uuid()) @db.Uuid
-  slug                String   @unique @db.VarChar(40)
-  name                String   @db.VarChar(60)
-  description         String   @db.VarChar(300)
+  id                     String   @id @default(uuid()) @db.Uuid
+  slug                   String   @unique @db.VarChar(40)
+  name                   String   @db.VarChar(60)
+  description            String   @db.VarChar(300)
   /// No list price: a website's own custom price applies, otherwise visitors contact sales.
-  isCustom            Boolean  @default(false)
+  isCustom               Boolean  @default(false)
   /// Paise per period; 0 = not priced yet, so it can't be bought.
-  quarterlyPricePaise Int      @default(0)
-  yearlyPricePaise    Int      @default(0)
-  features            String[]
+  quarterlyPricePaise    Int      @default(0)
+  yearlyPricePaise       Int      @default(0)
+  /// Custom package only: the "starting from" price on the pricing page, in paise. Display only, never charged; 0 = hidden.
+  startingQuarterlyPaise Int      @default(0)
+  startingYearlyPaise    Int      @default(0)
+  features               String[]
   /// Highlighted as the recommended package; at most one.
-  featured            Boolean  @default(false)
+  featured               Boolean  @default(false)
   /// Hidden from the pricing page and checkout when false; existing plans keep it.
-  active              Boolean  @default(true)
-  sortOrder           Int      @default(0)
-  createdAt           DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+  active                 Boolean  @default(true)
+  sortOrder              Int      @default(0)
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(6)
 
   subscriptions HostingSubscription[]
   orders        HostingOrder[]

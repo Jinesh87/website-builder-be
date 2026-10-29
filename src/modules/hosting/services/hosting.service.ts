@@ -161,6 +161,10 @@ export function toPackageView(pkg: HostingPackage, website: CustomPricing | null
       QUARTERLY: priceFor(BillingCycle.QUARTERLY, pkg, website),
       YEARLY: priceFor(BillingCycle.YEARLY, pkg, website),
     },
+    startingFrom: {
+      QUARTERLY: pkg.isCustom && pkg.startingQuarterlyPaise > 0 ? pkg.startingQuarterlyPaise : null,
+      YEARLY: pkg.isCustom && pkg.startingYearlyPaise > 0 ? pkg.startingYearlyPaise : null,
+    },
   };
 }
 
