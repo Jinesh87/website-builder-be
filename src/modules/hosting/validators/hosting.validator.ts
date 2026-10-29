@@ -66,8 +66,8 @@ export const updatePackageSchema = Joi.object({
   features: Joi.array().items(Joi.string().trim().min(1).max(120)).max(20).required(),
   quarterlyPricePaise: paise.required(),
   yearlyPricePaise: paise.required(),
-  startingQuarterlyPaise: paise.optional(),
-  startingYearlyPaise: paise.optional(),
+  defaultQuarterlyPaise: paise.optional(),
+  defaultYearlyPaise: paise.optional(),
   featured: Joi.boolean().required(),
   active: Joi.boolean().required(),
 });

@@ -20,14 +20,14 @@ model HostingPackage {
   slug                   String   @unique @db.VarChar(40)
   name                   String   @db.VarChar(60)
   description            String   @db.VarChar(300)
-  /// No list price: a website's own custom price applies, otherwise visitors contact sales.
+  /// Priced per website: a website's own custom price, else the package's default price.
   isCustom               Boolean  @default(false)
-  /// Paise per period; 0 = not priced yet, so it can't be bought.
+  /// Listed packages only. Paise per period; 0 = not priced yet, so it can't be bought.
   quarterlyPricePaise    Int      @default(0)
   yearlyPricePaise       Int      @default(0)
-  /// Custom package only: the "starting from" price on the pricing page, in paise. Display only, never charged; 0 = hidden.
-  startingQuarterlyPaise Int      @default(0)
-  startingYearlyPaise    Int      @default(0)
+  /// Custom package only: paise per period for a website without its own price; 0 = none, so such a website can't buy it.
+  defaultQuarterlyPaise  Int      @default(0)
+  defaultYearlyPaise     Int      @default(0)
   features               String[]
   /// Highlighted as the recommended package; at most one.
   featured               Boolean  @default(false)
@@ -52,7 +52,8 @@ model HostingSubscription {
   /// Package and cycle apply from the next payment; changing them never alters the current period.
   packageId            String?       @db.Uuid
   cycle                BillingCycle
-  /// This website's price on the custom package, in paise per period; null = not set. 0 = free.
+  /// This website's price on the custom package, in paise per period; null = the package's default. 0 = free.
+  /// Filled in when a custom plan is paid, so a later change to the default doesn't reprice it.
   customQuarterlyPaise Int?
   customYearlyPaise    Int?
   status               HostingStatus @default(AWAITING_PAYMENT)
