@@ -42,7 +42,9 @@ import {
   CYCLE_LABELS,
   formatBillingDate,
   formatPeriod,
+  customDefaultPrice,
   isHostingLive,
+  lockedCustomPrices,
   nextPeriod,
   priceFor,
   renewalOpensAt,
@@ -161,9 +163,9 @@ export function toPackageView(pkg: HostingPackage, website: CustomPricing | null
       QUARTERLY: priceFor(BillingCycle.QUARTERLY, pkg, website),
       YEARLY: priceFor(BillingCycle.YEARLY, pkg, website),
     },
-    startingFrom: {
-      QUARTERLY: pkg.isCustom && pkg.startingQuarterlyPaise > 0 ? pkg.startingQuarterlyPaise : null,
-      YEARLY: pkg.isCustom && pkg.startingYearlyPaise > 0 ? pkg.startingYearlyPaise : null,
+    defaultPrices: {
+      QUARTERLY: customDefaultPrice(BillingCycle.QUARTERLY, pkg),
+      YEARLY: customDefaultPrice(BillingCycle.YEARLY, pkg),
     },
   };
 }
@@ -197,7 +199,7 @@ export function availablePrice(
   if (price === null) {
     throw PACKAGE_NOT_AVAILABLE(
       pkg.isCustom
-        ? "A custom plan needs a price agreed for this website first. Contact us to set it up."
+        ? `${pkg.name} has no ${CYCLE_LABELS[cycle].toLowerCase()} price for this website yet. Contact us to set it up.`
         : `${pkg.name} isn't available with ${CYCLE_LABELS[cycle].toLowerCase()} billing yet.`,
     );
   }
@@ -286,7 +288,7 @@ type SettleRequest = {
   now?: Date;
 };
 
-type Charge = { packageId: string | null; packageName: string; cycle: BillingCycle; price: number };
+type Charge = { pkg: HostingPackage | null; packageName: string; cycle: BillingCycle; price: number };
 
 export class HostingService {
   /**
@@ -320,7 +322,12 @@ export class HostingService {
         }
 
         const charge: Charge = order
-          ? { packageId: order.packageId, packageName: order.packageName, cycle: order.cycle, price: order.amountPaise }
+          ? {
+              pkg: order.packageId ? await tx.hostingPackage.findUnique({ where: { id: order.packageId } }) : null,
+              packageName: order.packageName,
+              cycle: order.cycle,
+              price: order.amountPaise,
+            }
           : await this.chargeFor(tx, subscription, request.plan);
         const period = nextPeriod(subscription, charge.cycle, now);
 
@@ -354,13 +361,14 @@ export class HostingService {
         }
 
         const periodData = {
-          packageId: charge.packageId,
+          packageId: charge.pkg?.id ?? null,
           cycle: charge.cycle,
           status: HostingStatus.ACTIVE,
           currentPeriodStart: period.start,
           currentPeriodEnd: period.end,
           graceEndsAt: null,
           suspendedAt: null,
+          ...(charge.pkg?.isCustom ? lockedCustomPrices(charge.pkg, subscription, charge) : {}),
         };
         let subscriptionId: string;
         if (subscription) {
@@ -431,7 +439,7 @@ export class HostingService {
     if (!packageId || !cycle) throw new AppError(400, "Choose a hosting package first.", "PLAN_REQUIRED");
     const pkg = await tx.hostingPackage.findUnique({ where: { id: packageId } });
     const price = availablePrice(pkg, cycle, subscription);
-    return { packageId: pkg!.id, packageName: pkg!.name, cycle, price };
+    return { pkg, packageName: pkg!.name, cycle, price };
   }
 
   /** Puts a site the billing worker took offline back online with its existing live version. */
@@ -595,7 +603,7 @@ export class HostingService {
 
   /**
    * Sets up or changes a website's plan without charging. Package, cycle and prices apply from the next payment;
-   * only a Super Admin can set this website's custom price.
+   * only a Super Admin can set this website's custom price (null = back to the custom package's default).
    */
   async updatePlan(websiteId: string, input: UpdatePlanInput, actor: AuthUser): Promise<WebsiteHostingView> {
     const website = await prisma.website.findFirst({
@@ -630,11 +638,12 @@ export class HostingService {
       : await prisma.hostingPackage.findFirst({ where: { isCustom: true } });
     if (!pkg || (!pkg.active && pkg.id !== current?.packageId)) throw PACKAGE_NOT_AVAILABLE();
     packageId = pkg.id;
-    if (pkg.isCustom && after.quarterly === null && after.yearly === null) {
+    const priced = { customQuarterlyPaise: after.quarterly, customYearlyPaise: after.yearly };
+    if (pkg.isCustom && priceFor(BillingCycle.QUARTERLY, pkg, priced) === null && priceFor(BillingCycle.YEARLY, pkg, priced) === null) {
       throw PACKAGE_NOT_AVAILABLE(
         isAdmin
-          ? "Set this website's custom price before choosing the custom package."
-          : "A custom plan needs a price agreed for this website first. Contact us to set it up.",
+          ? `Set this website's price, or a default ${pkg.name} price in Settings → Hosting, before choosing ${pkg.name}.`
+          : `${pkg.name} has no price for this website yet. Contact us to set it up.`,
       );
     }
 

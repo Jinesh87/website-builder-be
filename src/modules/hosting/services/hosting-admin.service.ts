@@ -129,7 +129,17 @@ function toPriceChangeView(
 }
 
 function isSellable(pkg: HostingPackage): boolean {
-  return pkg.active && !pkg.isCustom && (pkg.quarterlyPricePaise > 0 || pkg.yearlyPricePaise > 0);
+  if (!pkg.active) return false;
+  return pkg.isCustom
+    ? pkg.defaultQuarterlyPaise > 0 || pkg.defaultYearlyPaise > 0
+    : pkg.quarterlyPricePaise > 0 || pkg.yearlyPricePaise > 0;
+}
+
+/** The prices a package change is logged with: the list prices, or the custom package's default. */
+function packagePrices(pkg: HostingPackage): { quarterly: number; yearly: number } {
+  return pkg.isCustom
+    ? { quarterly: pkg.defaultQuarterlyPaise, yearly: pkg.defaultYearlyPaise }
+    : { quarterly: pkg.quarterlyPricePaise, yearly: pkg.yearlyPricePaise };
 }
 
 export class HostingAdminService {
@@ -178,7 +188,10 @@ export class HostingAdminService {
     return this.settings();
   }
 
-  /** Edits one package. Prices apply from each plan's next payment; paid periods never change. */
+  /**
+   * Edits one package. List prices apply from each plan's next payment; paid periods never change. The custom
+   * package's default applies to websites without their own price, and paid custom plans keep the price they paid.
+   */
   async updatePackage(packageId: string, input: UpdatePackageInput, actor: AuthUser): Promise<HostingSettingsView> {
     const before = await prisma.hostingPackage.findUnique({ where: { id: packageId } });
     if (!before) throw new AppError(404, "Package not found", "PACKAGE_NOT_FOUND");
@@ -187,8 +200,8 @@ export class HostingAdminService {
       ? {
           quarterlyPricePaise: 0,
           yearlyPricePaise: 0,
-          startingQuarterlyPaise: input.startingQuarterlyPaise ?? before.startingQuarterlyPaise,
-          startingYearlyPaise: input.startingYearlyPaise ?? before.startingYearlyPaise,
+          defaultQuarterlyPaise: input.defaultQuarterlyPaise ?? before.defaultQuarterlyPaise,
+          defaultYearlyPaise: input.defaultYearlyPaise ?? before.defaultYearlyPaise,
         }
       : { quarterlyPricePaise: input.quarterlyPricePaise, yearlyPricePaise: input.yearlyPricePaise };
     const features = [...new Set(input.features.map((feature) => feature.trim()).filter(Boolean))];
@@ -211,15 +224,13 @@ export class HostingAdminService {
           "HOSTING_PRICES_REQUIRED",
         );
       }
-      if (!before.isCustom) {
-        await recordPriceChange(tx, {
-          scope: HostingPriceScope.PACKAGE,
-          label: input.name.trim(),
-          before: { quarterly: before.quarterlyPricePaise, yearly: before.yearlyPricePaise },
-          after: { quarterly: prices.quarterlyPricePaise, yearly: prices.yearlyPricePaise },
-          actorId: actor.id,
-        });
-      }
+      await recordPriceChange(tx, {
+        scope: HostingPriceScope.PACKAGE,
+        label: input.name.trim(),
+        before: packagePrices(before),
+        after: packagePrices(after),
+        actorId: actor.id,
+      });
     });
     logger.info({ actorId: actor.id, packageId, active: input.active }, "Hosting package updated");
     return this.settings();

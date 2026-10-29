@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addCycle, isHostingLive, nextPeriod, priceFor, renewalOpensAt } from "./hosting-period.js";
+import {
+  addCycle,
+  customDefaultPrice,
+  isHostingLive,
+  lockedCustomPrices,
+  nextPeriod,
+  priceFor,
+  renewalOpensAt,
+} from "./hosting-period.js";
 
 /** A time in India (UTC+5:30), as the billing dates are read there. */
 function ist(isoLocal: string): Date {
@@ -69,17 +77,46 @@ test("only paid or grace plans keep a site live", () => {
 });
 
 test("a listed package costs its own price, and can't be bought before it is priced", () => {
-  const basic = { isCustom: false, quarterlyPricePaise: 210_000, yearlyPricePaise: 0 };
+  const basic = { isCustom: false, quarterlyPricePaise: 210_000, yearlyPricePaise: 0, defaultQuarterlyPaise: 0, defaultYearlyPaise: 0 };
   const own = { customQuarterlyPaise: 100, customYearlyPaise: 200 };
   assert.equal(priceFor("QUARTERLY", basic, null), 210_000);
   assert.equal(priceFor("QUARTERLY", basic, own), 210_000);
   assert.equal(priceFor("YEARLY", basic, own), null);
+  assert.equal(customDefaultPrice("QUARTERLY", { ...basic, defaultQuarterlyPaise: 750_000 }), null);
 });
 
-test("the custom package costs the website's own price, if one is agreed", () => {
-  const custom = { isCustom: true, quarterlyPricePaise: 0, yearlyPricePaise: 0 };
-  assert.equal(priceFor("QUARTERLY", custom, null), null);
+test("the custom package costs the website's own price, else the package default", () => {
+  const custom = { isCustom: true, quarterlyPricePaise: 0, yearlyPricePaise: 0, defaultQuarterlyPaise: 750_000, defaultYearlyPaise: 2_400_000 };
+  assert.equal(priceFor("QUARTERLY", custom, null), 750_000);
+  assert.equal(priceFor("YEARLY", custom, null), 2_400_000);
   assert.equal(priceFor("QUARTERLY", custom, { customQuarterlyPaise: 150_000, customYearlyPaise: null }), 150_000);
-  assert.equal(priceFor("YEARLY", custom, { customQuarterlyPaise: 150_000, customYearlyPaise: null }), null);
+  assert.equal(priceFor("YEARLY", custom, { customQuarterlyPaise: 150_000, customYearlyPaise: null }), 2_400_000);
   assert.equal(priceFor("YEARLY", custom, { customQuarterlyPaise: null, customYearlyPaise: 0 }), 0);
+});
+
+test("the custom package can't be bought on a cycle with neither an own nor a default price", () => {
+  const custom = { isCustom: true, quarterlyPricePaise: 0, yearlyPricePaise: 0, defaultQuarterlyPaise: 0, defaultYearlyPaise: 2_400_000 };
+  assert.equal(priceFor("QUARTERLY", custom, null), null);
+  assert.equal(priceFor("QUARTERLY", custom, { customQuarterlyPaise: 500_000, customYearlyPaise: null }), 500_000);
+});
+
+test("a paid custom plan keeps its own prices and locks the default for the rest", () => {
+  const custom = { isCustom: true, quarterlyPricePaise: 0, yearlyPricePaise: 0, defaultQuarterlyPaise: 750_000, defaultYearlyPaise: 2_400_000 };
+  assert.deepEqual(lockedCustomPrices(custom, null, { cycle: "YEARLY", price: 2_400_000 }), {
+    customQuarterlyPaise: 750_000,
+    customYearlyPaise: 2_400_000,
+  });
+  // The paid cycle locks at what was charged, even if the default moved while the payment was in flight.
+  assert.deepEqual(lockedCustomPrices(custom, null, { cycle: "YEARLY", price: 2_000_000 }), {
+    customQuarterlyPaise: 750_000,
+    customYearlyPaise: 2_000_000,
+  });
+  assert.deepEqual(lockedCustomPrices(custom, { customQuarterlyPaise: null, customYearlyPaise: 1_800_000 }, { cycle: "YEARLY", price: 1_800_000 }), {
+    customQuarterlyPaise: 750_000,
+    customYearlyPaise: 1_800_000,
+  });
+  assert.deepEqual(
+    lockedCustomPrices({ ...custom, defaultQuarterlyPaise: 0 }, null, { cycle: "YEARLY", price: 2_400_000 }),
+    { customQuarterlyPaise: null, customYearlyPaise: 2_400_000 },
+  );
 });
