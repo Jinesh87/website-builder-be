@@ -36,8 +36,9 @@ model Product {
   website   Website             @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
   category  ShopCategory        @relation(fields: [categoryId, websiteId], references: [id, websiteId], onDelete: Restrict)
   variants  ProductVariant[]
-  movements InventoryMovement[]
-  cartItems ShopCartItem[]
+  movements  InventoryMovement[]
+  cartItems  ShopCartItem[]
+  orderItems ShopOrderItem[]
 
   @@unique([websiteId, slug])
   @@index([websiteId, categoryId])
@@ -61,6 +62,7 @@ model ProductVariant {
   product    Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   movements  InventoryMovement[]
   cartItems  ShopCartItem[]
+  orderItems ShopOrderItem[]
 
   @@index([productId, sortOrder])
   @@map("product_variants")
@@ -127,6 +129,7 @@ model ShopCustomer {
   website       Website                    @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
   refreshTokens ShopCustomerRefreshToken[]
   cartItems     ShopCartItem[]
+  orders        ShopOrder[]
 
   @@unique([websiteId, email])
   @@index([websiteId, status])
@@ -170,4 +173,77 @@ model ShopCustomerRefreshToken {
 
   @@index([customerId])
   @@map("shop_customer_refresh_tokens")
+}
+
+enum ShopOrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+/// Lifecycle of a Razorpay refund for a failed/cancelled checkout that was already charged.
+enum ShopRefundStatus {
+  NONE
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+/// A shopper's purchase on one website. Line items keep product names after catalogue edits.
+model ShopOrder {
+  id                String           @id @default(uuid()) @db.Uuid
+  websiteId         String           @db.Uuid
+  clientId          String           @db.Uuid
+  customerId        String           @db.Uuid
+  /// Per-website sequence shown as Order #1001.
+  number            Int
+  status            ShopOrderStatus  @default(PENDING)
+  currency          String           @default("INR") @db.VarChar(3)
+  totalPaise        Int
+  razorpayOrderId   String?          @unique @db.VarChar(64)
+  razorpayPaymentId String?          @db.VarChar(64)
+  razorpayRefundId  String?          @db.VarChar(64)
+  refundStatus      ShopRefundStatus @default(NONE)
+  refundedAt        DateTime?        @db.Timestamptz(6)
+  /// Set when inventory was taken for this order so retries never double-deduct.
+  stockDeductedAt   DateTime?        @db.Timestamptz(6)
+  paidAt            DateTime?        @db.Timestamptz(6)
+  failureReason     String?          @db.VarChar(300)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
+
+  website  Website         @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  customer ShopCustomer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items    ShopOrderItem[]
+
+  @@unique([websiteId, number])
+  @@index([websiteId, createdAt])
+  @@index([websiteId, status])
+  @@index([customerId, createdAt])
+  @@index([razorpayPaymentId])
+  @@index([clientId])
+  @@map("shop_orders")
+}
+
+model ShopOrderItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  orderId        String  @db.Uuid
+  productId      String? @db.Uuid
+  variantId      String? @db.Uuid
+  productName    String  @db.VarChar(160)
+  variantName    String  @db.VarChar(160)
+  unitPricePaise Int
+  quantity       Int
+  lineTotalPaise Int
+
+  order   ShopOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("shop_order_items")
 }

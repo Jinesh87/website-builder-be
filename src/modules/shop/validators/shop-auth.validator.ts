@@ -71,3 +71,11 @@ export const shopCartItemParamsSchema = Joi.object({
   websiteId: Joi.string().guid().required(),
   itemId: Joi.string().guid().required(),
 });
+
+const razorpayId = Joi.string().trim().max(64).pattern(/^[A-Za-z0-9_]+$/).required();
+
+export const shopCheckoutConfirmSchema = Joi.object({
+  razorpayOrderId: razorpayId,
+  razorpayPaymentId: razorpayId,
+  razorpaySignature: Joi.string().trim().hex().max(128).required(),
+});

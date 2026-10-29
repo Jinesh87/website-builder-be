@@ -8,13 +8,43 @@ export type ShopCustomerView = {
   createdAt: string;
 };
 
+export type ShopOrderStatusLabel =
+  | "pending"
+  | "paid"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "failed"
+  | "cancelled";
+
+export type ShopRefundStatusLabel = "none" | "pending" | "processed" | "failed";
+
 export type ShopOrderSummary = {
   id: string;
   number: string;
-  status: "pending" | "paid" | "failed" | "cancelled";
+  status: ShopOrderStatusLabel;
+  refundStatus: ShopRefundStatusLabel;
   totalPaise: number;
   currency: "INR";
   createdAt: string;
+  refundedAt: string | null;
+};
+
+export type ShopCheckoutSession = {
+  orderId: string;
+  orderNumber: string;
+  keyId: string;
+  razorpayOrderId: string;
+  amountPaise: number;
+  currency: string;
+  businessName: string;
+  prefill: { name: string; email?: string; contact?: string };
+};
+
+export type ShopCheckoutConfirmation = {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
 };
 
 export type ShopCartItemSummary = {

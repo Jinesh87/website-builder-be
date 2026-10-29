@@ -88,6 +88,27 @@ export function captureRazorpayPayment(
   return call(keys, "POST", `/payments/${encodeURIComponent(paymentId)}/capture`, { amount: amountPaise, currency });
 }
 
+export type RazorpayRefund = {
+  id: string;
+  payment_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+};
+
+/** Full refund when `amountPaise` is omitted. Only works on captured payments. */
+export function createRazorpayRefund(
+  keys: RazorpayKeys,
+  paymentId: string,
+  input: { amountPaise?: number; notes?: Record<string, string>; receipt?: string } = {},
+): Promise<RazorpayRefund> {
+  return call(keys, "POST", `/payments/${encodeURIComponent(paymentId)}/refund`, {
+    ...(input.amountPaise !== undefined ? { amount: input.amountPaise } : {}),
+    ...(input.notes ? { notes: input.notes } : {}),
+    ...(input.receipt ? { receipt: input.receipt } : {}),
+  });
+}
+
 export function createRazorpayPlan(
   keys: RazorpayKeys,
   input: { period: RazorpayPlanPeriod; interval: number; itemName: string; amountPaise: number; currency: string },

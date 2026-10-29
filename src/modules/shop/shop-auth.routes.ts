@@ -8,6 +8,7 @@ import {
   shopAuthWebsiteParamsSchema,
   shopCartItemParamsSchema,
   shopChangePasswordSchema,
+  shopCheckoutConfirmSchema,
   shopEmailOnlySchema,
   shopLoginSchema,
   shopProfileUpdateSchema,
@@ -107,6 +108,22 @@ shopAuthRouter.delete(
   validate(shopCartItemParamsSchema, "params"),
   authenticateShopCustomer,
   shopAuthController.removeCartItem,
+);
+
+shopAuthRouter.post(
+  "/checkout",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-checkout", max: 20, windowSeconds: MINUTE }),
+  shopAuthController.startCheckout,
+);
+shopAuthRouter.post(
+  "/checkout/confirm",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-checkout-confirm", max: 30, windowSeconds: MINUTE }),
+  validate(shopCheckoutConfirmSchema),
+  shopAuthController.confirmCheckout,
 );
 
 export default shopAuthRouter;

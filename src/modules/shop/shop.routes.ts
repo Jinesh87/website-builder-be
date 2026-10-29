@@ -13,6 +13,9 @@ import {
   shopInventoryLogQuerySchema,
   shopInventoryParamsSchema,
   shopInventoryQuerySchema,
+  shopOrderParamsSchema,
+  shopOrderQuerySchema,
+  shopOrderStatusSchema,
   shopPaymentSchema,
   shopProductParamsSchema,
   shopProductQuerySchema,
@@ -58,6 +61,15 @@ shopRouter.get("/inventory/log", websiteParams, validate(shopInventoryLogQuerySc
 
 shopRouter.get("/customers", websiteParams, validate(shopCustomerQuerySchema, "query"), shopController.listCustomers);
 shopRouter.get("/customers/:customerId", validate(shopCustomerParamsSchema, "params"), shopController.getCustomer);
+
+shopRouter.get("/orders", websiteParams, validate(shopOrderQuerySchema, "query"), shopController.listOrders);
+shopRouter.get("/orders/:orderId", validate(shopOrderParamsSchema, "params"), shopController.getOrder);
+shopRouter.patch(
+  "/orders/:orderId",
+  validate(shopOrderParamsSchema, "params"),
+  validate(shopOrderStatusSchema),
+  shopController.updateOrderStatus,
+);
 
 shopRouter.get("/payments", websiteParams, shopController.getPaymentConfig);
 shopRouter.put("/payments", websiteParams, validate(shopPaymentSchema), shopController.updatePaymentConfig);
