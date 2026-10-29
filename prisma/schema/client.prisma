@@ -1,19 +1,19 @@
 /// Client workspace. Every client-owned record (websites, pages, media, settings) carries a clientId.
 model Client {
-  id           String       @id @default(uuid()) @db.Uuid
-  businessName String       @db.VarChar(160)
-  address      String?      @db.VarChar(500)
-  source       ClientSource
+  id                 String       @id @default(uuid()) @db.Uuid
+  businessName       String       @db.VarChar(160)
+  address            String?      @db.VarChar(500)
+  source             ClientSource
   /// When false, client users can edit but only a Super Admin can publish.
-  canPublish   Boolean      @default(true)
+  canPublish         Boolean      @default(true)
   /// When true, the client may turn a shop on for each of their websites.
-  shopFeatureEnabled Boolean @default(false)
+  shopFeatureEnabled Boolean      @default(false)
   /// AI model chosen by the client; null = use the platform default from AiConfig.
-  aiModel      String?      @db.VarChar(100)
+  aiModel            String?      @db.VarChar(100)
   /// Platform-owned workspace (the Template Studio): hidden from client lists, never billed or published.
-  isInternal   Boolean      @default(false)
-  createdAt    DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime     @updatedAt @db.Timestamptz(6)
+  isInternal         Boolean      @default(false)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @db.Timestamptz(6)
 
   users                User[]
   websites             Website[]

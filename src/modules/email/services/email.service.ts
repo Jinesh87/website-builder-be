@@ -8,6 +8,7 @@ import {
   clientInviteEmail,
   contactFormLeadEmail,
   emailChangeCodeEmail,
+  enquiryReplyEmail,
   hostingNoticeEmail,
   passwordResetEmail,
   salesInquiryEmail,
@@ -153,6 +154,19 @@ export class EmailService {
     await this.send(params.to, (brand) => salesInquiryEmail({ brand, ...params }), {
       replyTo: params.senderEmail,
     });
+  }
+
+  /** `replyTo` is the sales inbox, so the customer's answer reaches the team rather than the sending address. */
+  async sendEnquiryReply(params: {
+    to: string;
+    replyTo: string;
+    subject: string;
+    message: string;
+    customerName: string;
+    originalMessage: string;
+    submittedAt: Date;
+  }) {
+    await this.send(params.to, (brand) => enquiryReplyEmail({ brand, ...params }), { replyTo: params.replyTo });
   }
 
   private async send(

@@ -58,9 +58,9 @@ model ProductVariant {
   /// Units on hand. Carried across product edits when the variant name stays the same.
   quantity   Int     @default(0)
 
-  product    Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  movements  InventoryMovement[]
-  cartItems  ShopCartItem[]
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  movements InventoryMovement[]
+  cartItems ShopCartItem[]
 
   @@index([productId, sortOrder])
   @@map("product_variants")

@@ -154,6 +154,40 @@ export function testEmail(params: { brand: string }): RenderedEmail {
   };
 }
 
+/** A Super Admin's reply to a contact-page enquiry, with the customer's original message quoted below. */
+export function enquiryReplyEmail(params: {
+  brand: string;
+  subject: string;
+  message: string;
+  customerName: string;
+  originalMessage: string;
+  submittedAt: Date;
+}): RenderedEmail {
+  const reply = escapeHtml(params.message.trim()).replace(/\n/g, "<br/>");
+  const original = escapeHtml(params.originalMessage.trim()).replace(/\n/g, "<br/>");
+  const sentOn = params.submittedAt.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const quoteHeading = `On ${sentOn} IST, ${params.customerName.trim()} wrote:`;
+
+  return {
+    subject: params.subject.replace(/[\r\n]+/g, " ").trim(),
+    html: layout(
+      params.brand,
+      `<div style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#1a1d23;word-break:break-word;">${reply}</div>
+       <p style="margin:0 0 6px;font-size:12px;color:#7a8090;">${escapeHtml(quoteHeading)}</p>
+       <div style="margin:0;padding:10px 14px;border-left:3px solid #e3e5ea;font-size:13px;line-height:1.55;color:#4b5160;word-break:break-word;">${original}</div>`,
+    ),
+    text: `${params.message.trim()}\n\n${quoteHeading}\n${params.originalMessage
+      .trim()
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n")}`,
+  };
+}
+
 export type ContactLeadField = { label: string; value: string };
 
 function contactFieldsLeadEmail(params: {
