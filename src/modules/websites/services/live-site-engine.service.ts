@@ -1371,7 +1371,7 @@ Sitemap: ${domain}/sitemap.xml
                 ${introParagraph ? `<p class="subtitle">${escapeHtml(introParagraph)}</p>` : ""}
                 <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 1.25rem;">
                   ${email ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(email)}" style="color: var(--color-primary);">${escapeHtml(email)}</a></div>` : ""}
-                  ${phone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(phone.replace(/\s+/g, ""))}" style="color: var(--color-primary);">${escapeHtml(phone)}</a></div>` : ""}
+                  ${phone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(`${phone.startsWith("+") ? "+" : ""}${phone.replace(/\D/g, "")}`)}" style="color: var(--color-primary);">${escapeHtml(phone)}</a></div>` : ""}
                   ${address ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Address</strong><p style="color: var(--color-muted); font-size: 0.95rem;">${escapeHtml(address)}</p></div>` : ""}
                 </div>
               </div>
