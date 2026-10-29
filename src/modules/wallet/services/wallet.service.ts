@@ -137,11 +137,20 @@ export type RazorpayWebhookPayment = {
   error_description?: string | null;
 };
 
+export type RazorpayWebhookRefund = {
+  id: string;
+  payment_id: string;
+  amount?: number;
+  currency?: string;
+  status?: string;
+};
+
 /** The parts of a Razorpay webhook body this app reads. */
 export type RazorpayWebhookEvent = {
   event?: string;
   payload?: {
     payment?: { entity?: RazorpayWebhookPayment };
+    refund?: { entity?: RazorpayWebhookRefund };
     subscription?: { entity?: RazorpaySubscription };
   };
 };

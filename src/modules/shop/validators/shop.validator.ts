@@ -153,3 +153,24 @@ export const shopCustomerParamsSchema = Joi.object({
   id: Joi.string().guid().required(),
   customerId: Joi.string().guid().required(),
 });
+
+const shopOrderStatus = Joi.string()
+  .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled")
+  .required();
+
+export const shopOrderQuerySchema = Joi.object({
+  search: Joi.string().trim().max(120).allow("").optional(),
+  status: Joi.string()
+    .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled")
+    .optional(),
+  page: Joi.number().integer().min(1).default(1),
+});
+
+export const shopOrderParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  orderId: Joi.string().guid().required(),
+});
+
+export const shopOrderStatusSchema = Joi.object({
+  status: shopOrderStatus,
+});

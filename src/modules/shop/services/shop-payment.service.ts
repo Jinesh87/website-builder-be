@@ -7,6 +7,8 @@ import { logger } from "../../../config/logger.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { checkRazorpayKeys, isValidWebhookSignature } from "../../wallet/services/razorpay.client.js";
+import type { RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
+import { shopCheckoutService } from "./shop-checkout.service.js";
 
 export type ShopPaymentConfigView = {
   configured: boolean;
@@ -127,7 +129,7 @@ export class ShopPaymentService {
     };
   }
 
-  /** Razorpay calls this on the platform domain. A valid signature is acknowledged; checkout is not built yet. */
+  /** Razorpay calls this on the platform domain. Marks matching shop orders paid (or failed). */
   async handleWebhook(websiteId: string, rawBody: Buffer, signature: string | undefined): Promise<void> {
     const config = await prisma.shopPaymentConfig.findUnique({
       where: { websiteId },
@@ -137,7 +139,14 @@ export class ShopPaymentService {
     if (!signature || !secret || !isValidWebhookSignature(secret, rawBody, signature)) {
       throw new AppError(400, "Invalid Razorpay signature", "WEBHOOK_SIGNATURE_INVALID");
     }
-    logger.info({ websiteId }, "Shop Razorpay webhook accepted");
+    let event: RazorpayWebhookEvent;
+    try {
+      event = JSON.parse(rawBody.toString("utf8")) as RazorpayWebhookEvent;
+    } catch {
+      throw new AppError(400, "Invalid Razorpay webhook body", "WEBHOOK_BODY_INVALID");
+    }
+    const handled = await shopCheckoutService.applyWebhook(websiteId, event);
+    logger.info({ websiteId, event: event.event, handled }, "Shop Razorpay webhook accepted");
   }
 
   private toView(website: {

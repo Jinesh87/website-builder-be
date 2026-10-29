@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { clearShopAuthCookies, getShopRefreshToken, setShopAuthCookies } from "../../../common/utils/cookies.js";
 import { shopAuthService } from "../services/shop-auth.service.js";
+import { shopCheckoutService } from "../services/shop-checkout.service.js";
 import type { ShopAuthResult } from "../types/shop-auth.types.js";
 
 type WebsiteParams = { websiteId: string };
@@ -160,6 +161,36 @@ export class ShopAuthController {
     try {
       res.status(200).json({
         cartItems: await shopAuthService.removeCartItem(req.params.websiteId, req.shopCustomer!.id, req.params.itemId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  startCheckout = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        checkout: await shopCheckoutService.startCheckout(req.params.websiteId, req.shopCustomer!.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  confirmCheckout = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        order: await shopCheckoutService.confirmCheckout(req.params.websiteId, req.shopCustomer!.id, req.body),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getOrder = async (req: Request<WebsiteParams & { orderId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        order: await shopCheckoutService.getCustomerOrder(req.params.websiteId, req.shopCustomer!.id, req.params.orderId),
       });
     } catch (error) {
       next(error);
