@@ -229,6 +229,11 @@ export class WebsiteController {
     try {
       // Ensure user has access to this website
       const website = await websiteService.get(req.params.id, req.user!);
+
+      if (website.builderType !== BuilderType.AI) {
+        throw new AppError(400, "AI builder assistant is only available for AI-generated websites.", "AI_NOT_SUPPORTED");
+      }
+
       const abortController = new AbortController();
 
       // `res` (not `req`) "close" means the client disconnected; `req` closes once the body is read.
