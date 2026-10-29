@@ -29,6 +29,7 @@ import templateCategoriesRouter from "./modules/websites/template-category.route
 import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
 import shopAuthRouter from "./modules/shop/shop-auth.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
+import adminEnquiriesRouter from "./modules/contact/admin-enquiry.routes.js";
 import contactRouter from "./modules/contact/contact.routes.js";
 import {
   adminWalletRouter,
@@ -99,6 +100,7 @@ app.use("/api/admin/wallet", adminWalletRouter);
 app.use("/api/admin/hosting", adminHostingRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin/clients", clientsRouter);
+app.use("/api/admin/enquiries", adminEnquiriesRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);
 app.use("/api/admin/templates", adminTemplatesRouter);
 app.use("/api/admin/template-categories", templateCategoriesRouter);

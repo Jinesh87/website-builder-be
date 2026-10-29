@@ -38,22 +38,22 @@ model WalletTransaction {
 
 /// A Razorpay order created for a purchase of connects.
 model PaymentOrder {
-  id                String             @id @default(uuid()) @db.Uuid
-  clientId          String             @db.Uuid
-  userId            String?            @db.Uuid
-  razorpayOrderId   String             @unique @db.VarChar(64)
-  razorpayPaymentId String?            @unique @db.VarChar(64)
+  id                     String             @id @default(uuid()) @db.Uuid
+  clientId               String             @db.Uuid
+  userId                 String?            @db.Uuid
+  razorpayOrderId        String             @unique @db.VarChar(64)
+  razorpayPaymentId      String?            @unique @db.VarChar(64)
   /// Connects credited once paid.
-  connects          Int
-  amountPaise       Int
-  currency          String             @default("INR") @db.VarChar(3)
-  status            PaymentOrderStatus @default(CREATED)
-  failureReason     String?            @db.VarChar(500)
+  connects               Int
+  amountPaise            Int
+  currency               String             @default("INR") @db.VarChar(3)
+  status                 PaymentOrderStatus @default(CREATED)
+  failureReason          String?            @db.VarChar(500)
   /// Set when an auto top-up charged it rather than a one-off checkout.
-  razorpaySubscriptionId String?       @db.VarChar(64)
-  paidAt            DateTime?          @db.Timestamptz(6)
-  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+  razorpaySubscriptionId String?            @db.VarChar(64)
+  paidAt                 DateTime?          @db.Timestamptz(6)
+  createdAt              DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(6)
 
   client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user        User?              @relation("PaymentOrderUser", fields: [userId], references: [id], onDelete: SetNull)

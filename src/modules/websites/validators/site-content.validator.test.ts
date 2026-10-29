@@ -89,7 +89,7 @@ test("Do's & Don'ts cards keep their variant, checklist points and bottom button
   assert.deepEqual(value.data.bottomCta, section.data.bottomCta);
 });
 
-test("film cards keep an uploaded video or a YouTube link, and can omit the video", () => {
+test("film cards keep an uploaded video or a YouTube link, and a removed video stays empty", () => {
   const film = (videoUrl?: string) => ({
     id: "cards-film",
     type: "cards",
@@ -106,7 +106,7 @@ test("film cards keep an uploaded video or a YouTube link, and can omit the vide
           subtitle: "MUSIC VIDEOS",
           badge: "03:45",
           description: "Broadcast commercial.",
-          ...(videoUrl ? { videoUrl } : {}),
+          ...(videoUrl !== undefined ? { videoUrl } : {}),
         },
       ],
     },
@@ -122,9 +122,13 @@ test("film cards keep an uploaded video or a YouTube link, and can omit the vide
     assert.equal(value.data.items[0].videoUrl, videoUrl);
   }
 
-  const cleared = sectionSchema.validate(film(), OPTIONS);
-  assert.equal(cleared.error, undefined);
-  assert.equal(cleared.value.data.items[0].videoUrl, undefined);
+  const unset = sectionSchema.validate(film(), OPTIONS);
+  assert.equal(unset.error, undefined);
+  assert.equal(unset.value.data.items[0].videoUrl, undefined);
+
+  const removed = sectionSchema.validate(film(""), OPTIONS);
+  assert.equal(removed.error, undefined);
+  assert.equal(removed.value.data.items[0].videoUrl, "");
 
   const rejected = sectionSchema.validate(film("https://vimeo.com/123456789"), OPTIONS);
   assert.ok(rejected.error);

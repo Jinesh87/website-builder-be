@@ -1,4 +1,5 @@
 import { AppError } from "../../../common/errors/AppError.js";
+import { BuilderType } from "../../../common/constants/website.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
@@ -129,6 +130,11 @@ export class AiSeoService {
     actor: AuthUser,
   ): Promise<PageSeoResult> {
     const website = await websiteService.get(websiteId, actor);
+
+    if (website.builderType !== BuilderType.AI) {
+      throw new AppError(400, "AI SEO is only available for AI-generated websites.", "AI_NOT_SUPPORTED");
+    }
+
     const targetPage = website.draft.pages.find((p) => p.id === pageId);
 
     if (!targetPage) {
@@ -228,6 +234,11 @@ Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and 
     actor: AuthUser,
   ): Promise<PageSeoContentReviewResult> {
     const website = await websiteService.get(websiteId, actor);
+
+    if (website.builderType !== BuilderType.AI) {
+      throw new AppError(400, "AI SEO is only available for AI-generated websites.", "AI_NOT_SUPPORTED");
+    }
+
     const targetPage = website.draft.pages.find((p) => p.id === pageId);
 
     if (!targetPage) {
