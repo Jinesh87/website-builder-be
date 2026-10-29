@@ -820,6 +820,8 @@ export type SectionDataMap = {
       iconColor?: string;
       featured?: boolean;
       checklist?: Array<string | { text: string; icon?: (typeof CARDS_CHECKLIST_ICONS)[number] }>;
+      /** Optional. A YouTube link or an uploaded video file. Omit it to leave the frame without a video. */
+      videoUrl?: string;
     }[];
   };
   testimonials: {
