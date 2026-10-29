@@ -215,8 +215,7 @@ export const MARKETING_AGENCY: BusinessTemplate = businessTemplate({
               label: "Trusted by fast-growing brands",
               logos: [{ label: "Lumen Health" }, { label: "Stackwise" }, { label: "Atelier Skin" }, { label: "Northline" }, { label: "Brightpay" }],
             },
-          },
-          { customColors: { gradientFrom: "#8B6CFF", gradientTo: "#3DD9C1" } },
+          }
         ),
         channels,
         results,
@@ -229,9 +228,9 @@ export const MARKETING_AGENCY: BusinessTemplate = businessTemplate({
           iconStyle: "glow-icon",
           cardStyle: "glow",
           items: [
-            { icon: "chart", iconColor: "purple", title: "SEO & content", description: "Technical SEO, content and links that compound every month.", link: { label: "Learn more", href: "/services" } },
-            { icon: "bolt", iconColor: "cyan", title: "Paid media", description: "Google, Meta, TikTok and LinkedIn campaigns tuned weekly.", link: { label: "Learn more", href: "/services" } },
-            { icon: "heart", iconColor: "pink", title: "Social & creators", description: "Content, community and creator partnerships that convert.", link: { label: "Learn more", href: "/services" } },
+            { icon: "chart", title: "SEO & content", description: "Technical SEO, content and links that compound every month.", link: { label: "Learn more", href: "/services" } },
+            { icon: "bolt", title: "Paid media", description: "Google, Meta, TikTok and LinkedIn campaigns tuned weekly.", link: { label: "Learn more", href: "/services" } },
+            { icon: "heart", title: "Social & creators", description: "Content, community and creator partnerships that convert.", link: { label: "Learn more", href: "/services" } },
           ],
         }),
         section(

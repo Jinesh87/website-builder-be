@@ -156,10 +156,6 @@ export const UX_DESIGNER: BusinessTemplate = businessTemplate({
           },
           {
             background: "default",
-            customColors: {
-              gradientFrom: "#8B6CFF",
-              gradientTo: "#38BDF8",
-            },
           },
         ),
         section(
@@ -248,25 +244,21 @@ export const UX_DESIGNER: BusinessTemplate = businessTemplate({
           items: [
             {
               icon: "chart",
-              iconColor: "purple",
               title: "1. Research & Synthesis",
               description: "Uncovering user pain points through contextual inquiry, session recordings, and metric funnels.",
             },
             {
               icon: "layers",
-              iconColor: "cyan",
               title: "2. Architecture & Wireframes",
               description: "Mapping information hierarchy and mental models before touching high-fidelity visual polish.",
             },
             {
               icon: "sparkles",
-              iconColor: "blue",
               title: "3. High-Fidelity & Motion",
               description: "Crafting tactile, fluid interfaces with micro-interactions and rigorous multi-state component behavior.",
             },
             {
               icon: "rocket",
-              iconColor: "green",
               title: "4. Ship & Iterate",
               description: "Collaborating directly in code with engineers to ensure zero design debt from Figma to production.",
             },
@@ -456,19 +448,16 @@ export const UX_DESIGNER: BusinessTemplate = businessTemplate({
           items: [
             {
               icon: "sparkles",
-              iconColor: "purple",
               title: "Principal Product Designer (2023 – Present)",
               description: "Leading core AI workflow architecture and spatial UI initiatives. Mentoring a high-performing team of 14 product and interaction designers.",
             },
             {
               icon: "bolt",
-              iconColor: "blue",
               title: "Staff Designer @ Stripe Ecosystem (2020 – 2023)",
               description: "Spearheaded merchant onboarding flows and developer dashboard redesigns, lifting checkout completion rates globally.",
             },
             {
               icon: "layers",
-              iconColor: "cyan",
               title: "Senior Lead Designer @ Method Studio (2017 – 2020)",
               description: "Delivered digital transformation engagements for global brands including Spotify, Nike Lab, and Monzo Bank.",
             },

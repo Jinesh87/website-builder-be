@@ -300,7 +300,7 @@ export type CustomBlock =
 export type CustomContainerBlock = Extract<CustomBlock, { children: CustomBlock[] }>;
 
 /** Mirrors frontend/src/site-kit/types.ts. Stored in site data, so values are only ever appended. */
-export const CONTACT_VARIANTS = ["split-form", "cards-hub", "minimal-editorial", "floating-glass", "custom"] as const;
+export const CONTACT_VARIANTS = ["split-form", "cards-hub", "minimal-editorial", "floating-glass", "clapper-slate", "custom"] as const;
 export const CONTACT_FIELD_TYPES = ["text", "email", "tel", "textarea", "select", "radio", "checkboxes", "date", "number"] as const;
 export const CONTACT_FIELD_WIDTHS = ["full", "half"] as const;
 export const CONTACT_BLOCK_TYPES = ["heading", "text", "badge", "info", "form", "map", "button", "image", "divider"] as const;
@@ -409,6 +409,8 @@ export type BrandDisplayMode = (typeof BRAND_DISPLAY_MODES)[number];
 
 /** Icon badge colours of feature cards; "default" follows the theme. */
 export const FEATURE_ICON_COLORS = [
+  "primary",
+  "secondary",
   "orange",
   "green",
   "blue",
@@ -889,6 +891,11 @@ export type SectionDataMap = {
     variant?: (typeof CONTACT_VARIANTS)[number];
     eyebrow?: string;
     heading: string;
+    solidHeading?: string;
+    outlineHeading?: string;
+    recText?: string;
+    timecode?: string;
+    timecodeMode?: "live" | "static";
     text?: string;
     email?: string;
     phone?: string;
@@ -899,6 +906,9 @@ export type SectionDataMap = {
     submitLabel: string;
     formHeading?: string;
     serviceOptions?: string[];
+    budgetOptions?: string[];
+    sceneTakeLabel?: string;
+    socialLinksText?: string;
     channels?: {
       label: string;
       value: string;
@@ -1201,6 +1211,7 @@ export type BlogData = {
   variant?: "default" | "vintage-journal";
   eyebrow?: string;
   title: string;
+  italicTitle?: string;
   subtitle?: string;
   categories: string[];
   layout?: "grid-3" | "grid-2" | "magazine";

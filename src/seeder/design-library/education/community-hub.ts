@@ -224,25 +224,21 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
             items: [
               {
                 icon: "heart",
-                iconColor: "green",
                 title: "Grassroots Autonomy",
                 description: "Every neighborhood chapter votes on its own budget, local priorities, and community projects through quadratic voting.",
               },
               {
                 icon: "shield",
-                iconColor: "blue",
                 title: "Radical Transparency",
                 description: "All financial ledgers, grant decisions, and meeting notes are published openly in real time on our public repository.",
               },
               {
                 icon: "sparkles",
-                iconColor: "yellow",
                 title: "Intergenerational Wisdom",
                 description: "Fostering collaboration between elder knowledge keepers, youth activists, and working families across every project.",
               },
               {
                 icon: "bolt",
-                iconColor: "orange",
                 title: "Immediate Tangible Action",
                 description: "We favor planting trees and repairing bicycles over endless committee debates. Action creates hope.",
               },
@@ -474,19 +470,16 @@ export const COMMUNITY_HUB: BusinessTemplate = businessTemplate({
             items: [
               {
                 icon: "heart",
-                iconColor: "green",
                 title: "Radical Inclusivity",
                 description: "Everyone is welcome at the table, regardless of background, technical skills, or financial means.",
               },
               {
                 icon: "shield",
-                iconColor: "blue",
                 title: "Open Knowledge",
                 description: "All blueprints, microgrid schematics, and curriculum materials are licensed under Creative Commons for free use.",
               },
               {
                 icon: "bolt",
-                iconColor: "yellow",
                 title: "Mutual Care",
                 description: "We show up for our neighbors in times of both everyday need and climate crisis with immediate, tangible support.",
               },

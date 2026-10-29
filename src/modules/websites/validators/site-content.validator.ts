@@ -1171,10 +1171,15 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     variant: flexibleVariant(
       CONTACT_VARIANTS,
       "split-form",
-      { "split": "split-form", "cards": "cards-hub", "minimal": "minimal-editorial", "floating": "floating-glass" },
+      { "split": "split-form", "cards": "cards-hub", "minimal": "minimal-editorial", "floating": "floating-glass", "clapper": "clapper-slate" },
     ),
     eyebrow: optionalText(80),
     heading: text(200).required(),
+    solidHeading: optionalText(100),
+    outlineHeading: optionalText(100),
+    recText: optionalText(100),
+    timecode: optionalText(50),
+    timecodeMode: Joi.string().valid("live", "static").optional(),
     text: optionalText(500),
     email: optionalText(255).meta(meta({ fact: "contactEmail" })),
     phone: optionalText(32).meta(meta({ fact: "contactPhone" })),
@@ -1185,6 +1190,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     submitLabel: text(40).required(),
     formHeading: optionalText(120),
     serviceOptions: Joi.array().items(text(60)).max(8).optional(),
+    budgetOptions: Joi.array().items(text(60)).max(10).optional(),
+    sceneTakeLabel: optionalText(100),
+    socialLinksText: optionalText(200),
     channels: Joi.array()
       .items(
         Joi.object({
@@ -1436,6 +1444,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     variant: Joi.string().valid("default", "vintage-journal").optional(),
     eyebrow: optionalText(120),
     title: text(160).required(),
+    italicTitle: optionalText(100),
     subtitle: optionalText(320),
     categories: Joi.array().items(text(60)).max(20).optional(),
     layout: Joi.string().valid("grid-3", "grid-2", "magazine").optional(),
