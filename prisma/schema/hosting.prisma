@@ -87,25 +87,25 @@ model HostingSubscription {
 
 /// A Razorpay order for one hosting period. Package, cycle and price are fixed when it is created.
 model HostingOrder {
-  id                String             @id @default(uuid()) @db.Uuid
-  clientId          String             @db.Uuid
-  websiteId         String?            @db.Uuid
-  userId            String?            @db.Uuid
-  packageId         String?            @db.Uuid
-  packageName       String             @db.VarChar(60)
-  cycle             BillingCycle
-  amountPaise       Int
-  currency          String             @default("INR") @db.VarChar(3)
-  razorpayOrderId   String             @unique @db.VarChar(64)
-  razorpayPaymentId String?            @unique @db.VarChar(64)
+  id                     String             @id @default(uuid()) @db.Uuid
+  clientId               String             @db.Uuid
+  websiteId              String?            @db.Uuid
+  userId                 String?            @db.Uuid
+  packageId              String?            @db.Uuid
+  packageName            String             @db.VarChar(60)
+  cycle                  BillingCycle
+  amountPaise            Int
+  currency               String             @default("INR") @db.VarChar(3)
+  razorpayOrderId        String             @unique @db.VarChar(64)
+  razorpayPaymentId      String?            @unique @db.VarChar(64)
   /// PAID only once the period is recorded; a captured payment that couldn't be applied stays CREATED with a reason.
-  status            PaymentOrderStatus @default(CREATED)
-  failureReason     String?            @db.VarChar(500)
+  status                 PaymentOrderStatus @default(CREATED)
+  failureReason          String?            @db.VarChar(500)
   /// Set when autopay charged it rather than a one-off checkout.
-  razorpaySubscriptionId String?       @db.VarChar(64)
-  paidAt            DateTime?          @db.Timestamptz(6)
-  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+  razorpaySubscriptionId String?            @db.VarChar(64)
+  paidAt                 DateTime?          @db.Timestamptz(6)
+  createdAt              DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(6)
 
   client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   website Website?        @relation(fields: [websiteId], references: [id], onDelete: SetNull)

@@ -1,0 +1,63 @@
+/// A message submitted from the public marketing contact form.
+model ContactInquiry {
+  id          String               @id @default(uuid()) @db.Uuid
+  name        String               @db.VarChar(120)
+  email       String               @db.VarChar(255)
+  phone       String?              @db.VarChar(50)
+  subject     String               @db.VarChar(200)
+  message     String               @db.VarChar(5000)
+  /// Where the team is with it. Whether it has been opened is tracked separately in readAt.
+  status      ContactInquiryStatus @default(NEW)
+  emailStatus InquiryEmailStatus   @default(PENDING)
+  /// Short reason when the sales email was not sent.
+  emailError  String?              @db.VarChar(300)
+  /// When a Super Admin first opened it; null means unread.
+  readAt      DateTime?            @db.Timestamptz(6)
+  createdAt   DateTime             @default(now()) @db.Timestamptz(6)
+
+  activity ContactInquiryActivity[]
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@map("contact_inquiries")
+}
+
+/// Timeline of an enquiry: internal notes, status changes and sales-email attempts.
+model ContactInquiryActivity {
+  id        String                     @id @default(uuid()) @db.Uuid
+  inquiryId String                     @db.Uuid
+  kind      ContactInquiryActivityKind
+  /// The note text, the reply sent, the new status, or why the email was not sent.
+  body      String?                    @db.VarChar(5000)
+  /// Null for automatic entries.
+  actorId   String?                    @db.Uuid
+  createdAt DateTime                   @default(now()) @db.Timestamptz(6)
+
+  inquiry ContactInquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  actor   User?          @relation("ContactInquiryActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([inquiryId, createdAt])
+  @@map("contact_inquiry_activity")
+}
+
+enum ContactInquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  SPAM
+}
+
+enum InquiryEmailStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum ContactInquiryActivityKind {
+  NOTE
+  REPLY_SENT
+  STATUS_CHANGED
+  EMAIL_SENT
+  EMAIL_NOT_SENT
+}

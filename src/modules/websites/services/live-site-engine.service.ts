@@ -1371,7 +1371,7 @@ Sitemap: ${domain}/sitemap.xml
                 ${introParagraph ? `<p class="subtitle">${escapeHtml(introParagraph)}</p>` : ""}
                 <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 1.25rem;">
                   ${email ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Email</strong><a href="mailto:${escapeHtml(email)}" style="color: var(--color-primary);">${escapeHtml(email)}</a></div>` : ""}
-                  ${phone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(phone.replace(/\s+/g, ""))}" style="color: var(--color-primary);">${escapeHtml(phone)}</a></div>` : ""}
+                  ${phone ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Phone</strong><a href="tel:${escapeHtml(`${phone.startsWith("+") ? "+" : ""}${phone.replace(/\D/g, "")}`)}" style="color: var(--color-primary);">${escapeHtml(phone)}</a></div>` : ""}
                   ${address ? `<div><strong style="color: var(--color-text); display: block; font-size: 0.875rem;">Address</strong><p style="color: var(--color-muted); font-size: 0.95rem;">${escapeHtml(address)}</p></div>` : ""}
                 </div>
               </div>
@@ -1630,6 +1630,11 @@ Sitemap: ${domain}/sitemap.xml
           const authorName = String(d.authorName || "");
           const date = String(d.date || "");
           const readTime = String(d.readTime || "");
+          const metaParts = [
+            date && `<span><strong>Date:</strong> ${escapeHtml(date)}</span>`,
+            authorName && `<span><strong>Author:</strong> ${escapeHtml(authorName)}</span>`,
+            readTime && `<span><strong>Read:</strong> ${escapeHtml(readTime)}</span>`,
+          ].filter(Boolean);
           const rawSections = Array.isArray(d.content) ? (d.content as Record<string, unknown>[]) : [];
           const coverImg =
             d.coverImage && typeof d.coverImage === "object" && "url" in d.coverImage
@@ -1643,11 +1648,13 @@ Sitemap: ${domain}/sitemap.xml
                 ${category ? `<span class="section-badge">${escapeHtml(category)}</span>` : ""}
                 <${headingTag} class="${headingClass}" style="margin: 0.75rem 0 1rem;">${escapeHtml(effectiveHeading)}</${headingTag}>
                 ${subheading || text ? `<p class="subtitle" style="margin: 0 auto 1.5rem;">${escapeHtml(subheading || text)}</p>` : ""}
-                <div style="display: flex; gap: 1.5rem; justify-content: center; font-size: 0.9rem; color: var(--color-muted); border-top: 1px solid rgba(0,0,0,0.08); border-bottom: 1px solid rgba(0,0,0,0.08); padding: 0.75rem 0;">
-                  <span><strong>Date:</strong> ${escapeHtml(date)}</span>
-                  <span><strong>Author:</strong> ${escapeHtml(authorName)}</span>
-                  <span><strong>Read:</strong> ${escapeHtml(readTime)}</span>
-                </div>
+                ${
+                  metaParts.length
+                    ? `<div style="display: flex; gap: 1.5rem; justify-content: center; font-size: 0.9rem; color: var(--color-muted); border-top: 1px solid rgba(0,0,0,0.08); border-bottom: 1px solid rgba(0,0,0,0.08); padding: 0.75rem 0;">
+                  ${metaParts.join("")}
+                </div>`
+                    : ""
+                }
               </header>
 
               ${

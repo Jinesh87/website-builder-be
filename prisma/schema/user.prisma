@@ -19,24 +19,25 @@ model User {
   client        Client?        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
 
-  websitesCreated      Website[]             @relation("WebsiteCreatedBy")
-  versionsPublished    WebsiteVersion[]      @relation("VersionPublishedBy")
-  mediaUploaded        MediaFile[]           @relation("MediaUploadedBy")
-  savedSectionsCreated SavedSection[]        @relation("SavedSectionCreatedBy")
-  templatesCreated     WebsiteTemplate[]     @relation("WebsiteTemplateCreatedBy")
-  templatesUpdated     WebsiteTemplate[]     @relation("WebsiteTemplateUpdatedBy")
+  websitesCreated      Website[]                @relation("WebsiteCreatedBy")
+  versionsPublished    WebsiteVersion[]         @relation("VersionPublishedBy")
+  mediaUploaded        MediaFile[]              @relation("MediaUploadedBy")
+  savedSectionsCreated SavedSection[]           @relation("SavedSectionCreatedBy")
+  templatesCreated     WebsiteTemplate[]        @relation("WebsiteTemplateCreatedBy")
+  templatesUpdated     WebsiteTemplate[]        @relation("WebsiteTemplateUpdatedBy")
   aiUsageLogs          AiUsageLog[]
-  generationsRequested WebsiteGeneration[]   @relation("WebsiteGenerationRequestedBy")
-  walletTransactions   WalletTransaction[]   @relation("WalletTransactionUser")
-  paymentOrders        PaymentOrder[]        @relation("PaymentOrderUser")
-  hostingSubscriptions HostingSubscription[] @relation("HostingSubscriptionCreatedBy")
-  hostingPayments      HostingPayment[]      @relation("HostingPaymentRecordedBy")
-  hostingPriceChanges  HostingPriceChange[]  @relation("HostingPriceChangedBy")
-  hostingOrders        HostingOrder[]        @relation("HostingOrderUser")
-  hostingAutopays      HostingAutopay[]      @relation("HostingAutopayUser")
-  walletAutoTopups     WalletAutoTopup[]     @relation("WalletAutoTopupUser")
-  inventoryMovements     InventoryMovement[]
-  shopOrderStatusEvents  ShopOrderStatusEvent[]
+  generationsRequested WebsiteGeneration[]      @relation("WebsiteGenerationRequestedBy")
+  walletTransactions   WalletTransaction[]      @relation("WalletTransactionUser")
+  paymentOrders        PaymentOrder[]           @relation("PaymentOrderUser")
+  hostingSubscriptions HostingSubscription[]    @relation("HostingSubscriptionCreatedBy")
+  hostingPayments      HostingPayment[]         @relation("HostingPaymentRecordedBy")
+  hostingPriceChanges  HostingPriceChange[]     @relation("HostingPriceChangedBy")
+  hostingOrders        HostingOrder[]           @relation("HostingOrderUser")
+  hostingAutopays      HostingAutopay[]         @relation("HostingAutopayUser")
+  walletAutoTopups     WalletAutoTopup[]        @relation("WalletAutoTopupUser")
+  inventoryMovements   InventoryMovement[]
+  shopOrderStatusEvents ShopOrderStatusEvent[]
+  enquiryActivity      ContactInquiryActivity[] @relation("ContactInquiryActivityActor")
 
   @@index([clientId])
   @@index([role, status])
