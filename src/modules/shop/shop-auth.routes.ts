@@ -10,6 +10,7 @@ import {
   shopChangePasswordSchema,
   shopCheckoutConfirmSchema,
   shopEmailOnlySchema,
+  shopOrderParamsSchema,
   shopLoginSchema,
   shopProfileUpdateSchema,
   shopResetPasswordSchema,
@@ -124,6 +125,12 @@ shopAuthRouter.post(
   rateLimit({ name: "shop-checkout-confirm", max: 30, windowSeconds: MINUTE }),
   validate(shopCheckoutConfirmSchema),
   shopAuthController.confirmCheckout,
+);
+shopAuthRouter.get(
+  "/orders/:orderId",
+  validate(shopOrderParamsSchema, "params"),
+  authenticateShopCustomer,
+  shopAuthController.getOrder,
 );
 
 export default shopAuthRouter;

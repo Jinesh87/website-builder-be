@@ -216,9 +216,10 @@ model ShopOrder {
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 
-  website  Website         @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
-  customer ShopCustomer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  website  Website                @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  customer ShopCustomer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items    ShopOrderItem[]
+  events   ShopOrderStatusEvent[]
 
   @@unique([websiteId, number])
   @@index([websiteId, createdAt])
@@ -227,6 +228,24 @@ model ShopOrder {
   @@index([razorpayPaymentId])
   @@index([clientId])
   @@map("shop_orders")
+}
+
+/// One status change on an order. Builds the customer/admin timeline.
+model ShopOrderStatusEvent {
+  id        String          @id @default(uuid()) @db.Uuid
+  orderId   String          @db.Uuid
+  status    ShopOrderStatus
+  /// SYSTEM (checkout/payment), CLIENT (shop owner), or CUSTOMER.
+  actorType String          @db.VarChar(20)
+  note      String?         @db.VarChar(300)
+  userId    String?         @db.Uuid
+  createdAt DateTime        @default(now()) @db.Timestamptz(6)
+
+  order ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@map("shop_order_status_events")
 }
 
 model ShopOrderItem {

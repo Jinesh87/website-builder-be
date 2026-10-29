@@ -15,6 +15,7 @@ import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/servic
 import { purgeShopPages } from "./shop-cache.js";
 import type { ShopOrderSummary, ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 import { getReservedQty, releaseStockForOrder, reserveStockForOrder } from "../utils/shop-stock-hold.js";
+import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
 
 const FIRST_ORDER_NUMBER = 1001;
 
@@ -276,6 +277,9 @@ export class ShopCheckoutService {
               lineTotalPaise: line.variant.pricePaise * line.quantity,
             })),
           },
+          events: {
+            create: { status: ShopOrderStatus.PENDING, actorType: "SYSTEM", note: "Order placed — awaiting payment" },
+          },
         },
         include: { items: { select: { variantId: true, quantity: true, productName: true } } },
       });
@@ -341,6 +345,9 @@ export class ShopCheckoutService {
       data: { razorpayOrderId: razorpay.id },
     });
 
+    // Razorpay Checkout expects digits only (no spaces / dashes); bad contact often 400s validate/account.
+    const contact = customer.phone?.replace(/\D/g, "") || undefined;
+
     return {
       orderId: order.id,
       orderNumber: String(order.number),
@@ -352,7 +359,7 @@ export class ShopCheckoutService {
       prefill: {
         name: customer.fullName,
         email: customer.email,
-        ...(customer.phone ? { contact: customer.phone } : {}),
+        ...(contact ? { contact } : {}),
       },
     };
   }
@@ -517,6 +524,12 @@ export class ShopCheckoutService {
             failureReason: null,
           },
         });
+        await recordOrderStatusEvent(tx, {
+          orderId: order.id,
+          status: ShopOrderStatus.PAID,
+          actorType: "SYSTEM",
+          note: "Payment received",
+        });
 
         const variantIds = order.items.map((item) => item.variantId).filter((id): id is string => Boolean(id));
         if (variantIds.length > 0) {
@@ -544,16 +557,22 @@ export class ShopCheckoutService {
         razorpayPaymentId,
         error.message,
       );
-      await prisma.shopOrder.update({
-        where: { id: existing.id },
-        data: {
+      const failReason = refund.ok
+        ? refund.refundStatus === ShopRefundStatus.PROCESSED
+          ? `Sold out during checkout; payment refunded. ${error.message}`.slice(0, 300)
+          : `Sold out during checkout; refund in progress. ${error.message}`.slice(0, 300)
+        : `Sold out during checkout; refund failed — refund from Razorpay. ${error.message}`.slice(0, 300);
+      await prisma.$transaction(async (tx) => {
+        await tx.shopOrder.update({
+          where: { id: existing.id },
+          data: { status: ShopOrderStatus.FAILED, failureReason: failReason },
+        });
+        await recordOrderStatusEvent(tx, {
+          orderId: existing.id,
           status: ShopOrderStatus.FAILED,
-          failureReason: refund.ok
-            ? refund.refundStatus === ShopRefundStatus.PROCESSED
-              ? `Sold out during checkout; payment refunded. ${error.message}`.slice(0, 300)
-              : `Sold out during checkout; refund in progress. ${error.message}`.slice(0, 300)
-            : `Sold out during checkout; refund failed — refund from Razorpay. ${error.message}`.slice(0, 300),
-        },
+          actorType: "SYSTEM",
+          note: failReason,
+        });
       });
       await releaseStockForOrder(existing.websiteId, existing.id, existing.items);
       logger.warn(
@@ -623,13 +642,59 @@ export class ShopCheckoutService {
       where: { razorpayOrderId, status: ShopOrderStatus.PENDING },
       select: { id: true, websiteId: true, items: { select: { variantId: true } } },
     });
-    await prisma.shopOrder.updateMany({
-      where: { razorpayOrderId, status: ShopOrderStatus.PENDING },
-      data: { status: ShopOrderStatus.FAILED, failureReason: reason?.slice(0, 300) || "Payment failed" },
+    const note = reason?.slice(0, 300) || "Payment failed";
+    await prisma.$transaction(async (tx) => {
+      for (const order of pending) {
+        await tx.shopOrder.update({
+          where: { id: order.id },
+          data: { status: ShopOrderStatus.FAILED, failureReason: note },
+        });
+        await recordOrderStatusEvent(tx, {
+          orderId: order.id,
+          status: ShopOrderStatus.FAILED,
+          actorType: "SYSTEM",
+          note,
+        });
+      }
     });
     for (const order of pending) {
       await releaseStockForOrder(order.websiteId, order.id, order.items);
     }
+  }
+
+  async getCustomerOrder(websiteId: string, customerId: string, orderId: string) {
+    await this.meGuard(websiteId, customerId);
+    const order = await prisma.shopOrder.findFirst({
+      where: { id: orderId, websiteId, customerId },
+      include: {
+        items: { orderBy: { productName: "asc" } },
+        events: { orderBy: { createdAt: "asc" } },
+      },
+    });
+    if (!order) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    return {
+      ...toOrderSummary(order),
+      items: order.items.map((item) => ({
+        id: item.id,
+        productName: item.productName,
+        variantName: item.variantName,
+        unitPricePaise: item.unitPricePaise,
+        quantity: item.quantity,
+        lineTotalPaise: item.lineTotalPaise,
+      })),
+      timeline: order.events.map(toTimelineEvent),
+      failureReason: order.failureReason,
+      paidAt: order.paidAt?.toISOString() ?? null,
+      updatedAt: order.updatedAt.toISOString(),
+    };
+  }
+
+  private async meGuard(websiteId: string, customerId: string): Promise<void> {
+    const customer = await prisma.shopCustomer.findFirst({
+      where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
+      select: { id: true },
+    });
+    if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
   }
 
   async applyWebhook(websiteId: string, event: RazorpayWebhookEvent): Promise<boolean> {

@@ -6,6 +6,7 @@ import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
 import { refundStatusLabel } from "./shop-checkout.service.js";
 import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
+import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
 
 const PAGE_SIZE = 20;
 
@@ -47,6 +48,7 @@ export type ShopOrderView = {
   paidAt: string | null;
   refundedAt: string | null;
   failureReason: string | null;
+  timeline: ShopOrderTimelineEvent[];
   createdAt: string;
   updatedAt: string;
 };
@@ -107,6 +109,13 @@ function toView(order: {
     quantity: number;
     lineTotalPaise: number;
   }[];
+  events?: {
+    id: string;
+    status: ShopOrderStatus;
+    actorType: string;
+    note: string | null;
+    createdAt: Date;
+  }[];
 }): ShopOrderView {
   return {
     id: order.id,
@@ -130,6 +139,7 @@ function toView(order: {
     paidAt: order.paidAt?.toISOString() ?? null,
     refundedAt: order.refundedAt?.toISOString() ?? null,
     failureReason: order.failureReason,
+    timeline: (order.events ?? []).map(toTimelineEvent),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   };
@@ -179,6 +189,7 @@ export class ShopOrdersService {
         include: {
           customer: { select: { id: true, fullName: true, email: true, phone: true } },
           items: { orderBy: { productName: "asc" } },
+          events: { orderBy: { createdAt: "asc" } },
         },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * PAGE_SIZE,
@@ -196,6 +207,7 @@ export class ShopOrdersService {
       include: {
         customer: { select: { id: true, fullName: true, email: true, phone: true } },
         items: { orderBy: { productName: "asc" } },
+        events: { orderBy: { createdAt: "asc" } },
       },
     });
     if (!order) throw new AppError(404, "Order not found", "ORDER_NOT_FOUND");
@@ -269,17 +281,34 @@ export class ShopOrdersService {
         stockChanged = true;
       }
 
-      await tx.shopOrder.update({
-        where: { id: existing.id },
-        data: {
+      if (existing.status !== nextStatus) {
+        await tx.shopOrder.update({
+          where: { id: existing.id },
+          data: {
+            status: nextStatus,
+            ...(shouldDeduct ? { stockDeductedAt: new Date() } : {}),
+            ...(nextStatus === ShopOrderStatus.PAID && !existing.paidAt ? { paidAt: new Date() } : {}),
+            ...(nextStatus === ShopOrderStatus.FAILED || nextStatus === ShopOrderStatus.CANCELLED
+              ? {}
+              : { failureReason: null }),
+          },
+        });
+        await recordOrderStatusEvent(tx, {
+          orderId: existing.id,
           status: nextStatus,
-          ...(shouldDeduct ? { stockDeductedAt: new Date() } : {}),
-          ...(nextStatus === ShopOrderStatus.PAID && !existing.paidAt ? { paidAt: new Date() } : {}),
-          ...(nextStatus === ShopOrderStatus.FAILED || nextStatus === ShopOrderStatus.CANCELLED
-            ? {}
-            : { failureReason: null }),
-        },
-      });
+          actorType: "CLIENT",
+          note: `Status set to ${LABEL_FROM_STATUS[nextStatus]}`,
+          userId: actor.id,
+        });
+      } else if (shouldDeduct) {
+        await tx.shopOrder.update({
+          where: { id: existing.id },
+          data: {
+            ...(shouldDeduct ? { stockDeductedAt: new Date() } : {}),
+            ...(nextStatus === ShopOrderStatus.PAID && !existing.paidAt ? { paidAt: new Date() } : {}),
+          },
+        });
+      }
     });
 
     if (stockChanged) purgeShopPages(websiteId);

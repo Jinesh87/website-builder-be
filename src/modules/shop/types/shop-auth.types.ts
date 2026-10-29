@@ -30,6 +30,31 @@ export type ShopOrderSummary = {
   refundedAt: string | null;
 };
 
+export type ShopOrderTimelineEventView = {
+  id: string;
+  status: string;
+  actorType: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type ShopOrderItemView = {
+  id: string;
+  productName: string;
+  variantName: string;
+  unitPricePaise: number;
+  quantity: number;
+  lineTotalPaise: number;
+};
+
+export type ShopOrderDetailView = ShopOrderSummary & {
+  items: ShopOrderItemView[];
+  timeline: ShopOrderTimelineEventView[];
+  failureReason: string | null;
+  paidAt: string | null;
+  updatedAt: string;
+};
+
 export type ShopCheckoutSession = {
   orderId: string;
   orderNumber: string;

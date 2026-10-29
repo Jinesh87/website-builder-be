@@ -186,6 +186,16 @@ export class ShopAuthController {
       next(error);
     }
   };
+
+  getOrder = async (req: Request<WebsiteParams & { orderId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        order: await shopCheckoutService.getCustomerOrder(req.params.websiteId, req.shopCustomer!.id, req.params.orderId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const shopAuthController = new ShopAuthController();

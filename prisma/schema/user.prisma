@@ -35,7 +35,8 @@ model User {
   hostingOrders        HostingOrder[]        @relation("HostingOrderUser")
   hostingAutopays      HostingAutopay[]      @relation("HostingAutopayUser")
   walletAutoTopups     WalletAutoTopup[]     @relation("WalletAutoTopupUser")
-  inventoryMovements   InventoryMovement[]
+  inventoryMovements     InventoryMovement[]
+  shopOrderStatusEvents  ShopOrderStatusEvent[]
 
   @@index([clientId])
   @@index([role, status])

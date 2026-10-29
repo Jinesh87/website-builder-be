@@ -79,3 +79,8 @@ export const shopCheckoutConfirmSchema = Joi.object({
   razorpayPaymentId: razorpayId,
   razorpaySignature: Joi.string().trim().hex().max(128).required(),
 });
+
+export const shopOrderParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+  orderId: Joi.string().guid().required(),
+});
