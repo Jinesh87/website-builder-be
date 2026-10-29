@@ -199,25 +199,21 @@ export const DESIGN_INSTITUTE: BusinessTemplate = businessTemplate({
             items: [
               {
                 icon: "sparkles",
-                iconColor: "orange",
                 title: "Daily Studio Critique",
                 description: "Rigorous collective reviews where concepts are defended, dismantled, and reconstructed alongside senior visiting critics.",
               },
               {
                 icon: "tools",
-                iconColor: "yellow",
                 title: "Fabrication Laboratories",
                 description: "Access to 5-axis CNC routers, clay 3D extruders, letterpress casting rooms, and timber joinery workshops.",
               },
               {
                 icon: "user",
-                iconColor: "purple",
                 title: "Master Mentors",
                 description: "Every fellow studies directly under a Pritzker-level architect or AGI-laureate typography director.",
               },
               {
                 icon: "shield",
-                iconColor: "indigo",
                 title: "Permanent Archive",
                 description: "Exceptional graduate thesis artifacts and publications are preserved in the permanent museum archives of the Institute.",
               },

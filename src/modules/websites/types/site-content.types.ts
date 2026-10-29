@@ -409,6 +409,8 @@ export type BrandDisplayMode = (typeof BRAND_DISPLAY_MODES)[number];
 
 /** Icon badge colours of feature cards; "default" follows the theme. */
 export const FEATURE_ICON_COLORS = [
+  "primary",
+  "secondary",
   "orange",
   "green",
   "blue",

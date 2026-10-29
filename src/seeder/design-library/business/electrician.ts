@@ -115,12 +115,12 @@ const coreServices = section("services", {
   cardStyle: "elevated",
   showPrices: true,
   items: [
-    { icon: "bolt", iconColor: "blue", title: "Panel upgrades", description: "100A to 200A upgrades, permits and inspection handled for you.", price: "$2,450+", link: { label: "Details", href: "/services" } },
-    { icon: "rocket", iconColor: "green", title: "EV charger install", description: "Level 2 chargers for Tesla, Rivian and every major brand.", price: "$890+", badge: "Popular", link: { label: "Details", href: "/services" } },
-    { icon: "sparkles", iconColor: "yellow", title: "Smart lighting", description: "Recessed, landscape and app-controlled lighting design.", price: "$180+", link: { label: "Details", href: "/services" } },
-    { icon: "tools", iconColor: "orange", title: "Troubleshooting", description: "Tripping breakers, dead outlets and flickering lights fixed fast.", price: "$129", link: { label: "Details", href: "/services" } },
-    { icon: "shield", iconColor: "purple", title: "Safety inspections", description: "Full home inspections for buyers, sellers and landlords.", price: "$249", link: { label: "Details", href: "/services" } },
-    { icon: "cloud", iconColor: "cyan", title: "Solar & batteries", description: "Battery backup and solar tie-ins that keep the lights on.", price: "Quote", link: { label: "Details", href: "/services" } },
+    { icon: "bolt", title: "Panel upgrades", description: "100A to 200A upgrades, permits and inspection handled for you.", price: "$2,450+", link: { label: "Details", href: "/services" } },
+    { icon: "rocket", title: "EV charger install", description: "Level 2 chargers for Tesla, Rivian and every major brand.", price: "$890+", badge: "Popular", link: { label: "Details", href: "/services" } },
+    { icon: "sparkles", title: "Smart lighting", description: "Recessed, landscape and app-controlled lighting design.", price: "$180+", link: { label: "Details", href: "/services" } },
+    { icon: "tools", title: "Troubleshooting", description: "Tripping breakers, dead outlets and flickering lights fixed fast.", price: "$129", link: { label: "Details", href: "/services" } },
+    { icon: "shield", title: "Safety inspections", description: "Full home inspections for buyers, sellers and landlords.", price: "$249", link: { label: "Details", href: "/services" } },
+    { icon: "cloud", title: "Solar & batteries", description: "Battery backup and solar tie-ins that keep the lights on.", price: "Quote", link: { label: "Details", href: "/services" } },
   ],
 });
 
@@ -166,10 +166,10 @@ const process = section(
     mobileColumns: 1,
     iconStyle: "pastel-circle",
     items: [
-      { icon: "pointer", iconColor: "blue", title: "1. Book online", description: "Pick a time that suits you — evenings and Saturdays included." },
-      { icon: "chat", iconColor: "green", title: "2. Get a fixed price", description: "We diagnose on arrival and quote before we start." },
-      { icon: "tools", iconColor: "orange", title: "3. We do the work", description: "Licensed, tidy and finished to code." },
-      { icon: "check", iconColor: "purple", title: "4. Inspect & warranty", description: "Permit sign-off and your 5-year warranty by email." },
+      { icon: "pointer", title: "1. Book online", description: "Pick a time that suits you — evenings and Saturdays included." },
+      { icon: "chat", title: "2. Get a fixed price", description: "We diagnose on arrival and quote before we start." },
+      { icon: "tools", title: "3. We do the work", description: "Licensed, tidy and finished to code." },
+      { icon: "check", title: "4. Inspect & warranty", description: "Permit sign-off and your 5-year warranty by email." },
     ],
   },
   { background: "surface" },
@@ -260,8 +260,7 @@ export const ELECTRICIAN: BusinessTemplate = businessTemplate({
             image: photo("1621905251189-08b45d6a269e", "{{businessName}} electrician working on a breaker panel", 1400),
             imageStyle: "rounded",
             rating: { stars: 5, text: "4.9 from 1,800+ Google reviews", avatarCount: 5 },
-          },
-          { customColors: { gradientFrom: "#2F6BFF", gradientTo: "#7C9CFF" } },
+          }
         ),
         credentials,
         coreServices,

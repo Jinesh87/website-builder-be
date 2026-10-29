@@ -175,37 +175,31 @@ export const DEVELOPER_PORTFOLIO: BusinessTemplate = businessTemplate({
           items: [
             {
               icon: "code",
-              iconColor: "blue",
               title: "Distributed Systems Architecture",
               description: "Designing fault-tolerant, horizontally scalable microservices capable of surviving network partitions and region failovers.",
             },
             {
               icon: "rocket",
-              iconColor: "cyan",
               title: "Full-Stack Web Performance",
               description: "Obsessive sub-second TTFB, edge compute routing, code splitting, and zero-layout-shift UI engineering with Next.js & React.",
             },
             {
               icon: "lock",
-              iconColor: "indigo",
               title: "Security, Auth & Compliance",
               description: "Zero-trust IAM protocols, OAuth2/OIDC, cryptographically signed JWT sessions, and SOC2 / HIPAA compliant system audit logging.",
             },
             {
               icon: "cloud",
-              iconColor: "blue",
               title: "Cloud Native & DevOps",
               description: "Infrastructure as Code via Terraform, Kubernetes orchestration, automated canary rollouts, and GitOps CI/CD pipelines.",
             },
             {
               icon: "chart",
-              iconColor: "green",
               title: "Observability & Profiling",
               description: "End-to-end distributed tracing via OpenTelemetry, Prometheus alerting, flame graphs, and heap memory leak diagnosis.",
             },
             {
               icon: "sparkles",
-              iconColor: "purple",
               title: "AI/ML Model Serving & RAG",
               description: "Low-latency inference pipelines, semantic vector search, streaming token responders, and custom fine-tuning orchestration.",
             },
@@ -360,19 +354,16 @@ export const DEVELOPER_PORTFOLIO: BusinessTemplate = businessTemplate({
           items: [
             {
               icon: "cloud",
-              iconColor: "blue",
               title: "Staff Systems Architect @ CloudEdge (2023 – Present)",
               description: "Spearheading global caching infrastructure and low-latency edge compute runtimes across 240 global datacenters.",
             },
             {
               icon: "chart",
-              iconColor: "cyan",
               title: "Principal Backend Engineer @ ScaleData (2019 – 2023)",
               description: "Designed the real-time event streaming pipeline processing 1.8B records daily using Kafka, Go, and PostgreSQL.",
             },
             {
               icon: "code",
-              iconColor: "indigo",
               title: "Senior Full-Stack Engineer @ FinStack (2015 – 2019)",
               description: "Built zero-downtime ledger migration engines and micro-frontend banking modules with React, GraphQL, and Node.",
             },

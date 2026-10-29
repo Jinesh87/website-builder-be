@@ -174,7 +174,7 @@ export const ACCOUNTING_FIRM: BusinessTemplate = businessTemplate({
           image: photo("1554224155-6726b3ff858f", "Accountant reviewing reports with a calculator"),
           imageStyle: "rounded",
           rating: { stars: 5, text: "4.9 from 180+ Google reviews", avatarCount: 4 },
-        }, { customColors: { gradientFrom: "#2448C8", gradientTo: "#0F9D7A" } }),
+        }),
         section("stats", {
           items: [
             { value: "400+", label: "Businesses supported" },
@@ -196,21 +196,18 @@ export const ACCOUNTING_FIRM: BusinessTemplate = businessTemplate({
             items: [
               {
                 icon: "chart",
-                iconColor: "blue",
                 title: "Bookkeeping",
                 description: "Monthly books, reconciliations and reports you can actually read.",
                 link: { label: "Learn more", href: "/services" },
               },
               {
                 icon: "wallet",
-                iconColor: "green",
                 title: "Tax returns",
                 description: "Business and personal returns filed on time, with every deduction found.",
                 link: { label: "Learn more", href: "/services" },
               },
               {
                 icon: "user",
-                iconColor: "purple",
                 title: "Payroll",
                 description: "Staff paid correctly and on schedule, with filings handled for you.",
                 link: { label: "Learn more", href: "/services" },
