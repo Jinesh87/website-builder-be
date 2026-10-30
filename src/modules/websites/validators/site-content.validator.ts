@@ -173,6 +173,14 @@ const image = Joi.object({
   .allow(null)
   .meta(meta({ kind: "image" }));
 
+const galleryImage = image.keys({
+  name: optionalText(200),
+  title: optionalText(200),
+  badge: optionalText(80),
+  description: optionalText(1000),
+  link: Joi.string().trim().max(2048).allow("").optional(),
+});
+
 const blogSocialLinks = Joi.array()
   .items(
     Joi.object({
@@ -1293,10 +1301,18 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     body: text(20000).allow("").required(),
   }),
   gallery: Joi.object({
+    eyebrow: optionalText(100),
     heading: optionalText(200),
+    intro: optionalText(1000),
+    description: optionalText(1000),
     columns: columns.required(),
     mobileColumns: columns.required(),
-    images: Joi.array().items(image).max(48).required(),
+    images: Joi.array().items(galleryImage).max(48).required(),
+    align: Joi.string().valid("left", "center", "right").optional(),
+    imageAspect: Joi.string().valid("4:3", "1:1", "16:9", "3:4", "auto").optional(),
+    cardStyle: Joi.string().valid("default", "surface", "overlay").optional(),
+    imageRadius: Joi.string().valid("default", "soft", "pill", "sharp").optional(),
+    cta: link.optional(),
   }),
   logos: Joi.object({
     heading: optionalText(200),
