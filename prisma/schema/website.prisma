@@ -48,6 +48,7 @@ model Website {
   aiUsageLogs        AiUsageLog[]
   aiChatSessions     AiChatSession[]
   generation         WebsiteGeneration?
+  questionnaires     Questionnaire[]
   hosting            HostingSubscription?
   hostingOrders      HostingOrder[]
   sourceOfTemplate   WebsiteTemplate?     @relation("WebsiteTemplateSource")
