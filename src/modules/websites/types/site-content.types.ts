@@ -443,7 +443,12 @@ export type HeaderData = {
   siteName: string;
   logo?: ImageRef;
   logoDisplay?: BrandDisplayMode;
+  /** Custom logo height in pixels. Default is 38px. */
+  logoHeight?: number;
+  logoSize?: number;
   menu: HeaderMenuItem[];
+  /** Desktop position of the main navigation; falls back to settings.align, then the design's own layout. */
+  navAlign?: (typeof SECTION_ALIGNMENTS)[number];
   cta?: LinkRef;
   secondaryCta?: LinkRef;
   announcement?: string;
@@ -514,6 +519,9 @@ export type FooterData = {
   siteName: string;
   logo?: ImageRef;
   logoDisplay?: BrandDisplayMode;
+  /** Custom logo height in pixels. Default is 38px. */
+  logoHeight?: number;
+  logoSize?: number;
   tagline?: string;
   description?: string;
   columns: { title: string; links: LinkRef[] }[];
@@ -928,10 +936,24 @@ export type SectionDataMap = {
   };
   text: { variant?: "default" | "pull-quote"; heading?: string; body: string };
   gallery: {
+    eyebrow?: string;
     heading?: string;
+    intro?: string;
+    description?: string;
     columns: GridColumns;
     mobileColumns: GridColumns;
-    images: ImageRef[];
+    images: (ImageRef & {
+      name?: string;
+      title?: string;
+      badge?: string;
+      description?: string;
+      link?: string;
+    })[];
+    align?: "left" | "center" | "right";
+    imageAspect?: "4:3" | "1:1" | "16:9" | "3:4" | "auto";
+    cardStyle?: "default" | "surface" | "overlay";
+    imageRadius?: "default" | "soft" | "pill" | "sharp";
+    cta?: LinkRef;
   };
   logos: { heading?: string; grayscale: boolean; logos: ImageRef[] };
   split: {

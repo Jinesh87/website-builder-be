@@ -9,6 +9,7 @@ import { createOpenAiJsonCompletion } from "./openai-json.client.js";
 import { liveSiteEngineService } from "./live-site-engine.service.js";
 import { websiteService } from "./website.service.js";
 import type { PageView, WebsiteDetail } from "../types/website.types.js";
+import { toPlainTextDeep } from "../../../common/utils/rich-text.js";
 
 
 export type GeneratePageSeoInput = {
@@ -66,7 +67,7 @@ function extractTextSummary(page: PageView): string {
 
   for (const section of page.sections) {
     if (section.hidden) continue;
-    const data = section.data as Record<string, unknown>;
+    const data = toPlainTextDeep(section.data) as Record<string, unknown>;
     const heading = [data.heading, data.title, data.siteName].find((v) => typeof v === "string");
     const subheading = [data.subheading, data.tagline, data.subtitle].find((v) => typeof v === "string");
     const text = [data.text, data.description, data.body, data.content].find((v) => typeof v === "string");
@@ -281,7 +282,7 @@ Generate the JSON with optimal, non-duplicate "seoTitle", "seoDescription", and 
     try {
 
         const sectionsPayload = sections.map((s, idx) => {
-          const d = (s.data || {}) as Record<string, unknown>;
+          const d = toPlainTextDeep(s.data || {}) as Record<string, unknown>;
           let heading = [d.heading, d.title, d.siteName].find((v) => typeof v === "string" && v.trim().length > 0) || "";
           let subheading = [d.subheading, d.tagline, d.subtitle, d.intro].find((v) => typeof v === "string" && v.trim().length > 0) || "";
           const text = [d.text, d.description, d.body].find((v) => typeof v === "string") || "";
@@ -528,7 +529,7 @@ Respond ONLY with valid JSON.`,
 
     const sectionSuggestions: SectionSeoSuggestion[] = sections.map((sec, idx) => {
       const type = String(sec.type || "custom");
-      const d = (sec.data || {}) as Record<string, unknown>;
+      const d = toPlainTextDeep(sec.data || {}) as Record<string, unknown>;
       let heading = [d.heading, d.title, d.siteName].find((v) => typeof v === "string" && v.trim().length > 0) as string | undefined;
       let subheading = [d.subheading, d.tagline, d.subtitle, d.intro].find((v) => typeof v === "string" && v.trim().length > 0) as string | undefined;
 

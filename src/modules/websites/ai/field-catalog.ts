@@ -46,7 +46,8 @@ type Description = {
 };
 
 function limit(description: Description, rule: string): number | undefined {
-  return description.rules?.find((candidate) => candidate.name === rule)?.args?.limit;
+  // Rich text fields limit visible characters with `richMax`; to the AI it is the same as `max`.
+  return description.rules?.find((candidate) => candidate.name === rule || (rule === "max" && candidate.name === "richMax"))?.args?.limit;
 }
 
 function toSpec(name: string, description: Description): FieldSpec {
