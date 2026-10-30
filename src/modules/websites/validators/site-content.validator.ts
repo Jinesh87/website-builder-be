@@ -615,6 +615,10 @@ export const headerSchema = Joi.object({
   logo: image.optional(),
   logoDisplay,
   menu: Joi.array().items(menuItem).max(24).default([]).optional(),
+  navAlign: Joi.string()
+    .valid(...SECTION_ALIGNMENTS)
+    .optional()
+    .description("Desktop position of the main navigation. Omit to keep the design's own layout."),
   cta: link.optional(),
   secondaryCta: link.optional(),
   announcement: optionalText(200),
