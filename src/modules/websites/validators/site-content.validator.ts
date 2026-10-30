@@ -1520,6 +1520,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     backHref: Joi.string().trim().max(200).allow("").optional(),
     showDescription: Joi.boolean().optional(),
     showStock: Joi.boolean().optional(),
+    showCancellationPolicy: Joi.boolean().optional(),
   }),
   account: Joi.object({
     variant: flexibleVariant(ACCOUNT_VARIANTS, "sidebar-tabs"),

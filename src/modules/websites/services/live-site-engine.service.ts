@@ -6,6 +6,7 @@ import { siteCacheService, type CachedPagePayload } from "./site-cache.service.j
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
 import { shopService, pagePublicCatalog } from "../../shop/services/shop.service.js";
 import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
+import { cancelUntilLabel } from "../../shop/utils/shop-order-cancel.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 import { shopPage } from "../ai/shop-pages.js";
@@ -14,12 +15,26 @@ type ShopRender = {
   websiteId: string;
   authHref?: string;
   accountHref?: string;
+  cancelUntilStatus?: "paid" | "processing" | "shipped" | null;
   products: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
   list?: PublicShopList;
   live: true;
 };
+
+function cancelPolicyText(status: "paid" | "processing" | "shipped" | null | undefined): string | null {
+  switch (status) {
+    case "paid":
+      return "You can cancel your order while it is pending or paid. Paid orders are refunded automatically.";
+    case "processing":
+      return "You can cancel your order until it ships. Paid orders are refunded automatically.";
+    case "shipped":
+      return "You can cancel your order until it is delivered. Paid orders are refunded automatically.";
+    default:
+      return null;
+  }
+}
 
 export type CachedPage = CachedPagePayload;
 
@@ -150,6 +165,7 @@ const renderStateSelect = {
   address: true,
   logoMediaId: true,
   shopEnabled: true,
+  shopCancelUntilStatus: true,
   client: { select: { shopFeatureEnabled: true } },
   domains: {
     where: { status: DomainStatus.ACTIVE },
@@ -262,7 +278,12 @@ function legacyShopHtml(
       }),
     ).replace(/</g, "\\u003c");
     const stock = first ? (first.quantity > 0 ? `${first.quantity} in stock` : "Out of stock") : "";
-    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
+    const policy =
+      data.showCancellationPolicy === false ? null : cancelPolicyText(shop?.cancelUntilStatus);
+    const policyHtml = policy
+      ? `<p class="wb-product-policy" style="margin:1rem 0 0;padding:.75rem .9rem;border:1px solid rgba(0,0,0,.1);border-radius:.65rem;font-size:.88rem;line-height:1.5;color:var(--color-muted);"><strong style="display:block;margin:0 0 .25rem;color:inherit;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;">Cancellation</strong>${escapeHtml(policy)}</p>`
+      : "";
+    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}${policyHtml}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
   }
 
   const list = shop?.products ?? [];
@@ -498,11 +519,13 @@ Sitemap: ${domain}/sitemap.xml
     const paged = isList ? pagePublicCatalog(products, listQuery) : null;
     const authPage = pages.find((page) => page.sections.some((section) => section.type === "auth"));
     const accountPage = pages.find((page) => page.sections.some((section) => section.type === "account"));
+    const cancelUntilStatus = cancelUntilLabel(website.shopCancelUntilStatus);
     const shop: ShopRender | undefined = shopOpen
       ? {
           websiteId: website.id,
           authHref: authPage ? (authPage.slug === "/" ? "/" : authPage.slug) : "/login",
           accountHref: accountPage ? (accountPage.slug === "/" ? "/" : accountPage.slug) : "/account",
+          cancelUntilStatus,
           products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
           ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
           ...(paged ? { list: paged.list } : {}),
