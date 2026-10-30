@@ -31,6 +31,8 @@ import shopAuthRouter from "./modules/shop/shop-auth.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
 import adminEnquiriesRouter from "./modules/contact/admin-enquiry.routes.js";
 import contactRouter from "./modules/contact/contact.routes.js";
+import adminQuestionnairesRouter from "./modules/questionnaire/admin-questionnaire.routes.js";
+import questionnaireRouter from "./modules/questionnaire/questionnaire.routes.js";
 import {
   adminWalletRouter,
   billingSettingsRouter,
@@ -101,6 +103,7 @@ app.use("/api/admin/hosting", adminHostingRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin/clients", clientsRouter);
 app.use("/api/admin/enquiries", adminEnquiriesRouter);
+app.use("/api/admin/questionnaires", adminQuestionnairesRouter);
 app.use("/api/admin/ai-usage", aiUsageRouter);
 app.use("/api/admin/templates", adminTemplatesRouter);
 app.use("/api/admin/template-categories", templateCategoriesRouter);
@@ -114,6 +117,7 @@ app.use("/api/websites/:id/shop", shopRouter);
 app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
 app.use("/api/contact", contactRouter);
+app.use("/api/questionnaire", questionnaireRouter);
 
 app.use(publicSiteRouter);
 

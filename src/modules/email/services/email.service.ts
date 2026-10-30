@@ -11,6 +11,8 @@ import {
   enquiryReplyEmail,
   hostingNoticeEmail,
   passwordResetEmail,
+  questionnaireAdminEmail,
+  questionnaireCustomerConfirmationEmail,
   salesInquiryEmail,
   testEmail,
   verificationCodeEmail,
@@ -167,6 +169,36 @@ export class EmailService {
     submittedAt: Date;
   }) {
     await this.send(params.to, (brand) => enquiryReplyEmail({ brand, ...params }), { replyTo: params.replyTo });
+  }
+
+  async sendQuestionnaireAdminNotification(params: {
+    to: string;
+    businessName: string;
+    senderName: string;
+    senderEmail: string;
+    senderPhone: string;
+    answersSummary: string;
+    filesLink?: string | null;
+    notes?: string | null;
+    ref?: string | null;
+    submittedAt?: Date;
+  }) {
+    await this.send(
+      params.to,
+      (brand) => questionnaireAdminEmail({ brand, ...params }),
+      { replyTo: params.senderEmail },
+    );
+  }
+
+  async sendQuestionnaireCustomerConfirmation(params: {
+    to: string;
+    businessName: string;
+    customerName: string;
+  }) {
+    await this.send(
+      params.to,
+      (brand) => questionnaireCustomerConfirmationEmail({ brand, ...params }),
+    );
   }
 
   private async send(

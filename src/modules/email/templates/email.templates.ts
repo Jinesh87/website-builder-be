@@ -470,3 +470,113 @@ Support: Support@bytezoracoders.com | Phone: +91 (999) 50-70483
     text,
   };
 }
+
+export function questionnaireAdminEmail(params: {
+  brand: string;
+  to: string;
+  businessName: string;
+  senderName: string;
+  senderEmail: string;
+  senderPhone: string;
+  answersSummary: string;
+  filesLink?: string | null;
+  notes?: string | null;
+  ref?: string | null;
+  submittedAt?: Date;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand);
+  const businessName = escapeHtml(params.businessName);
+  const name = escapeHtml(params.senderName);
+  const email = escapeHtml(params.senderEmail);
+  const phone = escapeHtml(params.senderPhone);
+  const filesLink = params.filesLink ? escapeHtml(params.filesLink) : null;
+  const notes = params.notes ? escapeHtml(params.notes).replace(/\n/g, "<br/>") : null;
+  const ref = params.ref ? escapeHtml(params.ref) : null;
+  const dateStr = (params.submittedAt || new Date()).toLocaleString("en-US", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  const html = layout(
+    params.brand,
+    `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">New Website Questionnaire: ${businessName}</h1>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">A new website brief was submitted on ${dateStr} IST.</p>
+     <table style="width:100%;margin-bottom:20px;border-collapse:collapse;font-size:14px;">
+       <tr><td style="padding:6px 0;color:#64748b;width:140px;">Business:</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${businessName}</td></tr>
+       <tr><td style="padding:6px 0;color:#64748b;">Contact Name:</td><td style="padding:6px 0;color:#0f172a;">${name}</td></tr>
+       <tr><td style="padding:6px 0;color:#64748b;">Email:</td><td style="padding:6px 0;color:#0f172a;"><a href="mailto:${email}" style="color:#2563eb;">${email}</a></td></tr>
+       <tr><td style="padding:6px 0;color:#64748b;">Phone:</td><td style="padding:6px 0;color:#0f172a;"><a href="tel:${phone}" style="color:#2563eb;">${phone}</a></td></tr>
+       ${ref ? `<tr><td style="padding:6px 0;color:#64748b;">Referral / Ref:</td><td style="padding:6px 0;color:#0f172a;">${ref}</td></tr>` : ""}
+     </table>
+     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
+       <h2 style="margin:0 0 10px;font-size:14px;color:#334155;text-transform:uppercase;letter-spacing:0.5px;">Brief Answers</h2>
+       <pre style="margin:0;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#1e293b;white-space:pre-wrap;">${escapeHtml(params.answersSummary)}</pre>
+     </div>
+     ${
+       filesLink
+         ? `<p style="margin:0 0 12px;font-size:14px;color:#1e293b;"><strong>Files link:</strong> <a href="${filesLink}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${filesLink}</a></p>`
+         : ""
+     }
+     ${
+       notes
+         ? `<div style="margin-bottom:16px;"><p style="margin:0 0 4px;font-weight:600;font-size:14px;color:#1e293b;">Client notes:</p><p style="margin:0;font-size:14px;color:#475569;line-height:1.5;">${notes}</p></div>`
+         : ""
+     }
+     <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">Open Super Admin to review this submission and create the AI website.</p>`,
+  );
+
+  const text = `New Website Questionnaire: ${params.businessName}
+Submitted: ${dateStr} IST
+
+Client Details:
+- Business: ${params.businessName}
+- Name:     ${params.senderName}
+- Email:    ${params.senderEmail}
+- Phone:    ${params.senderPhone}
+${params.ref ? `- Ref:      ${params.ref}\n` : ""}
+Brief Summary:
+${params.answersSummary}
+
+${params.filesLink ? `Files Link: ${params.filesLink}\n` : ""}${params.notes ? `Notes:\n${params.notes}\n` : ""}`;
+
+  return {
+    subject: `[${params.brand}] New Website Questionnaire: ${params.businessName} (${params.senderName})`,
+    html,
+    text,
+  };
+}
+
+export function questionnaireCustomerConfirmationEmail(params: {
+  brand: string;
+  businessName: string;
+  customerName: string;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand);
+  const businessName = escapeHtml(params.businessName);
+  const customerName = escapeHtml(params.customerName);
+
+  const html = layout(
+    params.brand,
+    `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">We received your questionnaire!</h1>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${customerName},</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Thank you for submitting the website brief for <strong>${businessName}</strong>. Our team has received your answers and our AI website builder is preparing your initial design.</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">We will review your requirements and reach out to you shortly with next steps.</p>
+     <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Team</p>`,
+  );
+
+  const text = `Hi ${params.customerName},
+
+Thank you for submitting the website brief for ${params.businessName}. Our team has received your answers and our AI website builder is preparing your initial design.
+
+We will review your requirements and reach out to you shortly with next steps.
+
+Warm regards,
+The ${params.brand} Team`;
+
+  return {
+    subject: `We've received your questionnaire for ${params.businessName} - ${params.brand}`,
+    html,
+    text,
+  };
+}

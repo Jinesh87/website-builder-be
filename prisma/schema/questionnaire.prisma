@@ -1,0 +1,61 @@
+/// A questionnaire submitted by a prospective or existing client for an AI website build.
+model Questionnaire {
+  id           String              @id @default(uuid()) @db.Uuid
+  businessName String              @db.VarChar(160)
+  name         String              @db.VarChar(120)
+  phone        String              @db.VarChar(50)
+  email        String              @db.VarChar(255)
+  answers      Json
+  filesLink    String?             @db.VarChar(1000)
+  notes        String?             @db.VarChar(5000)
+  ref          String?             @db.VarChar(100)
+  clientId     String?             @db.Uuid
+  websiteId    String?             @db.Uuid
+  status       QuestionnaireStatus @default(NEW)
+  emailStatus  InquiryEmailStatus  @default(PENDING)
+  emailError   String?             @db.VarChar(300)
+  readAt       DateTime?           @db.Timestamptz(6)
+  createdAt    DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime            @updatedAt @db.Timestamptz(6)
+
+  client   Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  website  Website?                @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  activity QuestionnaireActivity[]
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([clientId])
+  @@map("questionnaires")
+}
+
+/// Timeline of a questionnaire: internal notes, status changes and notification email attempts.
+model QuestionnaireActivity {
+  id              String                    @id @default(uuid()) @db.Uuid
+  questionnaireId String                    @db.Uuid
+  kind            QuestionnaireActivityKind
+  body            String?                   @db.VarChar(5000)
+  actorId         String?                   @db.Uuid
+  createdAt       DateTime                  @default(now()) @db.Timestamptz(6)
+
+  questionnaire Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  actor         User?         @relation("QuestionnaireActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([questionnaireId, createdAt])
+  @@map("questionnaire_activity")
+}
+
+enum QuestionnaireStatus {
+  NEW
+  IN_PROGRESS
+  WEBSITE_CREATED
+  DONE
+  SPAM
+}
+
+enum QuestionnaireActivityKind {
+  NOTE
+  STATUS_CHANGED
+  EMAIL_SENT
+  EMAIL_NOT_SENT
+}
+

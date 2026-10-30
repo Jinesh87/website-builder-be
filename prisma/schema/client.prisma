@@ -32,6 +32,7 @@ model Client {
   hostingAutopays      HostingAutopay[]
   autoTopup            WalletAutoTopup?
   notifications        Notification[]
+  questionnaires       Questionnaire[]
 
   @@map("clients")
 }
