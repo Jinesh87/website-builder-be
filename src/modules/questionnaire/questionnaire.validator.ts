@@ -5,6 +5,8 @@ import {
   FEATURE_OPTIONS,
   LOGO_OPTIONS,
   LOOK_OPTIONS,
+  MAX_QUESTIONNAIRE_FILES,
+  MAX_QUESTIONNAIRE_PAGES,
   NEEDED_OPTIONS,
   PALETTE_OPTIONS,
   PHOTOS_OPTIONS,
@@ -31,9 +33,12 @@ export const questionnaireAnswersSchema = Joi.object({
   pages: Joi.array()
     .items(Joi.string().valid(...WEBSITE_PAGES))
     .min(1)
+    .max(MAX_QUESTIONNAIRE_PAGES)
+    .unique()
     .required()
     .messages({
       "array.min": "Please select at least one page.",
+      "array.max": `Please choose at most ${MAX_QUESTIONNAIRE_PAGES} pages, Home included.`,
       "any.required": "Please select pages for your website.",
     }),
   look: Joi.string()
@@ -102,6 +107,15 @@ export const questionnaireAnswersSchema = Joi.object({
       "any.only": "Please specify how soon you need the website.",
       "any.required": "Please specify how soon you need the website.",
     }),
+  themeId: Joi.string().guid().allow(null).default(null),
+  templateKey: Joi.string().trim().max(80).empty("").allow(null).default(null),
+  logoMediaId: Joi.string().guid().allow(null).default(null),
+  mediaIds: Joi.array()
+    .items(Joi.string().guid())
+    .max(MAX_QUESTIONNAIRE_FILES)
+    .unique()
+    .default([])
+    .messages({ "array.max": `You can attach up to ${MAX_QUESTIONNAIRE_FILES} files.` }),
 }).options({ stripUnknown: true });
 
 export const submitQuestionnaireSchema = Joi.object({
