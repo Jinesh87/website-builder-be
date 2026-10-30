@@ -38,6 +38,7 @@ model User {
   inventoryMovements   InventoryMovement[]
   shopOrderStatusEvents ShopOrderStatusEvent[]
   enquiryActivity      ContactInquiryActivity[] @relation("ContactInquiryActivityActor")
+  questionnaireActivity QuestionnaireActivity[] @relation("QuestionnaireActivityActor")
 
   @@index([clientId])
   @@index([role, status])
