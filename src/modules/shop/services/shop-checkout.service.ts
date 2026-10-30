@@ -16,6 +16,7 @@ import { purgeShopPages } from "./shop-cache.js";
 import type { ShopOrderSummary, ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 import { getReservedQty, releaseStockForOrder, reserveStockForOrder } from "../utils/shop-stock-hold.js";
 import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
+import { shopOrderEmailsService } from "./shop-order-emails.service.js";
 
 const FIRST_ORDER_NUMBER = 1001;
 
@@ -546,6 +547,7 @@ export class ShopCheckoutService {
       if (result.stockChanged) purgeShopPages(result.order.websiteId);
       if (!result.alreadyPaid) {
         logger.info({ websiteId: result.order.websiteId, orderId: result.order.id, number: result.order.number }, "Shop order paid");
+        void shopOrderEmailsService.notifyStatusChange(result.order.id, ShopOrderStatus.PAID);
       }
       return result.order;
     } catch (error) {
@@ -574,6 +576,7 @@ export class ShopCheckoutService {
           note: failReason,
         });
       });
+      void shopOrderEmailsService.notifyStatusChange(existing.id, ShopOrderStatus.FAILED);
       await releaseStockForOrder(existing.websiteId, existing.id, existing.items);
       logger.warn(
         { websiteId: existing.websiteId, orderId: existing.id, refundStatus: refund.refundStatus, ok: refund.ok },
@@ -659,6 +662,7 @@ export class ShopCheckoutService {
     });
     for (const order of pending) {
       await releaseStockForOrder(order.websiteId, order.id, order.items);
+      void shopOrderEmailsService.notifyStatusChange(order.id, ShopOrderStatus.FAILED);
     }
   }
 

@@ -161,7 +161,7 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
-    const set = entry as { pricePaise?: unknown; options?: unknown; overrides?: unknown; images?: unknown };
+    const set = entry as { pricePaise?: unknown; options?: unknown; overrides?: unknown; skus?: unknown; images?: unknown };
     if (typeof set.pricePaise !== "number" || !Array.isArray(set.options)) return [];
     const options = set.options.flatMap((option) => {
       if (!option || typeof option !== "object" || Array.isArray(option)) return [];
@@ -188,6 +188,16 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
           return [{ key: row.key, pricePaise: row.pricePaise }];
         })
       : [];
+    const skus = Array.isArray(set.skus)
+      ? set.skus.flatMap((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+          const row = entry as { key?: unknown; sku?: unknown };
+          if (typeof row.key !== "string" || typeof row.sku !== "string") return [];
+          const sku = row.sku.trim();
+          if (!sku) return [];
+          return [{ key: row.key, sku }];
+        })
+      : [];
     const images = Array.isArray(set.images)
       ? set.images.flatMap((group) => {
           if (!group || typeof group !== "object" || Array.isArray(group)) return [];
@@ -202,6 +212,7 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
       pricePaise: set.pricePaise,
       options,
       ...(overrides.length ? { overrides } : {}),
+      ...(skus.length ? { skus } : {}),
       ...(images.length ? { images } : {}),
     }];
   });
@@ -542,7 +553,7 @@ export class ShopService {
 
 }
 
-type ExpandedVariant = { name: string; pricePaise: number; images: { mediaId: string; alt: string }[] };
+type ExpandedVariant = { name: string; sku: string | null; pricePaise: number; images: { mediaId: string; alt: string }[] };
 
 function variantImages(images: ShopImageInput[] | undefined): { mediaId: string; alt: string }[] {
   const list = images ?? [];
@@ -612,8 +623,14 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
 
     const combos = options.length === 0 ? [[]] : cartesian(options.map((option) => option.values));
     const overrides = new Map((set.overrides ?? []).map((override) => [override.key, override.pricePaise]));
+    const skuMap = new Map(
+      (set.skus ?? [])
+        .map((row) => [row.key, row.sku.trim()] as const)
+        .filter((row) => row[1].length > 0),
+    );
     const imageGroups = new Map((set.images ?? []).map((group) => [group.key, variantImages(group.images)]));
     const keptOverrides: { key: string; pricePaise: number }[] = [];
+    const keptSkus: { key: string; sku: string }[] = [];
     const keptImages: { key: string; images: { mediaId: string; alt: string }[] }[] = [];
 
     for (const values of combos) {
@@ -627,15 +644,18 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
       const override = overrides.get(key);
       const pricePaise = override ?? set.pricePaise;
       if (override !== undefined && override !== set.pricePaise) keptOverrides.push({ key, pricePaise: override });
+      const sku = skuMap.get(key) ?? null;
+      if (sku) keptSkus.push({ key, sku });
       const images = imageGroups.get(key) ?? [];
       if (images.length > 0) keptImages.push({ key, images });
-      variants.push({ name: label, pricePaise, images });
+      variants.push({ name: label, sku, pricePaise, images });
     }
 
     stored.push({
       pricePaise: set.pricePaise,
       options,
       ...(keptOverrides.length > 0 ? { overrides: keptOverrides } : {}),
+      ...(keptSkus.length > 0 ? { skus: keptSkus } : {}),
       ...(keptImages.length > 0 ? { images: keptImages } : {}),
     });
   }
@@ -654,6 +674,7 @@ function variantRows(
   return variants.map((variant, index) => ({
     id: randomUUID(),
     name: variant.name,
+    sku: variant.sku,
     pricePaise: variant.pricePaise,
     quantity: quantities.get(variant.name.toLowerCase()) ?? 0,
     images: variant.images as Prisma.InputJsonValue,

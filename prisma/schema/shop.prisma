@@ -266,3 +266,45 @@ model ShopOrderItem {
   @@index([orderId])
   @@map("shop_order_items")
 }
+
+/// Shared look for all shop order emails on a website (layout, colour, logo).
+model ShopOrderEmailDesign {
+  websiteId   String   @id @db.Uuid
+  clientId    String   @db.Uuid
+  /// classic | bold | minimal | banner | postcard
+  layout      String   @default("classic") @db.VarChar(20)
+  accentColor String   @default("#194a7a") @db.VarChar(7)
+  showLogo    Boolean  @default(true)
+  /// Optional custom logo; when null and showLogo is true, the website logo is used.
+  logoMediaId String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  website Website    @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+  logo    MediaFile? @relation(fields: [logoMediaId], references: [id], onDelete: SetNull)
+
+  @@unique([websiteId, clientId])
+  @@index([clientId])
+  @@map("shop_order_email_designs")
+}
+
+/// Editable customer email for one order status on a website shop.
+/// Owners edit subject / heading / message — HTML is generated when sending.
+model ShopOrderEmailTemplate {
+  id        String          @id @default(uuid()) @db.Uuid
+  websiteId String          @db.Uuid
+  clientId  String          @db.Uuid
+  status    ShopOrderStatus
+  enabled   Boolean         @default(true)
+  subject   String          @db.VarChar(200)
+  heading   String          @db.VarChar(160)
+  message   String          @db.Text
+  createdAt DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @db.Timestamptz(6)
+
+  website Website @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+
+  @@unique([websiteId, status])
+  @@index([clientId])
+  @@map("shop_order_email_templates")
+}

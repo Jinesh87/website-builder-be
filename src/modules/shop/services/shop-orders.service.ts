@@ -7,6 +7,7 @@ import { purgeShopPages } from "./shop-cache.js";
 import { refundStatusLabel } from "./shop-checkout.service.js";
 import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
+import { shopOrderEmailsService } from "./shop-order-emails.service.js";
 
 const PAGE_SIZE = 20;
 
@@ -312,6 +313,9 @@ export class ShopOrdersService {
     });
 
     if (stockChanged) purgeShopPages(websiteId);
+    if (existing.status !== nextStatus) {
+      void shopOrderEmailsService.notifyStatusChange(orderId, nextStatus);
+    }
     return this.get(websiteId, orderId, actor);
   }
 }
