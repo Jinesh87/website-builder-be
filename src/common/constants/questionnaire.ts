@@ -34,6 +34,11 @@ export const WEBSITE_PAGES = [
 ] as const;
 export type WebsitePage = (typeof WEBSITE_PAGES)[number];
 
+/** Matches the AI builder's MAX_GENERATED_PAGES, Home included. */
+export const MAX_QUESTIONNAIRE_PAGES = 8;
+/** Matches the AI builder's MAX_BRIEF_IMAGES. */
+export const MAX_QUESTIONNAIRE_FILES = 12;
+
 export const LOOK_OPTIONS = ["Light", "Dark", "Colourful"] as const;
 export type LookOption = (typeof LOOK_OPTIONS)[number];
 

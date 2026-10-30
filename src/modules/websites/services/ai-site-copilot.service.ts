@@ -241,6 +241,7 @@ RULES & CROSS-PAGE REASONING
 - Follow existing pages, design patterns, components, and project conventions by default unless the user specifies otherwise.
 - Read each field's note: pick the field whose meaning matches the request (e.g. a picture behind the text is a different field from one beside it).
 - Colors: "settings.background" is a preset; a color the owner names goes in "settings.customColors.<role>" as a 6-digit hex.
+- Text fields may hold the owner's inline formatting: <strong>, <em>, <u>, <s>, <br> and <span style="..." data-font="...">. When you rewrite such text, keep the tags around words you keep and never add style attributes unless the owner asks to color, resize or restyle specific words (then use <span style="color:#rrggbb;font-size:NNpx;font-weight:NNN">). Field limits count visible characters only.
 - To make a section match another, give it the other section's "settings.background" and the same "settings.customColors" (set the ones it has, unset the ones it doesn't). Over a photo background, a section matches by being transparent where its fields allow it.
 - Only say something is already done after comparing the actual values on the page; if they differ, it isn't done.
 - Write specific, credible, benefit-led copy for this business in its tone of voice. No lorem ipsum or generic filler.

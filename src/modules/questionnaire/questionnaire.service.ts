@@ -7,7 +7,10 @@ import {
 import { logger } from "../../config/logger.js";
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
+import { MediaKind } from "../../generated/prisma/enums.js";
 import { emailService } from "../email/services/email.service.js";
+import { mediaUrl } from "../media/services/media.service.js";
+import { VALID_PLATFORM_KEY_WHERE } from "../websites/services/website.service.js";
 import {
   formatAnswersSummary,
   questionnaireEmailFailure,
@@ -16,7 +19,9 @@ import type {
   CreateQuestionnaireInput,
   QuestionnaireActivityView,
   QuestionnaireAnswers,
+  QuestionnaireAssets,
   QuestionnaireCounts,
+  QuestionnaireMediaRef,
   QuestionnaireDetail,
   QuestionnaireListQuery,
   QuestionnaireListResult,
@@ -92,6 +97,94 @@ function salesInbox(): string {
   return process.env.CONTACT_SALES_EMAIL?.trim() || DEFAULT_SALES_EMAIL;
 }
 
+const mediaSelect = {
+  id: true,
+  kind: true,
+  fileName: true,
+  mimeType: true,
+  sizeBytes: true,
+  width: true,
+  height: true,
+  altText: true,
+} as const satisfies Prisma.MediaFileSelect;
+
+type MediaRow = Prisma.MediaFileGetPayload<{ select: typeof mediaSelect }>;
+
+function toMediaRef(file: MediaRow): QuestionnaireMediaRef {
+  return { ...file, url: mediaUrl(file.id) };
+}
+
+const platformTemplateWhere = (key: string): Prisma.WebsiteTemplateWhereInput => ({
+  key,
+  clientId: null,
+  isActive: true,
+  archivedAt: null,
+  ...VALID_PLATFORM_KEY_WHERE,
+});
+
+/** Rejects ids the submitter can't use, so admins never see someone else's files. */
+async function checkAssets(answers: QuestionnaireAnswers, clientId: string | null): Promise<void> {
+  if (answers.themeId) {
+    const theme = await prisma.theme.count({ where: { id: answers.themeId, isActive: true } });
+    if (!theme) throw new AppError(400, "That theme is no longer available. Pick another one.", "THEME_NOT_FOUND");
+  }
+  if (answers.templateKey) {
+    const template = await prisma.websiteTemplate.count({ where: platformTemplateWhere(answers.templateKey) });
+    if (!template) {
+      throw new AppError(400, "That template is no longer available. Pick another one.", "TEMPLATE_NOT_FOUND");
+    }
+  }
+
+  const fileIds = answers.mediaIds ?? [];
+  const requested = [...new Set([...fileIds, ...(answers.logoMediaId ? [answers.logoMediaId] : [])])];
+  if (requested.length === 0) return;
+  if (!clientId) {
+    throw new AppError(400, "Sign in to your account to attach files.", "SIGN_IN_TO_ATTACH");
+  }
+  const found = await prisma.mediaFile.findMany({
+    where: { id: { in: requested }, clientId },
+    select: { id: true, kind: true },
+  });
+  if (found.length !== requested.length) {
+    throw new AppError(400, "Some attached files are no longer in your media library.", "MEDIA_NOT_FOUND");
+  }
+  const logo = found.find((file) => file.id === answers.logoMediaId);
+  if (logo && logo.kind !== MediaKind.IMAGE) {
+    throw new AppError(400, "Your logo must be an image.", "LOGO_NOT_IMAGE");
+  }
+}
+
+async function resolveAssets(answers: QuestionnaireAnswers | null, clientId: string | null): Promise<QuestionnaireAssets> {
+  const fileIds = answers?.mediaIds ?? [];
+  const mediaIds = [...fileIds, ...(answers?.logoMediaId ? [answers.logoMediaId] : [])];
+  const [theme, template, media] = await Promise.all([
+    answers?.themeId
+      ? prisma.theme.findUnique({ where: { id: answers.themeId }, select: { id: true, name: true, settings: true } })
+      : null,
+    answers?.templateKey
+      ? prisma.websiteTemplate.findFirst({
+          where: platformTemplateWhere(answers.templateKey),
+          select: { key: true, name: true, category: true, thumbnailUrl: true, themeId: true },
+        })
+      : null,
+    clientId && mediaIds.length > 0
+      ? prisma.mediaFile.findMany({ where: { id: { in: mediaIds }, clientId }, select: mediaSelect })
+      : [],
+  ]);
+
+  const byId = new Map(media.map((file) => [file.id, file]));
+  const logo = answers?.logoMediaId ? byId.get(answers.logoMediaId) : undefined;
+  return {
+    theme,
+    template,
+    logo: logo ? toMediaRef(logo) : null,
+    files: fileIds.flatMap((id) => {
+      const file = byId.get(id);
+      return file ? [toMediaRef(file)] : [];
+    }),
+  };
+}
+
 export class QuestionnaireService {
   /**
    * Saves a questionnaire submission, then notifies both the admin sales inbox
@@ -111,6 +204,8 @@ export class QuestionnaireService {
       return { emailDispatched: false };
     }
 
+    await checkAssets(input.answers, authenticatedClientId);
+
     const row = await prisma.questionnaire.create({
       data: {
         businessName: input.businessName.trim(),
@@ -121,7 +216,7 @@ export class QuestionnaireService {
         filesLink: emptyToNull(input.filesLink),
         notes: emptyToNull(input.notes),
         ref: emptyToNull(input.ref),
-        clientId: authenticatedClientId || emptyToNull(input.clientId) || null,
+        clientId: authenticatedClientId,
         status: QuestionnaireStatus.NEW,
         emailStatus: InquiryEmailStatus.PENDING,
       },
@@ -210,9 +305,11 @@ export class QuestionnaireService {
     }
 
     const { activity, ...q } = row;
+    const assets = await resolveAssets(row.answers as unknown as QuestionnaireAnswers | null, row.clientId);
     return {
       questionnaire: toView(q as QuestionnaireRow),
       activity: activity.map(toActivityView),
+      assets,
     };
   }
 
@@ -335,10 +432,10 @@ export class QuestionnaireService {
   ): Promise<EmailOutcome> {
     const to = salesInbox();
     const answers = row.answers as unknown as QuestionnaireAnswers;
-    const answersSummary = formatAnswersSummary(answers);
     let outcome: EmailOutcome;
 
     try {
+      const answersSummary = formatAnswersSummary(answers, await resolveAssets(answers, row.clientId));
       await Promise.all([
         emailService.sendQuestionnaireAdminNotification({
           to,

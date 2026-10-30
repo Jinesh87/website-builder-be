@@ -10,6 +10,7 @@ import { cancelUntilLabel } from "../../shop/utils/shop-order-cancel.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 import { shopPage } from "../ai/shop-pages.js";
+import { toPlainText } from "../../../common/utils/rich-text.js";
 
 type ShopRender = {
   websiteId: string;
@@ -103,9 +104,11 @@ function prefixLocalHrefs(html: string, basePath: string): string {
   });
 }
 
+/** Legacy fallback renderer: inline formatting is dropped, only the visible text is shown. */
 function escapeHtml(str: string | null | undefined): string {
   if (!str) return "";
-  return String(str)
+  const value = String(str);
+  return (value.startsWith("data:") ? value : toPlainText(value))
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -1458,30 +1461,52 @@ Sitemap: ${domain}/sitemap.xml
           const rawImages = Array.isArray(d.images) ? d.images : Array.isArray(d.items) ? d.items : Array.isArray(d.photos) ? d.photos : [];
           const effectiveHeading = heading || "Gallery";
           const { tag: headingTag, cls: headingClass } = getHeadingMarkup(effectiveHeading);
-          const introParagraph = text || subheading;
+          const eyebrowText = String(d.eyebrow || badgeText || "");
+          const introParagraph = String(d.intro || d.description || text || subheading || "");
+          const ctaObj = d.cta && typeof d.cta === "object" && (d.cta as Record<string, unknown>).label ? (d.cta as Record<string, unknown>) : null;
 
           sectionParts.push(`
           <section class="section-gallery" id="gallery">
             <div class="container">
               <div style="text-align: center; margin-bottom: 3rem;">
-                ${badgeText ? `<span class="section-badge">${escapeHtml(badgeText)}</span>` : ""}
+                ${eyebrowText ? `<span class="section-badge">${escapeHtml(eyebrowText)}</span>` : ""}
                 <${headingTag} class="${headingClass}">${escapeHtml(effectiveHeading)}</${headingTag}>
-                ${introParagraph ? `<p class="subtitle" style="margin: 0 auto;">${escapeHtml(introParagraph)}</p>` : ""}
+                ${introParagraph ? `<p class="subtitle" style="margin: 0.5rem auto 0; max-width: 640px;">${escapeHtml(introParagraph)}</p>` : ""}
               </div>
               <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
                 ${rawImages
                   .map((it: Record<string, unknown> | string) => {
                     const imgUrl = typeof it === "string" ? it : typeof it === "object" && it ? String((it as Record<string, unknown>).url || (it as Record<string, unknown>).imageUrl || "") : "";
-                    const altText = typeof it === "object" && it ? String((it as Record<string, unknown>).alt || (it as Record<string, unknown>).caption || (it as Record<string, unknown>).title || `${effectiveHeading} image`) : `${effectiveHeading} image`;
-                    return imgUrl
-                      ? `
-                    <div style="border-radius: 0.85rem; overflow: hidden; height: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                      <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'" />
-                    </div>`
-                      : "";
+                    const nameText = typeof it === "object" && it ? String((it as Record<string, unknown>).name || (it as Record<string, unknown>).title || "") : "";
+                    const badgeVal = typeof it === "object" && it ? String((it as Record<string, unknown>).badge || "") : "";
+                    const descText = typeof it === "object" && it ? String((it as Record<string, unknown>).description || "") : "";
+                    const linkUrl = typeof it === "object" && it ? String((it as Record<string, unknown>).link || "") : "";
+                    const altText = typeof it === "object" && it ? String((it as Record<string, unknown>).alt || (it as Record<string, unknown>).caption || nameText || `${effectiveHeading} image`) : `${effectiveHeading} image`;
+                    if (!imgUrl) return "";
+                    const cardInner = `
+                    <div style="display: flex; flex-direction: column; width: 100%;">
+                      <div style="border-radius: 0.85rem; overflow: hidden; height: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); position: relative;">
+                        <img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(altText)}" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'" />
+                      </div>
+                      ${nameText || badgeVal || descText ? `
+                      <div style="display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.65rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                          ${nameText ? `<span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color, #0f172a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(nameText)}</span>` : "<span></span>"}
+                          ${badgeVal ? `<span style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #64748b); white-space: nowrap; flex-shrink: 0;">${escapeHtml(badgeVal)}</span>` : ""}
+                        </div>
+                        ${descText ? `<p style="font-size: 0.82rem; color: var(--text-muted, #64748b); margin: 0; line-height: 1.4;">${escapeHtml(descText)}</p>` : ""}
+                      </div>` : ""}
+                    </div>`;
+                    return linkUrl ? `<a href="${escapeHtml(linkUrl)}" style="text-decoration: none; color: inherit; display: block;">${cardInner}</a>` : cardInner;
                   })
                   .join("")}
               </div>
+              ${ctaObj ? `
+              <div style="text-align: center; margin-top: 3rem;">
+                <a href="${escapeHtml(String(ctaObj.href || '#'))}" class="btn btn-primary" style="display: inline-flex; align-items: center; justify-content: center; padding: 0.85rem 2rem; border-radius: 9999px; font-weight: 600; text-decoration: none; background: var(--primary-color, #0f172a); color: #fff; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                  ${escapeHtml(String(ctaObj.label || 'View more'))}
+                </a>
+              </div>` : ""}
             </div>
           </section>`);
           break;

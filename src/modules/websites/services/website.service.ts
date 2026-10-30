@@ -73,7 +73,7 @@ const MAX_CLIENT_TEMPLATES = 20;
 const MAX_SAVED_SECTIONS = 100;
 
 const BUILT_IN_TEMPLATE_KEYS = WEBSITE_TEMPLATE_SEEDS.map((seed) => seed.key);
-const VALID_PLATFORM_KEY_WHERE: Prisma.WebsiteTemplateWhereInput = {
+export const VALID_PLATFORM_KEY_WHERE: Prisma.WebsiteTemplateWhereInput = {
   OR: [
     { key: { in: BUILT_IN_TEMPLATE_KEYS } },
     { key: { startsWith: ADMIN_TEMPLATE_KEY_PREFIX } },

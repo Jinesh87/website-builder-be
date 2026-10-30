@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { hasRichText, sanitizeRichText, toPlainText } from "../../../common/utils/rich-text.js";
 import {
   ACCOUNT_PREVIEWS,
   ACCOUNT_VARIANTS,
@@ -86,7 +87,38 @@ const ANCHOR = /^[a-z][a-z0-9-]{0,39}$/;
 /** Blog social profiles: a full http(s)/mailto link, a bare domain, @handle, email or phone (no other schemes). */
 const BLOG_SOCIAL_URL = /^(https?:\/\/\S+|mailto:\S+|\+?[0-9][0-9 ()-]{5,}|[^\s:]+)$/i;
 
-const text = (max: number) => Joi.string().trim().max(max);
+/** Rich text markup never counts towards a field's limit, but its total size is still capped. */
+const RICH_TEXT_MARKUP_ALLOWANCE = (limit: number) => limit * 8 + 512;
+
+/**
+ * Joi strings whose `max` counts visible characters, so inline formatting
+ * (see common/utils/rich-text.ts) doesn't eat into the limit. Formatting is
+ * normalized on the way in. The AI field catalog reads `richMax` as `max`.
+ */
+const RichJoi = Joi.extend((joi) => ({
+  type: "string",
+  base: joi.string(),
+  rules: {
+    richMax: {
+      method(limit: number) {
+        return this.$_addRule({ name: "richMax", args: { limit } });
+      },
+      args: [{ name: "limit", assert: (value: unknown) => typeof value === "number" && value >= 0, message: "must be a positive number" }],
+      validate(value: string, helpers, { limit }: { limit: number }) {
+        if (!hasRichText(value) || value.startsWith("data:")) {
+          return value.length <= limit ? value : helpers.error("string.max", { limit, value });
+        }
+        const clean = sanitizeRichText(value);
+        if (toPlainText(clean, "").length > limit || clean.length > RICH_TEXT_MARKUP_ALLOWANCE(limit)) {
+          return helpers.error("string.max", { limit, value });
+        }
+        return clean;
+      },
+    },
+  },
+}));
+
+const text = (max: number) => RichJoi.string().trim().richMax(max);
 const optionalText = (max: number) => text(max).allow("").optional();
 
 /**
@@ -140,6 +172,14 @@ const image = Joi.object({
 })
   .allow(null)
   .meta(meta({ kind: "image" }));
+
+const galleryImage = image.keys({
+  name: optionalText(200),
+  title: optionalText(200),
+  badge: optionalText(80),
+  description: optionalText(1000),
+  link: Joi.string().trim().max(2048).allow("").optional(),
+});
 
 const blogSocialLinks = Joi.array()
   .items(
@@ -614,7 +654,13 @@ export const headerSchema = Joi.object({
   siteName: text(120).default("Brand").optional(),
   logo: image.optional(),
   logoDisplay,
+  logoHeight: Joi.number().integer().min(16).max(200).optional().description("Logo height in px; default is 38px"),
+  logoSize: Joi.number().integer().min(16).max(200).optional().description("Alias for logoHeight in px"),
   menu: Joi.array().items(menuItem).max(24).default([]).optional(),
+  navAlign: Joi.string()
+    .valid(...SECTION_ALIGNMENTS)
+    .optional()
+    .description("Desktop position of the main navigation. Omit to keep the design's own layout."),
   cta: link.optional(),
   secondaryCta: link.optional(),
   announcement: optionalText(200),
@@ -654,6 +700,8 @@ export const footerSchema = Joi.object({
   siteName: text(120).required(),
   logo: image.optional(),
   logoDisplay,
+  logoHeight: Joi.number().integer().min(16).max(200).optional().description("Logo height in px; default is 38px"),
+  logoSize: Joi.number().integer().min(16).max(200).optional().description("Alias for logoHeight in px"),
   tagline: optionalText(200),
   description: optionalText(500),
   columns: Joi.array()
@@ -1253,10 +1301,18 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     body: text(20000).allow("").required(),
   }),
   gallery: Joi.object({
+    eyebrow: optionalText(100),
     heading: optionalText(200),
+    intro: optionalText(1000),
+    description: optionalText(1000),
     columns: columns.required(),
     mobileColumns: columns.required(),
-    images: Joi.array().items(image).max(48).required(),
+    images: Joi.array().items(galleryImage).max(48).required(),
+    align: Joi.string().valid("left", "center", "right").optional(),
+    imageAspect: Joi.string().valid("4:3", "1:1", "16:9", "3:4", "auto").optional(),
+    cardStyle: Joi.string().valid("default", "surface", "overlay").optional(),
+    imageRadius: Joi.string().valid("default", "soft", "pill", "sharp").optional(),
+    cta: link.optional(),
   }),
   logos: Joi.object({
     heading: optionalText(200),
