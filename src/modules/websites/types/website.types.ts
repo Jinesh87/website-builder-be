@@ -23,6 +23,8 @@ export type WebsiteSummary = {
   shopFeatureEnabled: boolean;
   /** Client has turned the shop on for this website. */
   shopEnabled: boolean;
+  /** Inclusive status ceiling for shopper cancels. Null = customers cannot cancel. */
+  shopCancelUntilStatus: "paid" | "processing" | "shipped" | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -104,6 +106,8 @@ export type UpdateWebsiteInput = WebsiteInfoInput & {
   name?: string;
   seoToolsEnabled?: boolean;
   shopEnabled?: boolean;
+  /** Pass null to turn customer order cancellation off. */
+  shopCancelUntilStatus?: "paid" | "processing" | "shipped" | null;
 };
 
 export type PageInput = {

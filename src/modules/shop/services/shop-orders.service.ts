@@ -49,6 +49,7 @@ export type ShopOrderView = {
   paidAt: string | null;
   refundedAt: string | null;
   failureReason: string | null;
+  cancelReason: string | null;
   timeline: ShopOrderTimelineEvent[];
   createdAt: string;
   updatedAt: string;
@@ -99,6 +100,7 @@ function toView(order: {
   paidAt: Date | null;
   refundedAt: Date | null;
   failureReason: string | null;
+  cancelReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; fullName: string; email: string; phone: string | null };
@@ -140,6 +142,7 @@ function toView(order: {
     paidAt: order.paidAt?.toISOString() ?? null,
     refundedAt: order.refundedAt?.toISOString() ?? null,
     failureReason: order.failureReason,
+    cancelReason: order.cancelReason,
     timeline: (order.events ?? []).map(toTimelineEvent),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),

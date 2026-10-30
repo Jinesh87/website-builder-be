@@ -213,6 +213,8 @@ model ShopOrder {
   stockDeductedAt   DateTime?        @db.Timestamptz(6)
   paidAt            DateTime?        @db.Timestamptz(6)
   failureReason     String?          @db.VarChar(300)
+  /// Why the shopper cancelled (required for customer-initiated cancels).
+  cancelReason      String?          @db.VarChar(500)
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 

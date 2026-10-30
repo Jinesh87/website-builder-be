@@ -273,11 +273,12 @@ export class ShopAuthService {
 
   async account(websiteId: string, customerId: string): Promise<ShopCustomerAccountView> {
     const customer = await this.me(websiteId, customerId);
-    return {
-      customer,
-      orders: await shopCheckoutService.listCustomerOrders(websiteId, customerId),
-      cartItems: await this.listCart(websiteId, customerId),
-    };
+    const [orders, cartItems, cancelUntilStatus] = await Promise.all([
+      shopCheckoutService.listCustomerOrders(websiteId, customerId),
+      this.listCart(websiteId, customerId),
+      shopCheckoutService.getCancelUntilStatus(websiteId),
+    ]);
+    return { customer, orders, cartItems, cancelUntilStatus };
   }
 
   async listCart(websiteId: string, customerId: string): Promise<ShopCartItemSummary[]> {
