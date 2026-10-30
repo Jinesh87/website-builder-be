@@ -1,4 +1,4 @@
-import type { QuestionnaireAnswers } from "./questionnaire.types.js";
+import type { QuestionnaireAnswers, QuestionnaireAssets } from "./questionnaire.types.js";
 
 const SKIPPED_EMAIL_CODES = new Set(["EMAIL_NOT_CONFIGURED", "EMAIL_DISABLED", "EMAIL_KEY_UNREADABLE"]);
 const EMAIL_ERROR_MAX = 300;
@@ -18,11 +18,13 @@ export function questionnaireEmailFailure(error: unknown): QuestionnaireEmailFai
   };
 }
 
-export function formatAnswersSummary(answers: QuestionnaireAnswers): string {
+export function formatAnswersSummary(answers: QuestionnaireAnswers, assets?: QuestionnaireAssets): string {
   const parts: string[] = [];
   parts.push(`Business type: ${answers.businessType}`);
   parts.push(`Pages: ${answers.pages.join(", ")}`);
   parts.push(`Look & feel: ${answers.look} look, ${answers.style} style, ${answers.palette} palette`);
+  if (assets?.theme) parts.push(`Theme: ${assets.theme.name}`);
+  if (assets?.template) parts.push(`Template: ${assets.template.name} (${assets.template.category})`);
 
   const reachParts: string[] = [];
   if (answers.reach?.call?.enabled) {
@@ -52,6 +54,11 @@ export function formatAnswersSummary(answers: QuestionnaireAnswers): string {
   parts.push(`Photos: ${answers.photos}`);
   parts.push(`Domain: ${answers.domain}`);
   parts.push(`Timeline / Needed: ${answers.needed}`);
+
+  if (assets?.logo) parts.push(`Logo file: ${assets.logo.fileName} (${assets.logo.url})`);
+  if (assets && assets.files.length > 0) {
+    parts.push(`Uploaded files (${assets.files.length}): ${assets.files.map((file) => file.fileName).join(", ")}`);
+  }
 
   return parts.join("\n");
 }

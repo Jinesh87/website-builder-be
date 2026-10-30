@@ -14,6 +14,7 @@ import type {
   WebsitePage,
 } from "../../common/constants/questionnaire.js";
 import type { InquiryEmailStatus } from "../../common/constants/contact.js";
+import type { MediaKind } from "../../generated/prisma/enums.js";
 
 export type ReachMethod = {
   enabled: boolean;
@@ -39,6 +40,33 @@ export type QuestionnaireAnswers = {
   photos: PhotosOption;
   domain: DomainOption;
   needed: NeededOption;
+  /** Platform theme preset; null = let the team choose. */
+  themeId?: string | null;
+  /** Platform template key; null = no starting template. */
+  templateKey?: string | null;
+  /** Media library files of the submitting client. */
+  logoMediaId?: string | null;
+  mediaIds?: string[];
+};
+
+export type QuestionnaireMediaRef = {
+  id: string;
+  kind: MediaKind;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  altText: string | null;
+  url: string;
+};
+
+/** Names and URLs for the ids stored in the answers; missing ones were deleted since. */
+export type QuestionnaireAssets = {
+  theme: { id: string; name: string; settings: unknown } | null;
+  template: { key: string; name: string; category: string; thumbnailUrl: string | null; themeId: string | null } | null;
+  logo: QuestionnaireMediaRef | null;
+  files: QuestionnaireMediaRef[];
 };
 
 export type CreateQuestionnaireInput = {
@@ -87,6 +115,7 @@ export type QuestionnaireActivityView = {
 export type QuestionnaireDetail = {
   questionnaire: QuestionnaireView;
   activity: QuestionnaireActivityView[];
+  assets: QuestionnaireAssets;
 };
 
 export type QuestionnaireListQuery = {

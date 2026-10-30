@@ -83,6 +83,100 @@ test("submitQuestionnaireSchema accepts honeypot field and allows empty optional
   assert.equal(value.website, "http://spam-bot.site");
 });
 
+const validSubmission = {
+  businessName: "Coastal Bites",
+  name: "Aarav Sharma",
+  phone: "+91 98765 43210",
+  email: "aarav@example.com",
+};
+
+test("submitQuestionnaireSchema defaults the optional design and file choices", () => {
+  const { error, value } = submitQuestionnaireSchema.validate({ ...validSubmission, answers: sampleAnswers });
+  assert.equal(error, undefined);
+  assert.equal(value.answers.themeId, null);
+  assert.equal(value.answers.templateKey, null);
+  assert.equal(value.answers.logoMediaId, null);
+  assert.deepEqual(value.answers.mediaIds, []);
+});
+
+test("submitQuestionnaireSchema keeps a chosen theme, template and files", () => {
+  const themeId = "6f1c3c2e-4a7b-4c1d-9e2f-1a2b3c4d5e6f";
+  const fileId = "0b9d8c7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e";
+  const { error, value } = submitQuestionnaireSchema.validate({
+    ...validSubmission,
+    answers: { ...sampleAnswers, themeId, templateKey: "restaurant", logoMediaId: fileId, mediaIds: [fileId] },
+  });
+  assert.equal(error, undefined);
+  assert.equal(value.answers.themeId, themeId);
+  assert.equal(value.answers.templateKey, "restaurant");
+  assert.deepEqual(value.answers.mediaIds, [fileId]);
+
+  const blankTemplate = submitQuestionnaireSchema.validate({
+    ...validSubmission,
+    answers: { ...sampleAnswers, templateKey: "" },
+  });
+  assert.equal(blankTemplate.value.answers.templateKey, null);
+});
+
+test("submitQuestionnaireSchema rejects more pages or files than the AI builder supports", () => {
+  const tooManyPages = submitQuestionnaireSchema.validate({
+    ...validSubmission,
+    answers: {
+      ...sampleAnswers,
+      pages: ["Home", "About", "Services", "Products / Shop", "Gallery", "Our work", "Videos", "Blog", "Contact"],
+    },
+  });
+  assert.match(tooManyPages.error?.message ?? "", /at most 8 pages/);
+
+  const ids = Array.from({ length: 13 }, (_, i) => `0b9d8c7e-6f5a-4b3c-8d2e-${String(i).padStart(12, "0")}`);
+  const tooManyFiles = submitQuestionnaireSchema.validate({
+    ...validSubmission,
+    answers: { ...sampleAnswers, mediaIds: ids },
+  });
+  assert.match(tooManyFiles.error?.message ?? "", /up to 12 files/);
+
+  const badId = submitQuestionnaireSchema.validate({
+    ...validSubmission,
+    answers: { ...sampleAnswers, themeId: "not-a-uuid" },
+  });
+  assert.notEqual(badId.error, undefined);
+});
+
+test("formatAnswersSummary lists the chosen theme, template and uploads", () => {
+  const summary = formatAnswersSummary(sampleAnswers as any, {
+    theme: { id: "t1", name: "Midnight", settings: {} },
+    template: { key: "restaurant", name: "Bistro", category: "Food", thumbnailUrl: null, themeId: null },
+    logo: {
+      id: "l1",
+      kind: "IMAGE",
+      fileName: "logo.png",
+      mimeType: "image/png",
+      sizeBytes: 100,
+      width: 200,
+      height: 50,
+      altText: null,
+      url: "https://api.example.com/api/media/files/l1",
+    },
+    files: [
+      {
+        id: "f1",
+        kind: "IMAGE",
+        fileName: "shop.jpg",
+        mimeType: "image/jpeg",
+        sizeBytes: 100,
+        width: 800,
+        height: 600,
+        altText: null,
+        url: "https://api.example.com/api/media/files/f1",
+      },
+    ],
+  });
+  assert.match(summary, /Theme: Midnight/);
+  assert.match(summary, /Template: Bistro \(Food\)/);
+  assert.match(summary, /Logo file: logo\.png/);
+  assert.match(summary, /Uploaded files \(1\): shop\.jpg/);
+});
+
 test("formatAnswersSummary formats structured answers for team notifications", () => {
   const summary = formatAnswersSummary(sampleAnswers as any);
   assert.match(summary, /Restaurant \/ Café/);
