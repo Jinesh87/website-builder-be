@@ -443,6 +443,9 @@ export type HeaderData = {
   siteName: string;
   logo?: ImageRef;
   logoDisplay?: BrandDisplayMode;
+  /** Custom logo height in pixels. Default is 38px. */
+  logoHeight?: number;
+  logoSize?: number;
   menu: HeaderMenuItem[];
   /** Desktop position of the main navigation; falls back to settings.align, then the design's own layout. */
   navAlign?: (typeof SECTION_ALIGNMENTS)[number];
@@ -516,6 +519,9 @@ export type FooterData = {
   siteName: string;
   logo?: ImageRef;
   logoDisplay?: BrandDisplayMode;
+  /** Custom logo height in pixels. Default is 38px. */
+  logoHeight?: number;
+  logoSize?: number;
   tagline?: string;
   description?: string;
   columns: { title: string; links: LinkRef[] }[];

@@ -9,6 +9,7 @@ import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../
 import type { PublishSnapshot } from "../types/website.types.js";
 import type { Section } from "../types/site-content.types.js";
 import { shopPage } from "../ai/shop-pages.js";
+import { toPlainText } from "../../../common/utils/rich-text.js";
 
 type ShopRender = {
   websiteId: string;
@@ -88,9 +89,11 @@ function prefixLocalHrefs(html: string, basePath: string): string {
   });
 }
 
+/** Legacy fallback renderer: inline formatting is dropped, only the visible text is shown. */
 function escapeHtml(str: string | null | undefined): string {
   if (!str) return "";
-  return String(str)
+  const value = String(str);
+  return (value.startsWith("data:") ? value : toPlainText(value))
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
