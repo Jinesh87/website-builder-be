@@ -84,3 +84,10 @@ export const shopOrderParamsSchema = Joi.object({
   websiteId: Joi.string().guid().required(),
   orderId: Joi.string().guid().required(),
 });
+
+export const shopCancelOrderSchema = Joi.object({
+  reason: Joi.string().trim().min(3).max(500).required().messages({
+    "string.min": "Please share a short reason (at least 3 characters).",
+    "any.required": "Please share why you are cancelling.",
+  }),
+});

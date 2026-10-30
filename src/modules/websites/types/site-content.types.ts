@@ -1261,6 +1261,8 @@ export type ProductDetailData = {
   backHref?: string;
   showDescription?: boolean;
   showStock?: boolean;
+  /** Shows the shop's order cancellation policy under the description. */
+  showCancellationPolicy?: boolean;
 };
 
 export type BlogData = {

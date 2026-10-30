@@ -13,6 +13,9 @@ import {
   shopInventoryLogQuerySchema,
   shopInventoryParamsSchema,
   shopInventoryQuerySchema,
+  shopOrderEmailDesignSchema,
+  shopOrderEmailParamsSchema,
+  shopOrderEmailTemplateSchema,
   shopOrderParamsSchema,
   shopOrderQuerySchema,
   shopOrderStatusSchema,
@@ -69,6 +72,25 @@ shopRouter.patch(
   validate(shopOrderParamsSchema, "params"),
   validate(shopOrderStatusSchema),
   shopController.updateOrderStatus,
+);
+
+shopRouter.get("/order-emails", websiteParams, shopController.listOrderEmailTemplates);
+shopRouter.put(
+  "/order-emails/design",
+  websiteParams,
+  validate(shopOrderEmailDesignSchema),
+  shopController.updateOrderEmailDesign,
+);
+shopRouter.put(
+  "/order-emails/:status",
+  validate(shopOrderEmailParamsSchema, "params"),
+  validate(shopOrderEmailTemplateSchema),
+  shopController.updateOrderEmailTemplate,
+);
+shopRouter.post(
+  "/order-emails/:status/reset",
+  validate(shopOrderEmailParamsSchema, "params"),
+  shopController.resetOrderEmailTemplate,
 );
 
 shopRouter.get("/payments", websiteParams, shopController.getPaymentConfig);

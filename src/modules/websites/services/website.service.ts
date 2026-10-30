@@ -151,6 +151,14 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
     isTemplateStudio: website.client.isInternal,
     shopFeatureEnabled: website.client.shopFeatureEnabled,
     shopEnabled: website.shopEnabled,
+    shopCancelUntilStatus:
+      website.shopCancelUntilStatus === "PAID"
+        ? "paid"
+        : website.shopCancelUntilStatus === "PROCESSING"
+          ? "processing"
+          : website.shopCancelUntilStatus === "SHIPPED"
+            ? "shipped"
+            : null,
     publishedAt: website.publishedAt?.toISOString() ?? null,
     createdAt: website.createdAt.toISOString(),
     updatedAt: website.updatedAt.toISOString(),
@@ -720,6 +728,16 @@ export class WebsiteService {
         }
       }
       data.shopEnabled = input.shopEnabled;
+    }
+    if (input.shopCancelUntilStatus !== undefined) {
+      data.shopCancelUntilStatus =
+        input.shopCancelUntilStatus === "paid"
+          ? "PAID"
+          : input.shopCancelUntilStatus === "processing"
+            ? "PROCESSING"
+            : input.shopCancelUntilStatus === "shipped"
+              ? "SHIPPED"
+              : null;
     }
     const infoKeys = [
       "businessName",

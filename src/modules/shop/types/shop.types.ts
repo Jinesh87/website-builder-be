@@ -12,6 +12,8 @@ export type ShopOptionSetInput = {
   pricePaise: number;
   options: ShopOptionInput[];
   overrides?: { key: string; pricePaise: number }[];
+  /** Optional SKU per combination key (same key as price overrides). */
+  skus?: { key: string; sku: string }[];
   images?: { key: string; images: ShopImageInput[] }[];
 };
 
@@ -26,6 +28,7 @@ export type ShopOptionSetView = {
   pricePaise: number;
   options: ShopOptionView[];
   overrides?: { key: string; pricePaise: number }[];
+  skus?: { key: string; sku: string }[];
   images?: { key: string; images: ShopImageView[] }[];
 };
 
