@@ -122,6 +122,7 @@ export const updateWebsiteSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).optional(),
   seoToolsEnabled: Joi.boolean().optional(),
   shopEnabled: Joi.boolean().optional(),
+  shopCancelUntilStatus: Joi.string().valid("paid", "processing", "shipped").allow(null).optional(),
   ...websiteInfo,
 }).min(1);
 

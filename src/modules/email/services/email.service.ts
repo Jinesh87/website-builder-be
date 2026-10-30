@@ -201,6 +201,15 @@ export class EmailService {
     );
   }
 
+  /** Send a fully rendered email (used for editable shop order templates). */
+  async sendRendered(params: { to: string; subject: string; html: string; text: string }) {
+    await this.send(params.to, () => ({
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+    }));
+  }
+
   private async send(
     to: string,
     render: (brand: string) => RenderedEmail,

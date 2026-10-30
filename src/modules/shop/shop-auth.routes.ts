@@ -8,6 +8,7 @@ import {
   shopAuthWebsiteParamsSchema,
   shopCartItemParamsSchema,
   shopChangePasswordSchema,
+  shopCancelOrderSchema,
   shopCheckoutConfirmSchema,
   shopEmailOnlySchema,
   shopOrderParamsSchema,
@@ -131,6 +132,14 @@ shopAuthRouter.get(
   validate(shopOrderParamsSchema, "params"),
   authenticateShopCustomer,
   shopAuthController.getOrder,
+);
+shopAuthRouter.post(
+  "/orders/:orderId/cancel",
+  validate(shopOrderParamsSchema, "params"),
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-cancel-order", max: 10, windowSeconds: MINUTE }),
+  validate(shopCancelOrderSchema),
+  shopAuthController.cancelOrder,
 );
 
 export default shopAuthRouter;

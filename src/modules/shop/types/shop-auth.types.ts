@@ -19,6 +19,8 @@ export type ShopOrderStatusLabel =
 
 export type ShopRefundStatusLabel = "none" | "pending" | "processed" | "failed";
 
+export type ShopCancelUntilStatusLabel = "paid" | "processing" | "shipped";
+
 export type ShopOrderSummary = {
   id: string;
   number: string;
@@ -28,6 +30,8 @@ export type ShopOrderSummary = {
   currency: "INR";
   createdAt: string;
   refundedAt: string | null;
+  /** Shopper may cancel this order under the website's cancel policy. */
+  canCancel: boolean;
 };
 
 export type ShopOrderTimelineEventView = {
@@ -51,8 +55,13 @@ export type ShopOrderDetailView = ShopOrderSummary & {
   items: ShopOrderItemView[];
   timeline: ShopOrderTimelineEventView[];
   failureReason: string | null;
+  cancelReason: string | null;
   paidAt: string | null;
   updatedAt: string;
+};
+
+export type ShopCancelOrderInput = {
+  reason: string;
 };
 
 export type ShopCheckoutSession = {
@@ -96,6 +105,8 @@ export type ShopCustomerAccountView = {
   customer: ShopCustomerView;
   orders: ShopOrderSummary[];
   cartItems: ShopCartItemSummary[];
+  /** Inclusive status ceiling for cancels on this shop. Null = cancels disabled. */
+  cancelUntilStatus: ShopCancelUntilStatusLabel | null;
 };
 
 export type ShopAuthResult = {

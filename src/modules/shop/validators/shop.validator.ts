@@ -54,6 +54,15 @@ const optionSetSchema = Joi.object({
     .items(Joi.object({ key: Joi.string().trim().min(1).max(500).required(), pricePaise }))
     .max(100)
     .optional(),
+  skus: Joi.array()
+    .items(
+      Joi.object({
+        key: Joi.string().trim().max(500).allow("").required(),
+        sku: Joi.string().trim().max(64).allow("").required(),
+      }),
+    )
+    .max(100)
+    .optional(),
   images: Joi.array()
     .items(
       Joi.object({
@@ -173,4 +182,37 @@ export const shopOrderParamsSchema = Joi.object({
 
 export const shopOrderStatusSchema = Joi.object({
   status: shopOrderStatus,
+});
+
+const shopOrderEmailStatus = Joi.string()
+  .valid("paid", "processing", "shipped", "delivered", "failed", "cancelled")
+  .required();
+
+export const shopOrderEmailParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  status: shopOrderEmailStatus,
+});
+
+export const shopOrderEmailTemplateSchema = Joi.object({
+  enabled: Joi.boolean().required(),
+  subject: Joi.string().trim().min(1).max(200).required().messages({
+    "string.empty": "Enter an email subject",
+  }),
+  heading: Joi.string().trim().min(1).max(160).required().messages({
+    "string.empty": "Enter a title",
+  }),
+  message: Joi.string().trim().min(1).max(5000).required().messages({
+    "string.empty": "Enter a message",
+  }),
+});
+
+export const shopOrderEmailDesignSchema = Joi.object({
+  layout: Joi.string().valid("classic", "bold", "minimal", "banner", "postcard").required(),
+  accentColor: Joi.string()
+    .trim()
+    .pattern(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/)
+    .required()
+    .messages({ "string.pattern.base": "Choose a colour like #194a7a" }),
+  showLogo: Joi.boolean().required(),
+  logoMediaId: Joi.string().guid().allow(null).optional(),
 });

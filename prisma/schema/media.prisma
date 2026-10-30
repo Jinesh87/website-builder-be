@@ -37,7 +37,8 @@ model MediaFile {
   website    Website?     @relation("WebsiteMedia", fields: [websiteId], references: [id], onDelete: SetNull)
   folder     MediaFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   uploadedBy User?        @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
-  logoFor    Website[]    @relation("WebsiteLogo")
+  logoFor              Website[]               @relation("WebsiteLogo")
+  shopOrderEmailDesigns ShopOrderEmailDesign[]
 
   @@index([clientId, websiteId, createdAt])
   @@index([folderId])

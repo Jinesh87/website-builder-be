@@ -1,10 +1,16 @@
 import type { NextFunction, Request, Response } from "express";
 import { shopCustomersService, type ShopCustomerQuery } from "../services/shop-customers.service.js";
 import { shopInventoryService } from "../services/shop-inventory.service.js";
+import {
+  shopOrderEmailsService,
+  type ShopOrderEmailDesignInput,
+  type ShopOrderEmailTemplateInput,
+} from "../services/shop-order-emails.service.js";
 import { shopOrdersService, type ShopOrderQuery, type ShopOrderStatusLabel } from "../services/shop-orders.service.js";
 import { shopPaymentService, type UpdateShopPaymentInput } from "../services/shop-payment.service.js";
 import { shopService } from "../services/shop.service.js";
 import type { ShopCategoryInput, ShopProductInput, ShopProductQuery } from "../types/shop.types.js";
+import type { ShopOrderEmailStatusLabel } from "../utils/shop-order-email-defaults.js";
 
 type WebsiteParams = { id: string };
 type CategoryParams = WebsiteParams & { categoryId: string };
@@ -165,6 +171,74 @@ export class ShopController {
           req.params.id,
           req.params.orderId,
           req.body.status as ShopOrderStatusLabel,
+          req.user!,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listOrderEmailTemplates = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const [templates, design] = await Promise.all([
+        shopOrderEmailsService.list(req.params.id, req.user!),
+        shopOrderEmailsService.getDesign(req.params.id, req.user!),
+      ]);
+      res.json({
+        templates,
+        design,
+        layouts: shopOrderEmailsService.layouts(),
+        placeholders: shopOrderEmailsService.placeholders(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateOrderEmailDesign = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        design: await shopOrderEmailsService.updateDesign(
+          req.params.id,
+          req.body as ShopOrderEmailDesignInput,
+          req.user!,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateOrderEmailTemplate = async (
+    req: Request<WebsiteParams & { status: string }>,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      res.json({
+        template: await shopOrderEmailsService.upsert(
+          req.params.id,
+          req.params.status as ShopOrderEmailStatusLabel,
+          req.body as ShopOrderEmailTemplateInput,
+          req.user!,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetOrderEmailTemplate = async (
+    req: Request<WebsiteParams & { status: string }>,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      res.json({
+        template: await shopOrderEmailsService.reset(
+          req.params.id,
+          req.params.status as ShopOrderEmailStatusLabel,
           req.user!,
         ),
       });

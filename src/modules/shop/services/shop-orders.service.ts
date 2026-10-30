@@ -7,6 +7,7 @@ import { purgeShopPages } from "./shop-cache.js";
 import { refundStatusLabel } from "./shop-checkout.service.js";
 import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
+import { shopOrderEmailsService } from "./shop-order-emails.service.js";
 
 const PAGE_SIZE = 20;
 
@@ -48,6 +49,7 @@ export type ShopOrderView = {
   paidAt: string | null;
   refundedAt: string | null;
   failureReason: string | null;
+  cancelReason: string | null;
   timeline: ShopOrderTimelineEvent[];
   createdAt: string;
   updatedAt: string;
@@ -98,6 +100,7 @@ function toView(order: {
   paidAt: Date | null;
   refundedAt: Date | null;
   failureReason: string | null;
+  cancelReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; fullName: string; email: string; phone: string | null };
@@ -139,6 +142,7 @@ function toView(order: {
     paidAt: order.paidAt?.toISOString() ?? null,
     refundedAt: order.refundedAt?.toISOString() ?? null,
     failureReason: order.failureReason,
+    cancelReason: order.cancelReason,
     timeline: (order.events ?? []).map(toTimelineEvent),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
@@ -312,6 +316,9 @@ export class ShopOrdersService {
     });
 
     if (stockChanged) purgeShopPages(websiteId);
+    if (existing.status !== nextStatus) {
+      void shopOrderEmailsService.notifyStatusChange(orderId, nextStatus);
+    }
     return this.get(websiteId, orderId, actor);
   }
 }
