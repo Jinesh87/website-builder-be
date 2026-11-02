@@ -541,7 +541,7 @@ export class ShopCheckoutService {
    * Full refund after a captured payment when we cannot fulfil (e.g. stock raced away).
    * Records refundStatus immediately; refund.processed webhook confirms money landed.
    */
-  private async refundCapturedPayment(
+  async refundCapturedPayment(
     websiteId: string,
     orderId: string,
     razorpayPaymentId: string,
@@ -558,9 +558,10 @@ export class ShopCheckoutService {
       return { ok: false, refundStatus: ShopRefundStatus.FAILED };
     }
     try {
+      const receiptTail = Date.now().toString(36).slice(-6);
       const refund = await createRazorpayRefund(keys, razorpayPaymentId, {
         notes: { purpose, shopOrderId: orderId, reason: reason.slice(0, 100) },
-        receipt: `shop_rfnd_${orderId.replace(/-/g, "").slice(0, 28)}`,
+        receipt: `srf_${orderId.replace(/-/g, "").slice(0, 24)}_${receiptTail}`.slice(0, 40),
       });
       const refundStatus = refundStatusFromRazorpay(refund.status);
       await prisma.shopOrder.update({

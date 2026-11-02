@@ -79,6 +79,12 @@ shopRouter.patch(
   validate(shopOrderStatusSchema),
   shopController.updateOrderStatus,
 );
+shopRouter.post(
+  "/orders/:orderId/refund",
+  validate(shopOrderParamsSchema, "params"),
+  rateLimit({ name: "shop-order-refund-retry", max: 20, windowSeconds: 60 }),
+  shopController.retryOrderRefund,
+);
 
 shopRouter.get("/order-emails", websiteParams, shopController.listOrderEmailTemplates);
 shopRouter.put(

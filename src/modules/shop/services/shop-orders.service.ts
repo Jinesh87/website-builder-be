@@ -4,10 +4,11 @@ import { prisma } from "../../../config/prisma.js";
 import { ShopOrderStatus, ShopRefundStatus } from "../../../generated/prisma/client.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
-import { refundStatusLabel } from "./shop-checkout.service.js";
+import { refundStatusLabel, shopCheckoutService } from "./shop-checkout.service.js";
 import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
 import { shopOrderEmailsService } from "./shop-order-emails.service.js";
+import { logger } from "../../../config/logger.js";
 
 const PAGE_SIZE = 20;
 
@@ -325,6 +326,76 @@ export class ShopOrdersService {
     if (existing.status !== nextStatus) {
       void shopOrderEmailsService.notifyStatusChange(orderId, nextStatus);
     }
+    return this.get(websiteId, orderId, actor);
+  }
+
+  /**
+   * Merchant retries a Razorpay refund for a returned order whose automatic refund failed.
+   */
+  async retryRefund(websiteId: string, orderId: string, actor: AuthUser): Promise<ShopOrderView> {
+    await this.openShop(websiteId, actor);
+    const existing = await prisma.shopOrder.findFirst({
+      where: { id: orderId, websiteId },
+      select: {
+        id: true,
+        status: true,
+        refundStatus: true,
+        razorpayPaymentId: true,
+        returnReason: true,
+        failureReason: true,
+        number: true,
+      },
+    });
+    if (!existing) throw new AppError(404, "Order not found", "ORDER_NOT_FOUND");
+    if (existing.status !== ShopOrderStatus.RETURNED) {
+      throw new AppError(400, "Only returned orders can use this refund action.", "REFUND_NOT_ALLOWED");
+    }
+    if (existing.refundStatus !== ShopRefundStatus.FAILED) {
+      throw new AppError(400, "This order does not have a failed refund to retry.", "REFUND_NOT_FAILED");
+    }
+    if (!existing.razorpayPaymentId) {
+      throw new AppError(400, "This order has no payment to refund.", "PAYMENT_MISSING");
+    }
+
+    const reason = (existing.returnReason || existing.failureReason || "Merchant refund retry").slice(0, 500);
+    const refund = await shopCheckoutService.refundCapturedPayment(
+      websiteId,
+      existing.id,
+      existing.razorpayPaymentId,
+      reason,
+      "shop_merchant_return_refund",
+    );
+
+    if (refund.ok) {
+      const note =
+        refund.refundStatus === ShopRefundStatus.PROCESSED
+          ? "Refund processed by store"
+          : "Refund restarted by store";
+      await prisma.shopOrder.update({
+        where: { id: existing.id },
+        data: {
+          failureReason: `${note}. ${reason}`.slice(0, 300),
+        },
+      });
+      await recordOrderStatusEvent(prisma, {
+        orderId: existing.id,
+        status: ShopOrderStatus.RETURNED,
+        actorType: "CLIENT",
+        note,
+        userId: actor.id,
+      });
+      logger.info(
+        { websiteId, orderId: existing.id, number: existing.number, refundStatus: refund.refundStatus },
+        "Merchant retried return refund",
+      );
+    } else {
+      throw new AppError(
+        502,
+        "Razorpay could not process the refund. Check your payment keys or try again.",
+        "REFUND_RETRY_FAILED",
+      );
+    }
+
     return this.get(websiteId, orderId, actor);
   }
 }

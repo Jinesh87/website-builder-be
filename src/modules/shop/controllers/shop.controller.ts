@@ -187,6 +187,14 @@ export class ShopController {
     }
   };
 
+  retryOrderRefund = async (req: Request<OrderParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ order: await shopOrdersService.retryRefund(req.params.id, req.params.orderId, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   listOrderEmailTemplates = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       const [templates, design] = await Promise.all([
