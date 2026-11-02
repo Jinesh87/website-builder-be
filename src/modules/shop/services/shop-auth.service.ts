@@ -14,7 +14,6 @@ import { emailService } from "../../email/services/email.service.js";
 import { clearLoginLockout, getLoginLockStatus, recordFailedLoginAttempt } from "../../auth/utils/login-lockout.js";
 import {
   checkVerificationCode,
-  clearVerificationCode,
   generateVerificationCode,
   getResendCooldownSeconds,
   RESEND_COOLDOWN_SECONDS,
@@ -23,6 +22,13 @@ import {
   type VerifyCodeResult,
 } from "../../auth/utils/verification-code.js";
 import { consumeShopPasswordResetToken, createShopPasswordResetToken, SHOP_RESET_TOKEN_TTL_SECONDS } from "../utils/shop-password-reset.js";
+import {
+  clearPendingShopSignup,
+  getPendingShopSignup,
+  pendingSignupSubject,
+  storePendingShopSignup,
+  type PendingShopSignup,
+} from "../utils/shop-pending-signup.js";
 import { mediaUrl } from "../../media/services/media.service.js";
 import type {
   ShopAddToCartInput,
@@ -122,92 +128,133 @@ export class ShopAuthService {
     const email = input.email.toLowerCase();
     const existing = await prisma.shopCustomer.findUnique({
       where: { websiteId_email: { websiteId, email } },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    if (existing) throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
-
-    let customer: ShopCustomer;
-    try {
-      customer = await prisma.shopCustomer.create({
-        data: {
-          websiteId,
-          clientId: website.clientId,
-          email,
-          passwordHash: await hashPassword(input.password),
-          fullName: input.fullName.trim(),
-          phone: input.phone?.trim() || null,
-          status: UserStatus.PENDING_VERIFICATION,
-        },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
-      }
-      throw error;
+    if (existing?.status === UserStatus.PENDING_VERIFICATION) {
+      // Legacy incomplete signups are not real accounts — drop them so OTP can start fresh.
+      await prisma.shopCustomer.delete({ where: { id: existing.id } });
+    } else if (existing) {
+      throw new AppError(409, "An account with this email already exists.", "EMAIL_TAKEN");
     }
 
-    logger.info({ websiteId, customerId: customer.id }, "Shop customer signed up");
-    return this.dispatchVerificationCode(customer);
+    const pending: PendingShopSignup = {
+      websiteId,
+      clientId: website.clientId,
+      email,
+      passwordHash: await hashPassword(input.password),
+      fullName: input.fullName.trim(),
+      phone: input.phone?.trim() || null,
+    };
+    await storePendingShopSignup(pending);
+    logger.info({ websiteId, email }, "Shop customer signup pending email verification");
+    return this.dispatchPendingVerificationCode(pending);
   }
 
   async resendVerification(websiteId: string, rawEmail: string): Promise<ShopVerificationDispatch> {
     await this.openShop(websiteId);
     const email = rawEmail.toLowerCase();
-    const customer = await prisma.shopCustomer.findUnique({
-      where: { websiteId_email: { websiteId, email } },
-    });
-    if (!customer || customer.status !== UserStatus.PENDING_VERIFICATION) {
+    const pending = await getPendingShopSignup(websiteId, email);
+    if (!pending) {
       return { email, emailSent: true, resendAvailableInSeconds: RESEND_COOLDOWN_SECONDS };
     }
-    const cooldown = await getResendCooldownSeconds(customer.id, "shop-signup");
+    const subject = pendingSignupSubject(websiteId, email);
+    const cooldown = await getResendCooldownSeconds(subject, "shop-signup");
     if (cooldown > 0) {
       throw new AppError(429, `Please wait ${cooldown}s before requesting another code.`, "RESEND_COOLDOWN", {
         retryAfterSeconds: cooldown,
       });
     }
-    return this.dispatchVerificationCode(customer);
+    await storePendingShopSignup(pending);
+    return this.dispatchPendingVerificationCode(pending);
   }
 
   async verifyEmail(websiteId: string, rawEmail: string, code: string): Promise<ShopAuthResult> {
-    await this.openShop(websiteId);
+    const website = await this.openShop(websiteId);
     const email = rawEmail.toLowerCase();
-    const customer = await prisma.shopCustomer.findUnique({
+    const existing = await prisma.shopCustomer.findUnique({
       where: { websiteId_email: { websiteId, email } },
+      select: { id: true, status: true },
     });
-    if (!customer) throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
-    if (customer.status !== UserStatus.PENDING_VERIFICATION) {
+    if (existing && existing.status !== UserStatus.PENDING_VERIFICATION) {
       throw new AppError(409, "This email is already verified. Please log in.", "ALREADY_VERIFIED");
     }
-    assertCodeAccepted(await checkVerificationCode(customer.id, code, "shop-signup"));
-    const verified = await prisma.shopCustomer.update({
-      where: { id: customer.id },
-      data: { status: UserStatus.ACTIVE, emailVerifiedAt: new Date(), lastSignedInAt: new Date() },
-    });
-    logger.info({ websiteId, customerId: customer.id }, "Shop customer email verified");
+
+    const pending = await getPendingShopSignup(websiteId, email);
+    if (!pending) throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
+
+    assertCodeAccepted(await checkVerificationCode(pendingSignupSubject(websiteId, email), code, "shop-signup"));
+
+    let verified: ShopCustomer;
+    try {
+      if (existing?.status === UserStatus.PENDING_VERIFICATION) {
+        verified = await prisma.shopCustomer.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash: pending.passwordHash,
+            fullName: pending.fullName,
+            phone: pending.phone,
+            status: UserStatus.ACTIVE,
+            emailVerifiedAt: new Date(),
+            lastSignedInAt: new Date(),
+          },
+        });
+      } else {
+        verified = await prisma.shopCustomer.create({
+          data: {
+            websiteId,
+            clientId: website.clientId,
+            email,
+            passwordHash: pending.passwordHash,
+            fullName: pending.fullName,
+            phone: pending.phone,
+            status: UserStatus.ACTIVE,
+            emailVerifiedAt: new Date(),
+            lastSignedInAt: new Date(),
+          },
+        });
+      }
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new AppError(409, "This email is already verified. Please log in.", "ALREADY_VERIFIED");
+      }
+      throw error;
+    }
+
+    await clearPendingShopSignup(websiteId, email);
+    logger.info({ websiteId, customerId: verified.id }, "Shop customer email verified");
     return this.createSession(verified, true);
   }
 
   async login(websiteId: string, input: ShopLoginInput): Promise<ShopAuthResult> {
     await this.openShop(websiteId);
     const email = input.email.trim().toLowerCase();
-    const customer = await prisma.shopCustomer.findUnique({
+    let customer = await prisma.shopCustomer.findUnique({
       where: { websiteId_email: { websiteId, email } },
     });
+    // Incomplete (never-verified) rows are not accounts; remove so signup can start clean.
+    if (customer?.status === UserStatus.PENDING_VERIFICATION) {
+      await prisma.shopCustomer.delete({ where: { id: customer.id } });
+      customer = null;
+    }
+
     const lockKey = lockoutKey(websiteId, customer?.id ?? null, email);
     const lock = await getLoginLockStatus(lockKey);
     if (lock.locked) throw lockedError(lock.lockedUntil);
 
-    const passwordOk = await verifyPassword(input.password, customer?.passwordHash ?? (await dummyPasswordHash));
-    if (!customer || !passwordOk) {
+    const pending = customer ? null : await getPendingShopSignup(websiteId, email);
+    const passwordHash = customer?.passwordHash ?? pending?.passwordHash ?? (await dummyPasswordHash);
+    const passwordOk = await verifyPassword(input.password, passwordHash);
+    if ((!customer && !pending) || !passwordOk) {
       const afterFail = await recordFailedLoginAttempt(lockKey);
       if (afterFail.locked) throw lockedError(afterFail.lockedUntil);
       throw INVALID_CREDENTIALS();
     }
+    if (pending) {
+      throw new AppError(403, "Please verify your email first.", "EMAIL_NOT_VERIFIED", { email: pending.email });
+    }
+    if (!customer) throw INVALID_CREDENTIALS();
     if (customer.status === UserStatus.SUSPENDED) {
       throw new AppError(403, "Your account is suspended. Contact the store.", "ACCOUNT_SUSPENDED");
-    }
-    if (customer.status === UserStatus.PENDING_VERIFICATION) {
-      throw new AppError(403, "Please verify your email first.", "EMAIL_NOT_VERIFIED", { email: customer.email });
     }
 
     await clearLoginLockout(lockKey);
@@ -455,24 +502,25 @@ export class ShopAuthService {
     return this.createSession(customer, false);
   }
 
-  private async dispatchVerificationCode(customer: ShopCustomer): Promise<ShopVerificationDispatch> {
+  private async dispatchPendingVerificationCode(pending: PendingShopSignup): Promise<ShopVerificationDispatch> {
     const code = generateVerificationCode();
-    await storeVerificationCode(customer.id, code, "shop-signup");
+    const subject = pendingSignupSubject(pending.websiteId, pending.email);
+    await storeVerificationCode(subject, code, "shop-signup");
     try {
       await emailService.sendVerificationCode({
-        to: customer.email,
-        fullName: customer.fullName,
+        to: pending.email,
+        fullName: pending.fullName,
         code,
         expiresInMinutes: Math.round(VERIFICATION_CODE_TTL_SECONDS / 60),
       });
     } catch (error) {
-      logger.error({ err: error, customerId: customer.id }, "Shop verification email failed");
+      logger.error({ err: error, email: pending.email, websiteId: pending.websiteId }, "Shop verification email failed");
       if (!isProduction) {
-        logger.info({ code, email: customer.email }, "Shop verification code (dev fallback)");
+        logger.info({ code, email: pending.email }, "Shop verification code (dev fallback)");
       }
     }
     return {
-      email: customer.email,
+      email: pending.email,
       emailSent: true,
       resendAvailableInSeconds: RESEND_COOLDOWN_SECONDS,
     };

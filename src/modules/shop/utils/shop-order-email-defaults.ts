@@ -7,7 +7,8 @@ export type ShopOrderEmailStatusLabel =
   | "shipped"
   | "delivered"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "returned";
 
 export const SHOP_ORDER_EMAIL_STATUSES: ShopOrderEmailStatusLabel[] = [
   "paid",
@@ -16,6 +17,7 @@ export const SHOP_ORDER_EMAIL_STATUSES: ShopOrderEmailStatusLabel[] = [
   "delivered",
   "failed",
   "cancelled",
+  "returned",
 ];
 
 export const STATUS_FROM_EMAIL_LABEL: Record<ShopOrderEmailStatusLabel, ShopOrderStatus> = {
@@ -26,6 +28,7 @@ export const STATUS_FROM_EMAIL_LABEL: Record<ShopOrderEmailStatusLabel, ShopOrde
   delivered: ShopOrderStatus.DELIVERED,
   failed: ShopOrderStatus.FAILED,
   cancelled: ShopOrderStatus.CANCELLED,
+  returned: ShopOrderStatus.RETURNED,
 };
 
 export const EMAIL_LABEL_FROM_STATUS: Record<ShopOrderStatus, ShopOrderEmailStatusLabel> = {
@@ -36,6 +39,7 @@ export const EMAIL_LABEL_FROM_STATUS: Record<ShopOrderStatus, ShopOrderEmailStat
   [ShopOrderStatus.DELIVERED]: "delivered",
   [ShopOrderStatus.FAILED]: "failed",
   [ShopOrderStatus.CANCELLED]: "cancelled",
+  [ShopOrderStatus.RETURNED]: "returned",
 };
 
 export const STATUS_DISPLAY: Record<ShopOrderEmailStatusLabel, string> = {
@@ -46,6 +50,7 @@ export const STATUS_DISPLAY: Record<ShopOrderEmailStatusLabel, string> = {
   delivered: "Delivered",
   failed: "Failed",
   cancelled: "Cancelled",
+  returned: "Returned",
 };
 
 /** Placeholders shop owners can use in subject / title / message. */
@@ -106,6 +111,12 @@ export const DEFAULT_SHOP_ORDER_EMAILS: Record<ShopOrderEmailStatusLabel, Defaul
     subject: "Order #{{orderNumber}} cancelled — {{shopName}}",
     heading: "Order cancelled",
     message: "Hi {{customerName}},\n\nOrder #{{orderNumber}} has been cancelled.\n\n{{failureReason}}",
+  },
+  returned: {
+    subject: "Return received · Order #{{orderNumber}} — {{shopName}}",
+    heading: "Return received",
+    message:
+      "Hi {{customerName}},\n\nWe’ve received your return request for order #{{orderNumber}}. If a refund is due, it will follow according to your payment method.\n\n{{failureReason}}",
   },
 };
 

@@ -9,6 +9,7 @@ import {
   shopCartItemParamsSchema,
   shopChangePasswordSchema,
   shopCancelOrderSchema,
+  shopReturnOrderSchema,
   shopCheckoutConfirmSchema,
   shopEmailOnlySchema,
   shopOrderParamsSchema,
@@ -140,6 +141,14 @@ shopAuthRouter.post(
   rateLimit({ name: "shop-cancel-order", max: 10, windowSeconds: MINUTE }),
   validate(shopCancelOrderSchema),
   shopAuthController.cancelOrder,
+);
+shopAuthRouter.post(
+  "/orders/:orderId/return",
+  validate(shopOrderParamsSchema, "params"),
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-return-order", max: 10, windowSeconds: MINUTE }),
+  validate(shopReturnOrderSchema),
+  shopAuthController.returnOrder,
 );
 
 export default shopAuthRouter;

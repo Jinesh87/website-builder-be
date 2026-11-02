@@ -7,6 +7,7 @@ import { mediaUrl } from "../../media/services/media.service.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
+import { effectiveReturnDays } from "../utils/shop-order-return.js";
 import type {
   PublicShopProduct,
   PublicShopVariant,
@@ -73,13 +74,16 @@ function toProduct(product: ProductRow): ShopProductView {
     slug: product.slug,
     description: product.description,
     categoryId: product.categoryId,
-    categoryName: product.category.name,
+    categoryName: product.category?.name ?? "",
+    returnsEnabled: product.returnsEnabled,
+    returnDays: product.returnDays,
     optionSets: readOptionSets(product.optionSets),
     images: readImages(product.images),
     variants: product.variants.map(toVariant),
     updatedAt: product.updatedAt.toISOString(),
   };
 }
+
 
 function optionValues(optionSets: ShopOptionSetView[], variantName: string): { name: string; value: string; list?: boolean }[] {
   for (const set of optionSets) {
@@ -122,7 +126,7 @@ function sharedValueImages(optionSets: ShopOptionSetView[], variantName: string)
   return [];
 }
 
-function toPublicProduct(product: ProductRow): PublicShopProduct {
+function toPublicProduct(product: ProductRow, shopReturnDays: number | null): PublicShopProduct {
   const optionSets = readOptionSets(product.optionSets);
   const variants: PublicShopVariant[] = product.variants.map((variant) => {
     const own = readImages(variant.images);
@@ -141,7 +145,8 @@ function toPublicProduct(product: ProductRow): PublicShopProduct {
     name: product.name,
     slug: product.slug,
     description: product.description,
-    categoryName: product.category.name,
+    categoryName: product.category?.name ?? "",
+    returnDays: effectiveReturnDays(shopReturnDays, product),
     images: readImages(product.images).map(({ url, alt }) => ({ url, alt })),
     variants,
   };
@@ -368,7 +373,8 @@ export class ShopService {
 
   async createProduct(websiteId: string, input: ShopProductInput, actor: AuthUser): Promise<ShopProductView> {
     const website = await this.openShop(websiteId, actor);
-    await this.findCategory(websiteId, input.categoryId);
+    const categoryId = emptyToNull(input.categoryId ?? undefined);
+    if (categoryId) await this.findCategory(websiteId, categoryId);
     const count = await prisma.product.count({ where: { websiteId } });
     if (count >= MAX_PRODUCTS) {
       throw new AppError(409, `A shop can have up to ${MAX_PRODUCTS} products.`, "PRODUCT_LIMIT");
@@ -383,10 +389,12 @@ export class ShopService {
         data: {
           websiteId,
           clientId: website.clientId,
-          categoryId: input.categoryId,
+          categoryId,
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
+          returnsEnabled: input.returnsEnabled !== false,
+          returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
           images: images as Prisma.InputJsonValue,
           variants: { create: variantRows(expanded.variants) },
@@ -407,7 +415,8 @@ export class ShopService {
   ): Promise<ShopProductView> {
     await this.openShop(websiteId, actor);
     const current = await this.findProduct(websiteId, productId);
-    await this.findCategory(websiteId, input.categoryId);
+    const categoryId = emptyToNull(input.categoryId ?? undefined);
+    if (categoryId) await this.findCategory(websiteId, categoryId);
     const expanded = expandOptionSets(input.optionSets);
     const images = await this.resolveImages(current.clientId, input.images ?? []);
     await this.assertImages(current.clientId, imageIds(expanded));
@@ -444,10 +453,12 @@ export class ShopService {
       return tx.product.update({
         where: { id: productId },
         data: {
-          categoryId: input.categoryId,
+          categoryId,
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
+          returnsEnabled: input.returnsEnabled !== false,
+          returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
           images: images as Prisma.InputJsonValue,
           variants: { create: variantRows(expanded.variants, quantities) },
@@ -493,7 +504,11 @@ export class ShopService {
   async publicCatalog(websiteId: string): Promise<PublicShopProduct[]> {
     const website = await prisma.website.findUnique({
       where: { id: websiteId },
-      select: { shopEnabled: true, client: { select: { shopFeatureEnabled: true } } },
+      select: {
+        shopEnabled: true,
+        shopReturnDays: true,
+        client: { select: { shopFeatureEnabled: true } },
+      },
     });
     if (!website?.shopEnabled || !website.client.shopFeatureEnabled) return [];
     const products = await prisma.product.findMany({
@@ -502,7 +517,7 @@ export class ShopService {
       orderBy: { name: "asc" },
       take: MAX_PRODUCTS,
     });
-    return products.map(toPublicProduct);
+    return products.map((product) => toPublicProduct(product, website.shopReturnDays));
   }
 
   private async resolveImages(clientId: string, images: ShopImageInput[]): Promise<{ mediaId: string; alt: string }[]> {

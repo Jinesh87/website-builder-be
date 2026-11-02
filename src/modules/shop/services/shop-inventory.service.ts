@@ -1,10 +1,12 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import { prisma } from "../../../config/prisma.js";
-import { Prisma } from "../../../generated/prisma/client.js";
+import { Prisma, ShopOrderStatus } from "../../../generated/prisma/client.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
+import { refundStatusLabel } from "./shop-checkout.service.js";
 import { readOptionSets } from "./shop.service.js";
+import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 
 const PAGE_SIZE = 40;
 const MAX_ROWS = 2000;
@@ -20,6 +22,37 @@ export type InventoryRow = {
   options: InventoryOption[];
   pricePaise: number;
   quantity: number;
+  /** Distinct RETURNED orders that include this product. */
+  returnedOrderCount: number;
+};
+
+export type ProductReturnedOrderItem = {
+  id: string;
+  productName: string;
+  variantName: string;
+  quantity: number;
+  unitPricePaise: number;
+  lineTotalPaise: number;
+};
+
+export type ProductReturnedOrder = {
+  id: string;
+  number: string;
+  status: "returned";
+  refundStatus: ShopRefundStatusLabel;
+  totalPaise: number;
+  returnReason: string | null;
+  customerName: string;
+  customerEmail: string;
+  returnedAt: string;
+  createdAt: string;
+  items: ProductReturnedOrderItem[];
+};
+
+export type ProductReturnedOrdersView = {
+  productId: string;
+  productName: string;
+  orders: ProductReturnedOrder[];
 };
 
 export type InventoryMovementView = {
@@ -74,7 +107,84 @@ export class ShopInventoryService {
       orderBy: [{ product: { name: "asc" } }, { sortOrder: "asc" }],
       take: MAX_ROWS,
     });
-    return variants.map((variant) => toRow(variant));
+    const productIds = [...new Set(variants.map((variant) => variant.product.id))];
+    const returnedByProduct = new Map<string, number>();
+    if (productIds.length > 0) {
+      const returnedItems = await prisma.shopOrderItem.findMany({
+        where: {
+          productId: { in: productIds },
+          order: { websiteId, status: ShopOrderStatus.RETURNED },
+        },
+        select: { productId: true, orderId: true },
+      });
+      const orderIdsByProduct = new Map<string, Set<string>>();
+      for (const item of returnedItems) {
+        if (!item.productId) continue;
+        const set = orderIdsByProduct.get(item.productId) ?? new Set<string>();
+        set.add(item.orderId);
+        orderIdsByProduct.set(item.productId, set);
+      }
+      for (const [productId, orderIds] of orderIdsByProduct) {
+        returnedByProduct.set(productId, orderIds.size);
+      }
+    }
+    return variants.map((variant) => toRow(variant, returnedByProduct.get(variant.product.id) ?? 0));
+  }
+
+  async listProductReturns(websiteId: string, productId: string, actor: AuthUser): Promise<ProductReturnedOrdersView> {
+    await this.openShop(websiteId, actor);
+    const product = await prisma.product.findFirst({
+      where: { id: productId, websiteId },
+      select: { id: true, name: true },
+    });
+    if (!product) throw new AppError(404, "Product not found", "PRODUCT_NOT_FOUND");
+
+    const orders = await prisma.shopOrder.findMany({
+      where: {
+        websiteId,
+        status: ShopOrderStatus.RETURNED,
+        items: { some: { productId } },
+      },
+      include: {
+        customer: { select: { fullName: true, email: true } },
+        items: {
+          where: { productId },
+          orderBy: { productName: "asc" },
+        },
+        events: {
+          where: { status: ShopOrderStatus.RETURNED },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+    });
+
+    return {
+      productId: product.id,
+      productName: product.name,
+      orders: orders.map((order) => ({
+        id: order.id,
+        number: String(order.number),
+        status: "returned" as const,
+        refundStatus: refundStatusLabel(order.refundStatus),
+        totalPaise: order.totalPaise,
+        returnReason: order.returnReason,
+        customerName: order.customer.fullName,
+        customerEmail: order.customer.email,
+        returnedAt: (order.events[0]?.createdAt ?? order.updatedAt).toISOString(),
+        createdAt: order.createdAt.toISOString(),
+        items: order.items.map((item) => ({
+          id: item.id,
+          productName: item.productName,
+          variantName: item.variantName,
+          quantity: item.quantity,
+          unitPricePaise: item.unitPricePaise,
+          lineTotalPaise: item.lineTotalPaise,
+        })),
+      })),
+    };
   }
 
   async addQuantity(
@@ -119,7 +229,15 @@ export class ShopInventoryService {
       return saved;
     });
 
-    return toRow({ ...variant, quantity: updated.quantity });
+    const returnedItems = await prisma.shopOrderItem.findMany({
+      where: {
+        productId: variant.product.id,
+        order: { websiteId, status: ShopOrderStatus.RETURNED },
+      },
+      select: { orderId: true },
+    });
+    const returnedOrderCount = new Set(returnedItems.map((item) => item.orderId)).size;
+    return toRow({ ...variant, quantity: updated.quantity }, returnedOrderCount);
   }
 
   async log(websiteId: string, search: string | undefined, page: number, actor: AuthUser): Promise<InventoryLogPage> {
@@ -174,20 +292,21 @@ type StockVariant = {
     id: string;
     name: string;
     optionSets: Prisma.JsonValue;
-    category: { name: string };
+    category: { name: string } | null;
   };
 };
 
-function toRow(variant: StockVariant): InventoryRow {
+function toRow(variant: StockVariant, returnedOrderCount: number): InventoryRow {
   return {
     variantId: variant.id,
     productId: variant.product.id,
     productName: variant.product.name,
-    categoryName: variant.product.category.name,
+    categoryName: variant.product.category?.name ?? "",
     variantName: variant.name,
     options: variantOptions(variant.product.optionSets, variant.name),
     pricePaise: variant.pricePaise,
     quantity: variant.quantity,
+    returnedOrderCount,
   };
 }
 

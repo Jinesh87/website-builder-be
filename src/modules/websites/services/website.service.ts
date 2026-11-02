@@ -69,6 +69,15 @@ const RESERVED_SUBDOMAINS = new Set([
   "support", "help", "status", "sites", "preview", "staging", "dev", "test", "ns1", "ns2",
 ]);
 
+function readReturnGuidelines(value: Prisma.JsonValue | null | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry !== "string") return [];
+    const trimmed = entry.trim();
+    return trimmed ? [trimmed] : [];
+  });
+}
+
 const MAX_CLIENT_TEMPLATES = 20;
 const MAX_SAVED_SECTIONS = 100;
 
@@ -160,6 +169,8 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
           : website.shopCancelUntilStatus === "SHIPPED"
             ? "shipped"
             : null,
+    shopReturnDays: website.shopReturnDays ?? null,
+    shopReturnGuidelines: readReturnGuidelines(website.shopReturnGuidelines),
     publishedAt: website.publishedAt?.toISOString() ?? null,
     createdAt: website.createdAt.toISOString(),
     updatedAt: website.updatedAt.toISOString(),
@@ -770,6 +781,15 @@ export class WebsiteService {
             : input.shopCancelUntilStatus === "shipped"
               ? "SHIPPED"
               : null;
+    }
+    if (input.shopReturnDays !== undefined) {
+      data.shopReturnDays = input.shopReturnDays;
+    }
+    if (input.shopReturnGuidelines !== undefined) {
+      data.shopReturnGuidelines = input.shopReturnGuidelines
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 12);
     }
     const infoKeys = [
       "businessName",

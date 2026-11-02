@@ -81,9 +81,13 @@ export const shopProductSchema = Joi.object({
     "string.empty": "Enter a product name",
   }),
   description: Joi.string().trim().max(2000).allow("").optional(),
-  categoryId: Joi.string().guid().required().messages({
-    "string.guid": "Choose a category",
-    "any.required": "Choose a category",
+  categoryId: Joi.string().guid().allow(null, "").optional().messages({
+    "string.guid": "Choose a valid category",
+  }),
+  returnsEnabled: Joi.boolean().optional(),
+  returnDays: Joi.number().integer().min(1).max(365).allow(null).optional().messages({
+    "number.min": "Return window must be at least 1 day",
+    "number.max": "Return window cannot exceed 365 days",
   }),
   optionSets: Joi.array().items(optionSetSchema).min(1).max(8).required().messages({
     "array.min": "Add at least one combination",
@@ -144,6 +148,11 @@ export const shopInventoryParamsSchema = Joi.object({
   variantId: Joi.string().guid().required(),
 });
 
+export const shopInventoryReturnsParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  productId: Joi.string().guid().required(),
+});
+
 export const shopInventoryAdjustSchema = Joi.object({
   quantity: Joi.number().integer().min(1).max(1_000_000).required().messages({
     "number.min": "Add at least 1",
@@ -164,13 +173,13 @@ export const shopCustomerParamsSchema = Joi.object({
 });
 
 const shopOrderStatus = Joi.string()
-  .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled")
+  .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled", "returned")
   .required();
 
 export const shopOrderQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).allow("").optional(),
   status: Joi.string()
-    .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled")
+    .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled", "returned")
     .optional(),
   page: Joi.number().integer().min(1).default(1),
 });
@@ -185,7 +194,7 @@ export const shopOrderStatusSchema = Joi.object({
 });
 
 const shopOrderEmailStatus = Joi.string()
-  .valid("paid", "processing", "shipped", "delivered", "failed", "cancelled")
+  .valid("paid", "processing", "shipped", "delivered", "failed", "cancelled", "returned")
   .required();
 
 export const shopOrderEmailParamsSchema = Joi.object({

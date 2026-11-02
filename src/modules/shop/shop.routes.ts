@@ -16,6 +16,7 @@ import {
   shopInventoryLogQuerySchema,
   shopInventoryParamsSchema,
   shopInventoryQuerySchema,
+  shopInventoryReturnsParamsSchema,
   shopOrderEmailDesignSchema,
   shopOrderEmailParamsSchema,
   shopOrderEmailTemplateSchema,
@@ -100,6 +101,11 @@ shopRouter.get(
   validate(shopInventoryLogQuerySchema, "query"),
   shopController.inventoryLog,
 );
+shopRouter.get(
+  "/inventory/returns/:productId",
+  validate(shopInventoryReturnsParamsSchema, "params"),
+  shopController.listProductReturns,
+);
 
 shopRouter.get(
   "/customers",
@@ -129,6 +135,12 @@ shopRouter.patch(
   validate(shopOrderParamsSchema, "params"),
   validate(shopOrderStatusSchema),
   shopController.updateOrderStatus,
+);
+shopRouter.post(
+  "/orders/:orderId/refund",
+  validate(shopOrderParamsSchema, "params"),
+  rateLimit({ name: "shop-order-refund-retry", max: 20, windowSeconds: 60 }),
+  shopController.retryOrderRefund,
 );
 
 shopRouter.get(

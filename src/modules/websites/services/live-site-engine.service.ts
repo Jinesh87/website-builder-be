@@ -17,6 +17,7 @@ type ShopRender = {
   authHref?: string;
   accountHref?: string;
   cancelUntilStatus?: "paid" | "processing" | "shipped" | null;
+  returnGuidelines?: string[];
   products: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
@@ -169,6 +170,8 @@ const renderStateSelect = {
   logoMediaId: true,
   shopEnabled: true,
   shopCancelUntilStatus: true,
+  shopReturnDays: true,
+  shopReturnGuidelines: true,
   client: { select: { shopFeatureEnabled: true } },
   domains: {
     where: { status: DomainStatus.ACTIVE },
@@ -286,7 +289,15 @@ function legacyShopHtml(
     const policyHtml = policy
       ? `<p class="wb-product-policy" style="margin:1rem 0 0;padding:.75rem .9rem;border:1px solid rgba(0,0,0,.1);border-radius:.65rem;font-size:.88rem;line-height:1.5;color:var(--color-muted);"><strong style="display:block;margin:0 0 .25rem;color:inherit;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;">Cancellation</strong>${escapeHtml(policy)}</p>`
       : "";
-    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}${policyHtml}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
+    const returnDays = data.showReturnPolicy === false ? null : product.returnDays;
+    const returnPoints = (shop?.returnGuidelines ?? [])
+      .map((line) => `<li>${escapeHtml(line)}</li>`)
+      .join("");
+    const returnHtml =
+      returnDays && returnDays > 0
+        ? `<aside class="wb-product-policy" style="margin:1rem 0 0;padding:.75rem .9rem;border:1px solid rgba(0,0,0,.1);border-radius:.65rem;font-size:.88rem;line-height:1.5;color:var(--color-muted);"><strong style="display:block;margin:0 0 .25rem;color:inherit;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;">Returns</strong><p style="margin:0;">Return within ${returnDays} day${returnDays === 1 ? "" : "s"} of delivery.</p>${returnPoints ? `<ul style="margin:.45rem 0 0;padding-left:1.1rem;">${returnPoints}</ul>` : ""}</aside>`
+        : "";
+    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}${policyHtml}${returnHtml}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
   }
 
   const list = shop?.products ?? [];
@@ -523,12 +534,16 @@ Sitemap: ${domain}/sitemap.xml
     const authPage = pages.find((page) => page.sections.some((section) => section.type === "auth"));
     const accountPage = pages.find((page) => page.sections.some((section) => section.type === "account"));
     const cancelUntilStatus = cancelUntilLabel(website.shopCancelUntilStatus);
+    const returnGuidelines = Array.isArray(website.shopReturnGuidelines)
+      ? website.shopReturnGuidelines.flatMap((entry) => (typeof entry === "string" && entry.trim() ? [entry.trim()] : []))
+      : [];
     const shop: ShopRender | undefined = shopOpen
       ? {
           websiteId: website.id,
           authHref: authPage ? (authPage.slug === "/" ? "/" : authPage.slug) : "/login",
           accountHref: accountPage ? (accountPage.slug === "/" ? "/" : accountPage.slug) : "/account",
           cancelUntilStatus,
+          returnGuidelines,
           products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
           ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
           ...(paged ? { list: paged.list } : {}),
