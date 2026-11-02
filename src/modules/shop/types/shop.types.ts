@@ -46,7 +46,11 @@ export type ShopImageView = {
 export type ShopProductInput = {
   name: string;
   description?: string;
-  categoryId: string;
+  categoryId?: string | null;
+  /** Defaults to true when omitted. */
+  returnsEnabled?: boolean;
+  /** Null/omitted = use the shop default return window. */
+  returnDays?: number | null;
   optionSets: ShopOptionSetInput[];
   images?: ShopImageInput[];
 };
@@ -110,8 +114,11 @@ export type ShopProductView = {
   name: string;
   slug: string;
   description: string | null;
-  categoryId: string;
+  categoryId: string | null;
   categoryName: string;
+  returnsEnabled: boolean;
+  /** Null = use the shop default return window. */
+  returnDays: number | null;
   optionSets: ShopOptionSetView[];
   images: ShopImageView[];
   variants: ShopVariantView[];
@@ -136,6 +143,8 @@ export type PublicShopProduct = {
   slug: string;
   description: string | null;
   categoryName: string;
+  /** Effective return window for this product. Null = returns not offered. */
+  returnDays: number | null;
   images: PublicShopImage[];
   variants: PublicShopVariant[];
 };

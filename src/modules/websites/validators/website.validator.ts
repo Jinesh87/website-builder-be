@@ -123,6 +123,17 @@ export const updateWebsiteSchema = Joi.object({
   seoToolsEnabled: Joi.boolean().optional(),
   shopEnabled: Joi.boolean().optional(),
   shopCancelUntilStatus: Joi.string().valid("paid", "processing", "shipped").allow(null).optional(),
+  shopReturnDays: Joi.number().integer().min(1).max(365).allow(null).optional().messages({
+    "number.min": "Return window must be at least 1 day",
+    "number.max": "Return window cannot exceed 365 days",
+  }),
+  shopReturnGuidelines: Joi.array()
+    .items(Joi.string().trim().min(1).max(240))
+    .max(12)
+    .optional()
+    .messages({
+      "array.max": "Add at most 12 return guideline points",
+    }),
   ...websiteInfo,
 }).min(1);
 

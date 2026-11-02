@@ -15,7 +15,8 @@ export type ShopOrderStatusLabel =
   | "shipped"
   | "delivered"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "returned";
 
 export type ShopRefundStatusLabel = "none" | "pending" | "processed" | "failed";
 
@@ -32,6 +33,10 @@ export type ShopOrderSummary = {
   refundedAt: string | null;
   /** Shopper may cancel this order under the website's cancel policy. */
   canCancel: boolean;
+  /** Shopper may return this delivered order within the return window. */
+  canReturn: boolean;
+  /** Inclusive deadline for a customer return, when canReturn is true. */
+  returnUntil: string | null;
 };
 
 export type ShopOrderTimelineEventView = {
@@ -56,11 +61,16 @@ export type ShopOrderDetailView = ShopOrderSummary & {
   timeline: ShopOrderTimelineEventView[];
   failureReason: string | null;
   cancelReason: string | null;
+  returnReason: string | null;
   paidAt: string | null;
   updatedAt: string;
 };
 
 export type ShopCancelOrderInput = {
+  reason: string;
+};
+
+export type ShopReturnOrderInput = {
   reason: string;
 };
 

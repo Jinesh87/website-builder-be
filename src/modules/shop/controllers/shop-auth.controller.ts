@@ -211,6 +211,21 @@ export class ShopAuthController {
       next(error);
     }
   };
+
+  returnOrder = async (req: Request<WebsiteParams & { orderId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        order: await shopCheckoutService.returnCustomerOrder(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          req.params.orderId,
+          req.body,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const shopAuthController = new ShopAuthController();
