@@ -1,6 +1,7 @@
 enum UserRole {
   SUPER_ADMIN
   CLIENT
+  PARTNER
 }
 
 enum UserStatus {

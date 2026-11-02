@@ -54,9 +54,9 @@ function istDayStart(day: string): Date {
   return new Date(`${day}T00:00:00+05:30`);
 }
 
-/** A client's login account: their earliest CLIENT user, as on the clients pages. */
+/** A client's login account: their earliest CLIENT or PARTNER user, as on the clients pages. */
 const ownerSelect = {
-  where: { role: UserRole.CLIENT },
+  where: { role: { in: [UserRole.CLIENT, UserRole.PARTNER] } },
   orderBy: { createdAt: "asc" },
   take: 1,
   select: { fullName: true, email: true, username: true, phone: true },

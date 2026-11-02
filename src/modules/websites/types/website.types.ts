@@ -198,6 +198,8 @@ export type ThemeSummary = { id: string; name: string; settings: ThemeSettings }
 export type WebsiteTemplateSummary = {
   id: string;
   key: string;
+  /** Gallery sequence number (#3001, …) for platform templates; null for built-in or custom client templates. */
+  number?: number | null;
   /** True for a client's own saved template; false for platform templates. */
   isCustom: boolean;
   name: string;

@@ -10,6 +10,7 @@ import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { Prisma, type User } from "../../../generated/prisma/client.js";
 import { emailService } from "../../email/services/email.service.js";
+import { partnerService } from "../../partner/services/partner.service.js";
 import type {
   AuthResult,
   ChangePasswordInput,
@@ -138,6 +139,21 @@ export class AuthService {
     }
 
     logger.info({ userId: user.id, clientId: user.clientId }, "Client signed up");
+
+    if (input.referralCode && user.clientId && user.email) {
+      try {
+        await partnerService.attributeReferralOnSignup({
+          referralCode: input.referralCode,
+          userId: user.id,
+          clientId: user.clientId,
+          customerName: user.fullName,
+          customerEmail: user.email,
+        });
+      } catch (err) {
+        logger.error({ err, userId: user.id }, "Failed to attribute referral on signup");
+      }
+    }
+
     return this.dispatchVerificationCode({ id: user.id, email, fullName: user.fullName });
   }
 
@@ -530,6 +546,19 @@ export class AuthService {
   }
 
   private async createSession(user: UserWithClient, remember: boolean): Promise<AuthResult> {
+    if ((user.role === UserRole.CLIENT || user.role === UserRole.PARTNER) && !user.clientId) {
+      const newClient = await prisma.client.create({
+        data: {
+          businessName: user.fullName || "My Workspace",
+          source: ClientSource.SELF_SIGNUP,
+        },
+      });
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { clientId: newClient.id },
+        include: { client: clientSelect },
+      });
+    }
     const tokens = await this.issueTokens(user, remember);
     return { user: toPublicUser(user), tokens, remember };
   }

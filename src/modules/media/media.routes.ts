@@ -53,7 +53,7 @@ const byFolderId = validate(folderIdParamsSchema, "params");
 mediaRouter.get("/files/:id", byId, mediaController.serve);
 
 /** Shared by Super Admin and clients; the service limits clients to their own media. */
-mediaRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT));
+mediaRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT, UserRole.PARTNER));
 
 mediaRouter.get("/", validate(listMediaQuerySchema, "query"), mediaController.list);
 mediaRouter.post(

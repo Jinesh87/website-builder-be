@@ -19,7 +19,7 @@ const testSchema = Joi.object({
 });
 
 const clientEmailRouter = Router();
-clientEmailRouter.use(authenticate, authorize(UserRole.CLIENT));
+clientEmailRouter.use(authenticate, authorize(UserRole.CLIENT, UserRole.PARTNER));
 clientEmailRouter.get("/", clientEmailController.get);
 clientEmailRouter.put("/", validate(updateSchema), clientEmailController.update);
 clientEmailRouter.post(

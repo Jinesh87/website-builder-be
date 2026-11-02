@@ -55,11 +55,11 @@ authRouter.patch(
   validate(updateProfileSchema),
   authController.updateProfile,
 );
-// Clients only: the Super Admin is seeded by SEED_SUPER_ADMIN_EMAIL, so its email must not change here.
+// Clients & Partners: the Super Admin is seeded by SEED_SUPER_ADMIN_EMAIL, so its email must not change here.
 authRouter.post(
   "/me/email",
   authenticate,
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   rateLimit({ name: "email-change-request", max: 10, windowSeconds: HOUR }),
   validate(emailOnlySchema),
   authController.requestEmailChange,
@@ -67,7 +67,7 @@ authRouter.post(
 authRouter.post(
   "/me/email/verify",
   authenticate,
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   rateLimit({ name: "email-change-verify", max: 30, windowSeconds: 15 * MINUTE }),
   validate(verifyEmailChangeSchema),
   authController.confirmEmailChange,
@@ -75,7 +75,7 @@ authRouter.post(
 authRouter.delete(
   "/me/email",
   authenticate,
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   rateLimit({ name: "email-remove", max: 10, windowSeconds: HOUR }),
   authController.removeEmail,
 );

@@ -13,6 +13,11 @@ import {
   passwordResetEmail,
   questionnaireAdminEmail,
   questionnaireCustomerConfirmationEmail,
+  partnerApplicationConfirmationEmail,
+  partnerApprovalEmail,
+  partnerRejectionEmail,
+  partnerSuspensionEmail,
+  salesPartnerApplicationNotificationEmail,
   salesInquiryEmail,
   testEmail,
   verificationCodeEmail,
@@ -29,6 +34,9 @@ export type EmailConfigView = {
   fromEmail: string | null;
   fromName: string | null;
   enabled: boolean;
+  contactSalesEmail: string | null;
+  questionnaireSalesEmail: string | null;
+  partnerSalesEmail: string | null;
   updatedAt: string | null;
 };
 
@@ -38,6 +46,9 @@ export type UpdateEmailConfigInput = {
   fromEmail: string;
   fromName: string;
   enabled: boolean;
+  contactSalesEmail?: string | null;
+  questionnaireSalesEmail?: string | null;
+  partnerSalesEmail?: string | null;
 };
 
 function maskApiKey(key: string): string {
@@ -53,6 +64,9 @@ function toView(config: MessagingConfig | null): EmailConfigView {
       fromEmail: null,
       fromName: null,
       enabled: false,
+      contactSalesEmail: null,
+      questionnaireSalesEmail: null,
+      partnerSalesEmail: null,
       updatedAt: null,
     };
   }
@@ -63,6 +77,9 @@ function toView(config: MessagingConfig | null): EmailConfigView {
     fromEmail: config.fromEmail,
     fromName: config.fromName,
     enabled: config.enabled,
+    contactSalesEmail: config.contactSalesEmail ?? null,
+    questionnaireSalesEmail: config.questionnaireSalesEmail ?? null,
+    partnerSalesEmail: config.partnerSalesEmail ?? null,
     updatedAt: config.updatedAt.toISOString(),
   };
 }
@@ -71,6 +88,46 @@ export class EmailService {
   async getConfigView(): Promise<EmailConfigView> {
     const config = await prisma.messagingConfig.findUnique({ where: { id: CONFIG_ID } });
     return toView(config);
+  }
+
+  private getDefaultSalesEmail(): string {
+    return process.env.CONTACT_SALES_EMAIL?.trim() || "support@bytezoracoders.com";
+  }
+
+  async getContactSalesEmail(): Promise<string> {
+    try {
+      const config = await prisma.messagingConfig.findUnique({
+        where: { id: CONFIG_ID },
+        select: { contactSalesEmail: true },
+      });
+      return config?.contactSalesEmail?.trim() || this.getDefaultSalesEmail();
+    } catch {
+      return this.getDefaultSalesEmail();
+    }
+  }
+
+  async getQuestionnaireSalesEmail(): Promise<string> {
+    try {
+      const config = await prisma.messagingConfig.findUnique({
+        where: { id: CONFIG_ID },
+        select: { questionnaireSalesEmail: true },
+      });
+      return config?.questionnaireSalesEmail?.trim() || this.getDefaultSalesEmail();
+    } catch {
+      return this.getDefaultSalesEmail();
+    }
+  }
+
+  async getPartnerSalesEmail(): Promise<string> {
+    try {
+      const config = await prisma.messagingConfig.findUnique({
+        where: { id: CONFIG_ID },
+        select: { partnerSalesEmail: true },
+      });
+      return config?.partnerSalesEmail?.trim() || this.getDefaultSalesEmail();
+    } catch {
+      return this.getDefaultSalesEmail();
+    }
   }
 
   async updateConfig(input: UpdateEmailConfigInput): Promise<EmailConfigView> {
@@ -83,10 +140,20 @@ export class EmailService {
       ]);
     }
 
+    const sanitizeEmail = (val?: string | null) => {
+      const trimmed = val?.trim().toLowerCase();
+      return trimmed && trimmed.length > 0 ? trimmed : null;
+    };
+
     const data = {
       fromEmail: input.fromEmail.trim().toLowerCase(),
       fromName: input.fromName.trim(),
       enabled: input.enabled,
+      ...(input.contactSalesEmail !== undefined ? { contactSalesEmail: sanitizeEmail(input.contactSalesEmail) } : {}),
+      ...(input.questionnaireSalesEmail !== undefined
+        ? { questionnaireSalesEmail: sanitizeEmail(input.questionnaireSalesEmail) }
+        : {}),
+      ...(input.partnerSalesEmail !== undefined ? { partnerSalesEmail: sanitizeEmail(input.partnerSalesEmail) } : {}),
       ...(newKey ? { resendApiKeyCipher: encryptSecret(newKey) } : {}),
     };
 
@@ -198,6 +265,88 @@ export class EmailService {
     await this.send(
       params.to,
       (brand) => questionnaireCustomerConfirmationEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerApplicationConfirmation(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    applicationId: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerApplicationConfirmationEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerApplicationSalesNotification(params: {
+    to: string;
+    applicationId: string;
+    companyName: string;
+    registrationNumber?: string | null;
+    website?: string | null;
+    businessType: string;
+    yearEstablished: string;
+    country: string;
+    state: string;
+    city: string;
+    businessAddress: string;
+    contactName: string;
+    designation: string;
+    email: string;
+    phone: string;
+    alternatePhone?: string | null;
+    partnershipType: string;
+    targetCategories: string[];
+    expectedReferrals: string;
+    marketingChannels: string[];
+    reason: string;
+    previousExperience?: boolean;
+    submittedAt?: Date;
+  }) {
+    await this.send(
+      params.to,
+      (brand) => salesPartnerApplicationNotificationEmail({ brand, ...params }),
+      { replyTo: params.email },
+    );
+  }
+
+  async sendPartnerApproval(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    referralCode: string;
+    commissionRate: string | number;
+    dashboardLink: string;
+    loginEmail: string;
+    loginUrl?: string;
+    temporaryPassword?: string;
+    inviteLink?: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerApprovalEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerRejection(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    reason: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerRejectionEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerSuspension(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    reason: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerSuspensionEmail({ brand, ...params }),
     );
   }
 

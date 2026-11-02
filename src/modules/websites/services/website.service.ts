@@ -93,6 +93,7 @@ function toTemplateSummary(template: WebsiteTemplate): WebsiteTemplateSummary {
   return {
     id: template.id,
     key: template.key,
+    number: template.number ?? null,
     isCustom: template.clientId !== null,
     name: template.name,
     category: template.category,
@@ -462,13 +463,36 @@ export class WebsiteService {
       where: { clientId: null, isActive: true, archivedAt: null, ...VALID_PLATFORM_KEY_WHERE },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     });
+    const missing = templates.filter((t) => t.number === null && !BUILT_IN_TEMPLATE_KEYS.includes(t.key));
+    if (missing.length > 0) {
+      for (const t of missing) {
+        try {
+          const [row] = await prisma.$queryRaw<{ value: bigint }[]>`SELECT nextval('website_template_number_seq') AS value`;
+          const num = Number(row.value);
+          await prisma.websiteTemplate.update({
+            where: { id: t.id },
+            data: { number: num },
+          });
+          t.number = num;
+        } catch {
+          // If sequence or update fails, continue with null
+        }
+      }
+    }
     return templates.map(toTemplateSummary);
   }
 
   /** Public: only active platform templates, never a client's private ones. */
   async getTemplatePreview(key: string): Promise<TemplatePreview> {
+    const isNum = /^[0-9]+$/.test(key);
     const template = await prisma.websiteTemplate.findFirst({
-      where: { key, clientId: null, isActive: true, archivedAt: null, ...VALID_PLATFORM_KEY_WHERE },
+      where: {
+        ...(isNum ? { number: parseInt(key, 10) } : { key }),
+        clientId: null,
+        isActive: true,
+        archivedAt: null,
+        ...VALID_PLATFORM_KEY_WHERE,
+      },
       include: { theme: { select: { settings: true } } },
     });
     if (!template) throw new AppError(404, "Template not found", "TEMPLATE_NOT_FOUND");
@@ -622,16 +646,24 @@ export class WebsiteService {
       clientId = ownClientId(actor);
     }
 
+    const isTemplateNum = input.templateKey ? /^[0-9]+$/.test(input.templateKey) : false;
     const template = input.templateKey
       ? await prisma.websiteTemplate.findFirst({
           // A client's own templates are usable only for that client's websites.
           where: {
-            key: input.templateKey,
+            OR: [
+              { key: input.templateKey },
+              ...(isTemplateNum ? [{ number: parseInt(input.templateKey, 10) }] : []),
+            ],
             isActive: true,
             archivedAt: null,
-            OR: [
-              { clientId: null, ...VALID_PLATFORM_KEY_WHERE },
-              ...(clientId ? [{ clientId }] : []),
+            AND: [
+              {
+                OR: [
+                  { clientId: null, ...VALID_PLATFORM_KEY_WHERE },
+                  ...(clientId ? [{ clientId }] : []),
+                ],
+              },
             ],
           },
           include: { theme: { select: { settings: true } } },

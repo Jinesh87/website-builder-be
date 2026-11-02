@@ -11,7 +11,7 @@ export const websiteDomainsRouter = Router({ mergeParams: true });
 const byWebsite = validate(websiteDomainsParamsSchema, "params");
 const byDomain = validate(domainParamsSchema, "params");
 
-websiteDomainsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT));
+websiteDomainsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT, UserRole.PARTNER));
 websiteDomainsRouter.get("/", byWebsite, domainController.list);
 websiteDomainsRouter.post(
   "/",

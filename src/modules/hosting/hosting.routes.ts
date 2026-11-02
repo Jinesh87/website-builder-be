@@ -26,12 +26,12 @@ import {
 export const websiteHostingRouter = Router({ mergeParams: true });
 const byWebsite = validate(websiteParamsSchema, "params");
 
-websiteHostingRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT));
+websiteHostingRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT, UserRole.PARTNER));
 websiteHostingRouter.get("/", byWebsite, hostingController.get);
 websiteHostingRouter.patch("/", byWebsite, validate(updatePlanSchema), hostingController.updatePlan);
 websiteHostingRouter.post(
   "/checkout",
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   byWebsite,
   rateLimit({ name: "hosting-checkout", max: 30, windowSeconds: 60 * 60 }),
   validate(planChoiceSchema),
@@ -39,7 +39,7 @@ websiteHostingRouter.post(
 );
 websiteHostingRouter.post(
   "/checkout/verify",
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   byWebsite,
   rateLimit({ name: "hosting-checkout-verify", max: 60, windowSeconds: 60 * 60 }),
   validate(confirmCheckoutSchema),
@@ -47,14 +47,14 @@ websiteHostingRouter.post(
 );
 websiteHostingRouter.post(
   "/autopay",
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   byWebsite,
   rateLimit({ name: "hosting-autopay", max: 20, windowSeconds: 60 * 60 }),
   hostingController.setupAutopay,
 );
 websiteHostingRouter.post(
   "/autopay/verify",
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   byWebsite,
   rateLimit({ name: "hosting-autopay-verify", max: 60, windowSeconds: 60 * 60 }),
   validate(confirmAutopaySchema),
@@ -69,7 +69,7 @@ websiteHostingRouter.delete(
 );
 websiteHostingRouter.post(
   "/pay",
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   byWebsite,
   rateLimit({ name: "hosting-pay", max: 30, windowSeconds: 60 * 60 }),
   validate(planChoiceSchema),
