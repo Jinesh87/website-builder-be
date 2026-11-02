@@ -34,6 +34,9 @@ export type EmailConfigView = {
   fromEmail: string | null;
   fromName: string | null;
   enabled: boolean;
+  contactSalesEmail: string | null;
+  questionnaireSalesEmail: string | null;
+  partnerSalesEmail: string | null;
   updatedAt: string | null;
 };
 
@@ -43,6 +46,9 @@ export type UpdateEmailConfigInput = {
   fromEmail: string;
   fromName: string;
   enabled: boolean;
+  contactSalesEmail?: string | null;
+  questionnaireSalesEmail?: string | null;
+  partnerSalesEmail?: string | null;
 };
 
 function maskApiKey(key: string): string {
@@ -58,6 +64,9 @@ function toView(config: MessagingConfig | null): EmailConfigView {
       fromEmail: null,
       fromName: null,
       enabled: false,
+      contactSalesEmail: null,
+      questionnaireSalesEmail: null,
+      partnerSalesEmail: null,
       updatedAt: null,
     };
   }
@@ -68,6 +77,9 @@ function toView(config: MessagingConfig | null): EmailConfigView {
     fromEmail: config.fromEmail,
     fromName: config.fromName,
     enabled: config.enabled,
+    contactSalesEmail: config.contactSalesEmail ?? null,
+    questionnaireSalesEmail: config.questionnaireSalesEmail ?? null,
+    partnerSalesEmail: config.partnerSalesEmail ?? null,
     updatedAt: config.updatedAt.toISOString(),
   };
 }
@@ -76,6 +88,46 @@ export class EmailService {
   async getConfigView(): Promise<EmailConfigView> {
     const config = await prisma.messagingConfig.findUnique({ where: { id: CONFIG_ID } });
     return toView(config);
+  }
+
+  private getDefaultSalesEmail(): string {
+    return process.env.CONTACT_SALES_EMAIL?.trim() || "support@bytezoracoders.com";
+  }
+
+  async getContactSalesEmail(): Promise<string> {
+    try {
+      const config = await prisma.messagingConfig.findUnique({
+        where: { id: CONFIG_ID },
+        select: { contactSalesEmail: true },
+      });
+      return config?.contactSalesEmail?.trim() || this.getDefaultSalesEmail();
+    } catch {
+      return this.getDefaultSalesEmail();
+    }
+  }
+
+  async getQuestionnaireSalesEmail(): Promise<string> {
+    try {
+      const config = await prisma.messagingConfig.findUnique({
+        where: { id: CONFIG_ID },
+        select: { questionnaireSalesEmail: true },
+      });
+      return config?.questionnaireSalesEmail?.trim() || this.getDefaultSalesEmail();
+    } catch {
+      return this.getDefaultSalesEmail();
+    }
+  }
+
+  async getPartnerSalesEmail(): Promise<string> {
+    try {
+      const config = await prisma.messagingConfig.findUnique({
+        where: { id: CONFIG_ID },
+        select: { partnerSalesEmail: true },
+      });
+      return config?.partnerSalesEmail?.trim() || this.getDefaultSalesEmail();
+    } catch {
+      return this.getDefaultSalesEmail();
+    }
   }
 
   async updateConfig(input: UpdateEmailConfigInput): Promise<EmailConfigView> {
@@ -88,10 +140,20 @@ export class EmailService {
       ]);
     }
 
+    const sanitizeEmail = (val?: string | null) => {
+      const trimmed = val?.trim().toLowerCase();
+      return trimmed && trimmed.length > 0 ? trimmed : null;
+    };
+
     const data = {
       fromEmail: input.fromEmail.trim().toLowerCase(),
       fromName: input.fromName.trim(),
       enabled: input.enabled,
+      ...(input.contactSalesEmail !== undefined ? { contactSalesEmail: sanitizeEmail(input.contactSalesEmail) } : {}),
+      ...(input.questionnaireSalesEmail !== undefined
+        ? { questionnaireSalesEmail: sanitizeEmail(input.questionnaireSalesEmail) }
+        : {}),
+      ...(input.partnerSalesEmail !== undefined ? { partnerSalesEmail: sanitizeEmail(input.partnerSalesEmail) } : {}),
       ...(newKey ? { resendApiKeyCipher: encryptSecret(newKey) } : {}),
     };
 

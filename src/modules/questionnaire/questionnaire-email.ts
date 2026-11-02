@@ -8,10 +8,24 @@ export type QuestionnaireEmailFailure = {
   emailError: string;
 };
 
+export function humanizeEmailError(rawError: string): string {
+  const lower = rawError.toLowerCase();
+  if (
+    lower.includes("example.com") ||
+    lower.includes("invalid `to` field") ||
+    lower.includes("invalid 'to' field") ||
+    lower.includes("testing email address")
+  ) {
+    return "Invalid recipient email address: Test or dummy domains (like @example.com) cannot receive emails. Please use a valid email address.";
+  }
+  return rawError;
+}
+
 /** Maps a failed notification send onto the status stored with the questionnaire. */
 export function questionnaireEmailFailure(error: unknown): QuestionnaireEmailFailure {
   const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "";
-  const message = error instanceof Error && error.message.trim() ? error.message.trim() : "Email could not be sent.";
+  const rawMessage = error instanceof Error && error.message.trim() ? error.message.trim() : "Email could not be sent.";
+  const message = humanizeEmailError(rawMessage);
   return {
     emailStatus: SKIPPED_EMAIL_CODES.has(code) ? "SKIPPED" : "FAILED",
     emailError: message.slice(0, EMAIL_ERROR_MAX),

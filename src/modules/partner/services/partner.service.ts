@@ -1,5 +1,9 @@
 import { AppError } from "../../../common/errors/AppError.js";
-import { ClientSource, UserRole, UserStatus } from "../../../common/constants/roles.js";
+import {
+  ClientSource,
+  UserRole,
+  UserStatus,
+} from "../../../common/constants/roles.js";
 import { hashPassword } from "../../../common/utils/hash.js";
 import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
@@ -33,11 +37,15 @@ function toPartnerSummary(
     _count?: { referrals: number; commissions: number };
   },
 ): PartnerSummary {
-  const totalReferrals = partner._count?.referrals ?? partner.referrals?.length ?? 0;
+  const totalReferrals =
+    partner._count?.referrals ?? partner.referrals?.length ?? 0;
   const convertedReferrals =
-    partner.referrals?.filter((r) => r.status === PartnerReferralStatus.CONVERTED).length ?? 0;
+    partner.referrals?.filter(
+      (r) => r.status === PartnerReferralStatus.CONVERTED,
+    ).length ?? 0;
   const totalCommissionPaise =
-    partner.commissions?.reduce((sum, c) => sum + c.commissionAmountPaise, 0) ?? 0;
+    partner.commissions?.reduce((sum, c) => sum + c.commissionAmountPaise, 0) ??
+    0;
 
   return {
     id: partner.id,
@@ -65,7 +73,9 @@ export class PartnerService {
    * Public submission of a partner application.
    * Validates duplicate email and sends confirmation email.
    */
-  async apply(input: PartnerApplicationInput): Promise<{ applicationId: string; message: string }> {
+  async apply(
+    input: PartnerApplicationInput,
+  ): Promise<{ applicationId: string; message: string }> {
     const email = input.email.trim().toLowerCase();
 
     // Check for existing application with same email
@@ -149,12 +159,15 @@ export class PartnerService {
         applicationId,
       });
     } catch (err) {
-      logger.error({ err, applicationId, email }, "Failed to send partner application confirmation email");
+      logger.error(
+        { err, applicationId, email },
+        "Failed to send partner application confirmation email",
+      );
     }
 
     // Send notification email to Bytezora Sales
     try {
-      const salesInbox = process.env.CONTACT_SALES_EMAIL?.trim() || "support@bytezoracoders.com";
+      const salesInbox = await emailService.getPartnerSalesEmail();
       await emailService.sendPartnerApplicationSalesNotification({
         to: salesInbox,
         applicationId,
@@ -180,14 +193,21 @@ export class PartnerService {
         previousExperience: input.previousExperience,
       });
     } catch (err) {
-      logger.error({ err, applicationId, email }, "Failed to send partner application sales notification email");
+      logger.error(
+        { err, applicationId, email },
+        "Failed to send partner application sales notification email",
+      );
     }
 
-    logger.info({ partnerId: partner.id, applicationId, email }, "Partner application created");
+    logger.info(
+      { partnerId: partner.id, applicationId, email },
+      "Partner application created",
+    );
 
     return {
       applicationId,
-      message: "Application submitted successfully. We have sent a confirmation email.",
+      message:
+        "Application submitted successfully. We have sent a confirmation email.",
     };
   }
 
@@ -222,36 +242,43 @@ export class PartnerService {
       ];
     }
 
-    const [items, total, countPending, countApproved, countRejected, countSuspended] =
-      await Promise.all([
-        prisma.partner.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          skip,
-          take: pageSize,
-          include: {
-            _count: {
-              select: {
-                referrals: true,
-                commissions: true,
-              },
-            },
-            referrals: {
-              select: { status: true },
-            },
-            commissions: {
-              select: { commissionAmountPaise: true },
+    const [
+      items,
+      total,
+      countPending,
+      countApproved,
+      countRejected,
+      countSuspended,
+    ] = await Promise.all([
+      prisma.partner.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: pageSize,
+        include: {
+          _count: {
+            select: {
+              referrals: true,
+              commissions: true,
             },
           },
-        }),
-        prisma.partner.count({ where }),
-        prisma.partner.count({ where: { status: PartnerStatus.PENDING } }),
-        prisma.partner.count({ where: { status: PartnerStatus.APPROVED } }),
-        prisma.partner.count({ where: { status: PartnerStatus.REJECTED } }),
-        prisma.partner.count({ where: { status: PartnerStatus.SUSPENDED } }),
-      ]);
+          referrals: {
+            select: { status: true },
+          },
+          commissions: {
+            select: { commissionAmountPaise: true },
+          },
+        },
+      }),
+      prisma.partner.count({ where }),
+      prisma.partner.count({ where: { status: PartnerStatus.PENDING } }),
+      prisma.partner.count({ where: { status: PartnerStatus.APPROVED } }),
+      prisma.partner.count({ where: { status: PartnerStatus.REJECTED } }),
+      prisma.partner.count({ where: { status: PartnerStatus.SUSPENDED } }),
+    ]);
 
-    const totalAll = countPending + countApproved + countRejected + countSuspended;
+    const totalAll =
+      countPending + countApproved + countRejected + countSuspended;
 
     return {
       items: items.map(toPartnerSummary),
@@ -356,19 +383,28 @@ export class PartnerService {
         referralCode = generateReferralCode(partner.companyName);
       }
     } else {
-      const codeExists = await prisma.partner.findUnique({ where: { referralCode } });
+      const codeExists = await prisma.partner.findUnique({
+        where: { referralCode },
+      });
       if (codeExists && codeExists.id !== partner.id) {
-        throw new AppError(409, `Referral code "${referralCode}" is already in use`, "CODE_EXISTS");
+        throw new AppError(
+          409,
+          `Referral code "${referralCode}" is already in use`,
+          "CODE_EXISTS",
+        );
       }
     }
 
     // Link or create user account for partner
-    const tempPassword = params.temporaryPassword?.trim() || `Partner@${randomAlphanumeric(6)}`;
+    const tempPassword =
+      params.temporaryPassword?.trim() || `Partner@${randomAlphanumeric(6)}`;
     let userId = partner.userId;
     let createdNewUser = false;
 
     if (!userId) {
-      const existingUser = await prisma.user.findUnique({ where: { email: partner.email } });
+      const existingUser = await prisma.user.findUnique({
+        where: { email: partner.email },
+      });
       if (existingUser) {
         userId = existingUser.id;
       } else {
@@ -443,7 +479,10 @@ export class PartnerService {
         temporaryPassword: createdNewUser ? tempPassword : undefined,
       });
     } catch (err) {
-      logger.error({ err, partnerId: id }, "Failed to send partner approval email");
+      logger.error(
+        { err, partnerId: id },
+        "Failed to send partner approval email",
+      );
     }
 
     return this.getAdminDetail(id);
@@ -491,7 +530,10 @@ export class PartnerService {
         reason: params.reason.trim(),
       });
     } catch (err) {
-      logger.error({ err, partnerId: id }, "Failed to send partner rejection email");
+      logger.error(
+        { err, partnerId: id },
+        "Failed to send partner rejection email",
+      );
     }
 
     return this.getAdminDetail(id);
@@ -538,7 +580,10 @@ export class PartnerService {
         reason: params.reason.trim(),
       });
     } catch (err) {
-      logger.error({ err, partnerId: id }, "Failed to send partner suspension email");
+      logger.error(
+        { err, partnerId: id },
+        "Failed to send partner suspension email",
+      );
     }
 
     return this.getAdminDetail(id);
@@ -607,7 +652,9 @@ export class PartnerService {
 
     if (params.isCommissionActive !== undefined) {
       data.isCommissionActive = params.isCommissionActive;
-      logParts.push(`Commission eligibility set to ${params.isCommissionActive ? "ACTIVE" : "INACTIVE"}`);
+      logParts.push(
+        `Commission eligibility set to ${params.isCommissionActive ? "ACTIVE" : "INACTIVE"}`,
+      );
     }
 
     await prisma.$transaction(async (tx) => {
@@ -646,13 +693,19 @@ export class PartnerService {
 
     // Only approved partners can receive new referrals
     if (!partner || partner.status !== PartnerStatus.APPROVED) {
-      logger.info({ code }, "Referral code not found or partner not active for signup attribution");
+      logger.info(
+        { code },
+        "Referral code not found or partner not active for signup attribution",
+      );
       return null;
     }
 
     // Do not self-refer
     if (partner.email.toLowerCase() === params.customerEmail.toLowerCase()) {
-      logger.info({ code, email: params.customerEmail }, "Self-referral ignored");
+      logger.info(
+        { code, email: params.customerEmail },
+        "Self-referral ignored",
+      );
       return null;
     }
 
@@ -689,7 +742,10 @@ export class PartnerService {
 
       return referral;
     } catch (err) {
-      logger.error({ err, code, email: params.customerEmail }, "Error saving referral attribution");
+      logger.error(
+        { err, code, email: params.customerEmail },
+        "Error saving referral attribution",
+      );
       return null;
     }
   }
@@ -708,7 +764,9 @@ export class PartnerService {
         OR: [
           { id: userIdOrPartnerId },
           { userId: userIdOrPartnerId },
-          ...(user?.email ? [{ email: { equals: user.email, mode: "insensitive" as const } }] : []),
+          ...(user?.email
+            ? [{ email: { equals: user.email, mode: "insensitive" as const } }]
+            : []),
         ],
       },
       include: {
@@ -738,7 +796,11 @@ export class PartnerService {
     });
 
     if (!partner) {
-      throw new AppError(404, "No partner application found for this account", "PARTNER_NOT_FOUND");
+      throw new AppError(
+        404,
+        "No partner application found for this account",
+        "PARTNER_NOT_FOUND",
+      );
     }
 
     // If application is still pending or not approved, return application details cleanly
@@ -789,9 +851,12 @@ export class PartnerService {
 
     for (const c of partner.commissions) {
       totalEarnedPaise += c.commissionAmountPaise;
-      if (c.status === CommissionStatus.PENDING) pendingCommissionPaise += c.commissionAmountPaise;
-      if (c.status === CommissionStatus.APPROVED) approvedCommissionPaise += c.commissionAmountPaise;
-      if (c.status === CommissionStatus.PAID) paidCommissionPaise += c.commissionAmountPaise;
+      if (c.status === CommissionStatus.PENDING)
+        pendingCommissionPaise += c.commissionAmountPaise;
+      if (c.status === CommissionStatus.APPROVED)
+        approvedCommissionPaise += c.commissionAmountPaise;
+      if (c.status === CommissionStatus.PAID)
+        paidCommissionPaise += c.commissionAmountPaise;
     }
 
     const shareUrl = `${env.FRONTEND_URL}/?ref=${encodeURIComponent(partner.referralCode || "")}`;
@@ -842,4 +907,3 @@ export class PartnerService {
 }
 
 export const partnerService = new PartnerService();
-

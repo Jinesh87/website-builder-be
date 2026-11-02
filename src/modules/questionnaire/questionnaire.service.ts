@@ -93,8 +93,8 @@ function toActivityView(row: ActivityRow): QuestionnaireActivityView {
   };
 }
 
-function salesInbox(): string {
-  return process.env.CONTACT_SALES_EMAIL?.trim() || DEFAULT_SALES_EMAIL;
+async function salesInbox(): Promise<string> {
+  return emailService.getQuestionnaireSalesEmail();
 }
 
 const mediaSelect = {
@@ -436,7 +436,7 @@ export class QuestionnaireService {
     row: QuestionnaireRow,
     actorId: string | null,
   ): Promise<EmailOutcome> {
-    const to = salesInbox();
+    const to = await salesInbox();
     const answers = row.answers as unknown as QuestionnaireAnswers;
     let outcome: EmailOutcome;
 
