@@ -174,7 +174,7 @@ type StockVariant = {
     id: string;
     name: string;
     optionSets: Prisma.JsonValue;
-    category: { name: string };
+    category: { name: string } | null;
   };
 };
 
@@ -183,7 +183,7 @@ function toRow(variant: StockVariant): InventoryRow {
     variantId: variant.id,
     productId: variant.product.id,
     productName: variant.product.name,
-    categoryName: variant.product.category.name,
+    categoryName: variant.product.category?.name ?? "",
     variantName: variant.name,
     options: variantOptions(variant.product.optionSets, variant.name),
     pricePaise: variant.pricePaise,

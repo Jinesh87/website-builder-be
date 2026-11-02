@@ -73,7 +73,7 @@ function toProduct(product: ProductRow): ShopProductView {
     slug: product.slug,
     description: product.description,
     categoryId: product.categoryId,
-    categoryName: product.category.name,
+    categoryName: product.category?.name ?? "",
     optionSets: readOptionSets(product.optionSets),
     images: readImages(product.images),
     variants: product.variants.map(toVariant),
@@ -141,7 +141,7 @@ function toPublicProduct(product: ProductRow): PublicShopProduct {
     name: product.name,
     slug: product.slug,
     description: product.description,
-    categoryName: product.category.name,
+    categoryName: product.category?.name ?? "",
     images: readImages(product.images).map(({ url, alt }) => ({ url, alt })),
     variants,
   };
@@ -368,7 +368,8 @@ export class ShopService {
 
   async createProduct(websiteId: string, input: ShopProductInput, actor: AuthUser): Promise<ShopProductView> {
     const website = await this.openShop(websiteId, actor);
-    await this.findCategory(websiteId, input.categoryId);
+    const categoryId = emptyToNull(input.categoryId ?? undefined);
+    if (categoryId) await this.findCategory(websiteId, categoryId);
     const count = await prisma.product.count({ where: { websiteId } });
     if (count >= MAX_PRODUCTS) {
       throw new AppError(409, `A shop can have up to ${MAX_PRODUCTS} products.`, "PRODUCT_LIMIT");
@@ -383,7 +384,7 @@ export class ShopService {
         data: {
           websiteId,
           clientId: website.clientId,
-          categoryId: input.categoryId,
+          categoryId,
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
@@ -407,7 +408,8 @@ export class ShopService {
   ): Promise<ShopProductView> {
     await this.openShop(websiteId, actor);
     const current = await this.findProduct(websiteId, productId);
-    await this.findCategory(websiteId, input.categoryId);
+    const categoryId = emptyToNull(input.categoryId ?? undefined);
+    if (categoryId) await this.findCategory(websiteId, categoryId);
     const expanded = expandOptionSets(input.optionSets);
     const images = await this.resolveImages(current.clientId, input.images ?? []);
     await this.assertImages(current.clientId, imageIds(expanded));
@@ -444,7 +446,7 @@ export class ShopService {
       return tx.product.update({
         where: { id: productId },
         data: {
-          categoryId: input.categoryId,
+          categoryId,
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),

@@ -81,9 +81,8 @@ export const shopProductSchema = Joi.object({
     "string.empty": "Enter a product name",
   }),
   description: Joi.string().trim().max(2000).allow("").optional(),
-  categoryId: Joi.string().guid().required().messages({
-    "string.guid": "Choose a category",
-    "any.required": "Choose a category",
+  categoryId: Joi.string().guid().allow(null, "").optional().messages({
+    "string.guid": "Choose a valid category",
   }),
   optionSets: Joi.array().items(optionSetSchema).min(1).max(8).required().messages({
     "array.min": "Add at least one combination",

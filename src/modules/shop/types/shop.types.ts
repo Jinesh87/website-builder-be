@@ -46,7 +46,7 @@ export type ShopImageView = {
 export type ShopProductInput = {
   name: string;
   description?: string;
-  categoryId: string;
+  categoryId?: string | null;
   optionSets: ShopOptionSetInput[];
   images?: ShopImageInput[];
 };
@@ -110,7 +110,7 @@ export type ShopProductView = {
   name: string;
   slug: string;
   description: string | null;
-  categoryId: string;
+  categoryId: string | null;
   categoryName: string;
   optionSets: ShopOptionSetView[];
   images: ShopImageView[];
