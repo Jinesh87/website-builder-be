@@ -3,6 +3,7 @@ import { AppError } from "../../../common/errors/AppError.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import {
+  CommissionSource,
   PaymentOrderStatus,
   WalletTransactionSource,
   WalletTransactionType,
@@ -11,6 +12,7 @@ import {
   type WalletAutoTopup,
   type WalletTransaction,
 } from "../../../generated/prisma/client.js";
+import { partnerCommissionService } from "../../partner/services/partner-commission.service.js";
 import { STOPPABLE_AUTOPAY } from "./autopay.js";
 import { paymentSettingsService } from "./payment-settings.service.js";
 import {
@@ -341,7 +343,8 @@ export class WalletService {
         data: { status: PaymentOrderStatus.PAID, razorpayPaymentId, paidAt: new Date(), failureReason: null },
       });
       if (claimed.count === 0) return null;
-      return applyLedgerEntry(tx, order.clientId, {
+
+      const ledger = await applyLedgerEntry(tx, order.clientId, {
         type: WalletTransactionType.CREDIT,
         source: WalletTransactionSource.TOPUP,
         amount: order.connects,
@@ -349,6 +352,21 @@ export class WalletService {
         userId: order.userId,
         paymentOrderId: order.id,
       });
+
+      // Automatically calculate and attribute commission to referring partner
+      try {
+        await partnerCommissionService.recordCommissionFromPayment({
+          clientId: order.clientId,
+          userId: order.userId,
+          paymentOrderId: order.id,
+          amountPaise: order.amountPaise,
+          source: CommissionSource.WALLET_TOPUP,
+        });
+      } catch (err) {
+        logger.error({ err, orderId: order.id }, "Failed to attribute partner commission for wallet topup");
+      }
+
+      return ledger;
     });
   }
 

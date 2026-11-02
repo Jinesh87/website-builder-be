@@ -13,6 +13,11 @@ import {
   passwordResetEmail,
   questionnaireAdminEmail,
   questionnaireCustomerConfirmationEmail,
+  partnerApplicationConfirmationEmail,
+  partnerApprovalEmail,
+  partnerRejectionEmail,
+  partnerSuspensionEmail,
+  salesPartnerApplicationNotificationEmail,
   salesInquiryEmail,
   testEmail,
   verificationCodeEmail,
@@ -198,6 +203,88 @@ export class EmailService {
     await this.send(
       params.to,
       (brand) => questionnaireCustomerConfirmationEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerApplicationConfirmation(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    applicationId: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerApplicationConfirmationEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerApplicationSalesNotification(params: {
+    to: string;
+    applicationId: string;
+    companyName: string;
+    registrationNumber?: string | null;
+    website?: string | null;
+    businessType: string;
+    yearEstablished: string;
+    country: string;
+    state: string;
+    city: string;
+    businessAddress: string;
+    contactName: string;
+    designation: string;
+    email: string;
+    phone: string;
+    alternatePhone?: string | null;
+    partnershipType: string;
+    targetCategories: string[];
+    expectedReferrals: string;
+    marketingChannels: string[];
+    reason: string;
+    previousExperience?: boolean;
+    submittedAt?: Date;
+  }) {
+    await this.send(
+      params.to,
+      (brand) => salesPartnerApplicationNotificationEmail({ brand, ...params }),
+      { replyTo: params.email },
+    );
+  }
+
+  async sendPartnerApproval(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    referralCode: string;
+    commissionRate: string | number;
+    dashboardLink: string;
+    loginEmail: string;
+    loginUrl?: string;
+    temporaryPassword?: string;
+    inviteLink?: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerApprovalEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerRejection(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    reason: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerRejectionEmail({ brand, ...params }),
+    );
+  }
+
+  async sendPartnerSuspension(params: {
+    to: string;
+    contactName: string;
+    companyName: string;
+    reason: string;
+  }) {
+    await this.send(params.to, (brand) =>
+      partnerSuspensionEmail({ brand, ...params }),
     );
   }
 

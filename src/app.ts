@@ -33,6 +33,8 @@ import adminEnquiriesRouter from "./modules/contact/admin-enquiry.routes.js";
 import contactRouter from "./modules/contact/contact.routes.js";
 import adminQuestionnairesRouter from "./modules/questionnaire/admin-questionnaire.routes.js";
 import questionnaireRouter from "./modules/questionnaire/questionnaire.routes.js";
+import partnerRouter from "./modules/partner/partner.routes.js";
+import adminPartnerRouter from "./modules/partner/admin-partner.routes.js";
 import {
   adminWalletRouter,
   billingSettingsRouter,
@@ -118,6 +120,8 @@ app.use("/api/websites", websitesRouter);
 app.use("/api/media", mediaRouter);
 app.use("/api/contact", contactRouter);
 app.use("/api/questionnaire", questionnaireRouter);
+app.use("/api/partner", partnerRouter);
+app.use("/api/admin/partners", adminPartnerRouter);
 
 app.use(publicSiteRouter);
 

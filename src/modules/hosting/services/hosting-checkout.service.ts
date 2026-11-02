@@ -3,7 +3,8 @@ import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
-import { HostingPayer, HostingPaymentMethod, PaymentOrderStatus, type HostingOrder } from "../../../generated/prisma/client.js";
+import { CommissionSource, HostingPayer, HostingPaymentMethod, PaymentOrderStatus, type HostingOrder } from "../../../generated/prisma/client.js";
+import { partnerCommissionService } from "../../partner/services/partner-commission.service.js";
 import { notificationService } from "../../notifications/services/notification.service.js";
 import { paymentSettingsService } from "../../wallet/services/payment-settings.service.js";
 import {
@@ -176,7 +177,21 @@ export class HostingCheckoutService {
             cycle: order.cycle,
           },
         });
-        return payment !== null;
+        if (payment !== null) {
+          try {
+            await partnerCommissionService.recordCommissionFromPayment({
+              clientId: order.clientId,
+              userId: order.userId,
+              hostingOrderId: order.id,
+              amountPaise: order.amountPaise,
+              source: CommissionSource.HOSTING,
+            });
+          } catch (err) {
+            logger.error({ err, orderId: order.id }, "Failed to attribute partner commission for hosting");
+          }
+          return true;
+        }
+        return false;
       } catch (error) {
         if (error instanceof AppError && error.code === "HOSTING_CHANGED") {
           if (attempt < APPLY_ATTEMPTS) continue;

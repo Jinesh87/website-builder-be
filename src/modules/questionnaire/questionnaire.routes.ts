@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { UserRole } from "../../common/constants/roles.js";
-import { authenticate, authorize } from "../../common/middleware/authenticate.js";
+import {
+  authenticate,
+  authorize,
+} from "../../common/middleware/authenticate.js";
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { questionnaireController } from "./questionnaire.controller.js";
@@ -18,9 +21,8 @@ questionnaireRouter.post(
 questionnaireRouter.get(
   "/mine",
   authenticate,
-  authorize(UserRole.CLIENT),
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
   questionnaireController.listMine,
 );
 
 export default questionnaireRouter;
-

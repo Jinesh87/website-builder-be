@@ -26,6 +26,7 @@ export type SignupInput = {
   email: string;
   password: string;
   phone?: string;
+  referralCode?: string | null;
 };
 
 export type LoginInput = {

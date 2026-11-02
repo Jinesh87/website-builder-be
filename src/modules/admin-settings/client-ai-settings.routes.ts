@@ -15,7 +15,7 @@ const updateClientAiSettingsSchema = Joi.object({
 
 const clientAiSettingsRouter = Router();
 
-clientAiSettingsRouter.use(authenticate, authorize(UserRole.CLIENT));
+clientAiSettingsRouter.use(authenticate, authorize(UserRole.CLIENT, UserRole.PARTNER));
 
 clientAiSettingsRouter.get("/", clientAiSettingsController.get);
 clientAiSettingsRouter.put("/", validate(updateClientAiSettingsSchema), clientAiSettingsController.update);

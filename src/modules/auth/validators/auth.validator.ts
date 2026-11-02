@@ -45,6 +45,7 @@ export const signupSchema = Joi.object({
   email: email.required(),
   password: password.required(),
   phone: phone.optional(),
+  referralCode: Joi.string().trim().max(50).allow("", null).optional(),
   acceptTerms: Joi.boolean().valid(true).required().messages({
     "any.only": "You must accept the Terms of Service and Privacy Policy",
   }),
