@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AiSuggestionPayload } from "../services/ai-generator.service.js";
 import type { WebsiteDetail } from "../types/website.types.js";
 import type { SectionEnvelope } from "./ai-ops.js";
-import type { CreatedPageEdit, NavigationPatchEdit } from "./section-edits.js";
+import type { CreatedPageEdit, NavigationPatchEdit, UpdatedPageEdit } from "./section-edits.js";
 
 export const SHOP_SLUG = "/shop";
 export const PRODUCT_SLUG = "/product";
@@ -12,34 +12,54 @@ export const ACCOUNT_SLUG = "/account";
 /** Pages the builder can create without the model: the shop catalogue and the shopper's own pages. */
 export type ShopPageKind = "shop" | "product" | "login" | "account";
 
+type DraftPage = WebsiteDetail["draft"]["pages"][number];
+
 const PAGE_WORD = /\b(pages?|screens?|sections?|flows?|areas?|portals?|dashboards?)\b/i;
 /** Requests about the header, menu bar or a button are navigation edits, never page builds. */
 const NAV_WORDS = /\b(header|nav|navbar|navigation|menu\s*bar|top\s*bar|button|link|cta|footer)\b/i;
 
+/** Section type that makes a page actually provide that shop capability. */
+const CAPABILITY_SECTION: Record<ShopPageKind, string> = {
+  shop: "products",
+  product: "product_detail",
+  login: "auth",
+  account: "account",
+};
+
 /**
- * A request to add shop or shopper pages that don't exist yet: it names the pages explicitly
- * ("login page", "product pages", "account page", "online store") and isn't about the header or a
- * button. Anything else goes to the model, which knows the page that's open.
+ * Catalogue / storefront intent: list products, shop page, ecommerce, etc.
+ * Broader than naming "product page" so casual owner wording still resolves.
+ */
+const CATALOGUE_INTENT =
+  /\b(?:'?(?:list|show|display|browse|sell|add|include|put|need|want|have)\b[\s\S]{0,48}\bproducts?\b|\bproducts?\b[\s\S]{0,48}\b(?:list(?:ing)?|grid|catalogue|catalog|shop|store|on\s+(?:the\s+)?(?:page|site|website))\b|\b(?:shop|store|catalogue|catalog|e-?commerce)\s+pages?\b|\bproduct\s+(?:pages?|list(?:ing)?|detail|grid|catalogue|catalog)\b|\bonline\s+(?:shop|store)\b|\be-?commerce\b|\bour\s+products\b)\b/i;
+
+/**
+ * A request for shop or shopper pages (or to fix a shop page that doesn't list products yet).
+ * Header / nav / button wording is excluded so those stay navigation edits.
  */
 export function isShopPageRequest(prompt: string): boolean {
   if (NAV_WORDS.test(prompt)) return false;
-  const asksToCreate = /\b(new|create|add|make|build|need|want|generate|set\s*up|setup)\b/i.test(prompt);
-  return asksToCreate && requestedShopPages(prompt).length > 0;
+  return requestedShopPages(prompt).length > 0;
 }
 
-/** Which page kinds the prompt names. A login request brings the account page and vice versa. */
+/** Which page kinds the prompt needs. A login request brings the account page and vice versa. */
 export function requestedShopPages(prompt: string): ShopPageKind[] {
   const kinds = new Set<ShopPageKind>();
-  if (/\b(product\s+pages?|products\s+pages?|shop\s+pages?|store\s+pages?|product\s+list|product\s+detail|online\s+(?:shop|store)|e-?commerce)\b/i.test(prompt)) {
+
+  if (CATALOGUE_INTENT.test(prompt)) {
     kinds.add("shop");
     kinds.add("product");
   }
-  const mentionsLogin = /\b(login|log\s*in|sign\s*in|sign\s*up|signup|register|registration|auth(?:entication)?)\b/i.test(prompt);
+
+  const mentionsLogin = /\b(login|log\s*in|sign\s*in|sign\s*up|signup|register|registration|auth(?:entication)?)\b/i.test(
+    prompt,
+  );
   const mentionsAccount = /\b(account|profile|my\s+orders|order\s+history|dashboard)\b/i.test(prompt);
   if ((mentionsLogin || mentionsAccount) && (PAGE_WORD.test(prompt) || /\b(customer|shopper|user)s?\b/i.test(prompt))) {
     kinds.add("login");
     kinds.add("account");
   }
+
   return [...kinds];
 }
 
@@ -85,6 +105,7 @@ function detailSections(): SectionEnvelope[] {
       backHref: SHOP_SLUG,
       showDescription: true,
       showStock: true,
+      showCancellationPolicy: true,
     }),
   ];
 }
@@ -196,11 +217,26 @@ export function accountSections(business: string, variant = "sidebar-tabs"): Sec
   ];
 }
 
-const PAGE_SPECS: Record<ShopPageKind, { name: string; slug: string; showInNav: boolean; sections: (business: string) => SectionEnvelope[]; seo: (business: string) => string }> = {
+const PAGE_SPECS: Record<
+  ShopPageKind,
+  { name: string; slug: string; showInNav: boolean; sections: (business: string) => SectionEnvelope[]; seo: (business: string) => string }
+> = {
   shop: { name: "Shop", slug: SHOP_SLUG, showInNav: true, sections: shopSections, seo: (b) => `Browse products from ${b}.` },
-  product: { name: "Product", slug: PRODUCT_SLUG, showInNav: false, sections: () => detailSections(), seo: (b) => `Product details, options and stock at ${b}.` },
+  product: {
+    name: "Product",
+    slug: PRODUCT_SLUG,
+    showInNav: false,
+    sections: () => detailSections(),
+    seo: (b) => `Product details, options and stock at ${b}.`,
+  },
   login: { name: "Login", slug: LOGIN_SLUG, showInNav: false, sections: loginSections, seo: (b) => `Sign in or create an account at ${b}.` },
-  account: { name: "Account", slug: ACCOUNT_SLUG, showInNav: false, sections: accountSections, seo: (b) => `Manage your profile, orders and cart at ${b}.` },
+  account: {
+    name: "Account",
+    slug: ACCOUNT_SLUG,
+    showInNav: false,
+    sections: accountSections,
+    seo: (b) => `Manage your profile, orders and cart at ${b}.`,
+  },
 };
 
 export function businessNameOf(website: WebsiteDetail | undefined): string {
@@ -222,53 +258,140 @@ export function shopPage(kind: ShopPageKind, business: string): CreatedPageEdit 
   };
 }
 
-/** The existing page of the given kind, matched by slug, name or (for login/account) section type. */
-export function findShopPage(kind: ShopPageKind, pages: readonly WebsiteDetail["draft"]["pages"][number][]) {
-  const spec = PAGE_SPECS[kind];
-  const byType = kind === "login" ? "auth" : kind === "account" ? "account" : kind === "shop" ? "products" : "product_detail";
-  return (
-    pages.find((page) => pathKey(page.slug) === pathKey(spec.slug) || pathKey(page.name) === pathKey(spec.name)) ??
-    pages.find((page) => page.sections.some((item) => item.type === byType))
-  );
+function isChrome(section: { type: string }): boolean {
+  return section.type === "header" || section.type === "footer";
+}
+
+/** True when the page already has the live section that delivers this capability. */
+export function pageHasShopCapability(kind: ShopPageKind, page: DraftPage): boolean {
+  const needed = CAPABILITY_SECTION[kind];
+  return page.sections.some((item) => item.type === needed);
 }
 
 /**
- * Builds the requested shop pages that are missing, without asking the model. Existing pages are
- * never overwritten here: rewrites are real edits and go through the model with the page content.
+ * Prefer a page that already provides the capability; otherwise the page named/slugged for that
+ * role (even if it is still a marketing stub). Matching by section type alone is last.
  */
-export function shopPagesSuggestion(prompt: string, website: WebsiteDetail | undefined): AiSuggestionPayload | null {
+export function findShopPage(kind: ShopPageKind, pages: readonly DraftPage[]) {
+  const capable = pages.find((page) => pageHasShopCapability(kind, page));
+  if (capable) return capable;
+  const spec = PAGE_SPECS[kind];
+  return (
+    pages.find((page) => pathKey(page.slug) === pathKey(spec.slug) || pathKey(page.name) === pathKey(spec.name)) ??
+    pages.find((page) => page.sections.some((item) => item.type === CAPABILITY_SECTION[kind]))
+  );
+}
+
+function withPageChrome(template: SectionEnvelope[], existing: DraftPage): SectionEnvelope[] {
+  const header = existing.sections.find((item) => item.type === "header");
+  const footer = existing.sections.find((item) => item.type === "footer");
+  const body = template.filter((item) => !isChrome(item));
+  return [...(header ? [header as SectionEnvelope] : []), ...body, ...(footer ? [footer as SectionEnvelope] : [])];
+}
+
+export type ShopPagesSuggestionOptions = {
+  /** Page open in the editor; when it is the shop page being fixed, preview uses before/after. */
+  pageId?: string | null;
+};
+
+/**
+ * Builds or repairs shop / shopper pages without asking the model.
+ * - Missing pages are created.
+ * - Pages that exist by name/slug but lack the live capability section are upgraded in place
+ *   (e.g. a marketing "/shop" page with no products grid).
+ * Capable pages are left alone; if every requested capability already exists, returns a short chat.
+ */
+export function shopPagesSuggestion(
+  prompt: string,
+  website: WebsiteDetail | undefined,
+  options: ShopPagesSuggestionOptions = {},
+): AiSuggestionPayload | null {
   if (!isShopPageRequest(prompt)) return null;
 
   const business = businessNameOf(website);
   const pages = website?.draft.pages ?? [];
   const kinds = requestedShopPages(prompt);
-  const createdPages = kinds.filter((kind) => !findShopPage(kind, pages)).map((kind) => shopPage(kind, business));
-  if (createdPages.length === 0) return null;
+  const createdPages: CreatedPageEdit[] = [];
+  const updatedPages: UpdatedPageEdit[] = [];
+  const notes: string[] = [];
+
+  for (const kind of kinds) {
+    const existing = findShopPage(kind, pages);
+    if (existing && pageHasShopCapability(kind, existing)) continue;
+
+    if (existing) {
+      const nextSections = withPageChrome(PAGE_SPECS[kind].sections(business), existing);
+      updatedPages.push({
+        pageId: existing.id,
+        name: existing.name || PAGE_SPECS[kind].name,
+        slug: existing.slug || PAGE_SPECS[kind].slug,
+        showInNav: kind === "shop" ? true : existing.showInNav,
+        sections: nextSections,
+      });
+      notes.push(
+        kind === "shop"
+          ? `Updated "${existing.name}" so it lists your live products.`
+          : `Updated "${existing.name}" into a working ${PAGE_SPECS[kind].name.toLowerCase()} page.`,
+      );
+      continue;
+    }
+
+    const page = shopPage(kind, business);
+    createdPages.push(page);
+    notes.push(`Created ${page.name}.`);
+  }
+
+  if (createdPages.length === 0 && updatedPages.length === 0) {
+    const hasShop = kinds.includes("shop");
+    return {
+      id: randomUUID(),
+      prompt,
+      summary: hasShop
+        ? "Your shop page already lists products from the catalogue."
+        : "Those shopper pages are already set up.",
+      chatReply: hasShop
+        ? "Your shop page already uses the live products catalogue. Add products under Shop in the editor if the list looks empty."
+        : "Those pages are already on the site. Open them from the page list or header to review.",
+      target: { scope: "chat" },
+      before: [],
+      after: [],
+    };
+  }
 
   const menu = [...(website?.draft.header.menu ?? [])];
-  const addsShop = createdPages.some((page) => page.slug === SHOP_SLUG);
-  const hasShop = menu.some((item) => pathKey(item.href) === pathKey(SHOP_SLUG) || pathKey(item.label) === "shop");
+  const shopReady =
+    createdPages.some((page) => page.slug === SHOP_SLUG) ||
+    updatedPages.some((page) => pathKey(page.slug ?? "") === pathKey(SHOP_SLUG)) ||
+    pages.some((page) => pageHasShopCapability("shop", page));
+  const hasShopLink = menu.some((item) => pathKey(item.href) === pathKey(SHOP_SLUG) || pathKey(item.label) === "shop");
   const navigationPatch: NavigationPatchEdit | undefined =
-    addsShop && !hasShop ? { headerMenu: [...menu, { label: "Shop", href: SHOP_SLUG }] } : undefined;
+    shopReady && !hasShopLink ? { headerMenu: [...menu, { label: "Shop", href: SHOP_SLUG }] } : undefined;
 
-  const names = createdPages.map((page) => page.name);
-  const summary = [
-    `Created ${names.join(", ")}.`,
-    navigationPatch ? "Added Shop to the header menu." : "",
-    createdPages.some((page) => page.slug === SHOP_SLUG) ? "The shop page lists your products; each one opens on the product page with its options, price and stock." : "",
-    createdPages.some((page) => page.slug === ACCOUNT_SLUG) ? "Customers sign in on Login and see their orders, cart and profile on Account (visible only when signed in)." : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  if (navigationPatch) notes.push("Added Shop to the header menu.");
+  if (createdPages.some((page) => page.slug === SHOP_SLUG) || updatedPages.some((page) => pathKey(page.slug ?? "") === pathKey(SHOP_SLUG))) {
+    notes.push("The shop page lists your products; each one opens on the product page with its options, price and stock.");
+  }
+  if (createdPages.some((page) => page.slug === ACCOUNT_SLUG)) {
+    notes.push("Customers sign in on Login and see their orders, cart and profile on Account (visible only when signed in).");
+  }
+
+  const currentId = options.pageId ?? null;
+  const currentUpdate = currentId ? updatedPages.find((page) => page.pageId === currentId) : undefined;
+  const currentPage = currentId ? pages.find((page) => page.id === currentId) : undefined;
 
   return {
     id: randomUUID(),
     prompt,
-    summary,
-    target: { scope: "site", createdPageIds: createdPages.map((page) => page.id), affectedPageIds: [] },
-    before: [],
-    after: [],
-    createdPages,
+    summary: notes.filter(Boolean).join(" "),
+    target: {
+      scope: "site",
+      createdPageIds: createdPages.map((page) => page.id),
+      affectedPageIds: [currentId, ...updatedPages.map((page) => page.pageId)].filter((id): id is string => Boolean(id)),
+    },
+    before: currentUpdate && currentPage ? currentPage.sections : [],
+    after: currentUpdate?.sections ?? [],
+    createdPages: createdPages.length > 0 ? createdPages : undefined,
+    updatedPages: updatedPages.length > 0 ? updatedPages : undefined,
     ...(navigationPatch ? { navigationPatch } : {}),
   };
 }

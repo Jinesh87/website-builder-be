@@ -274,15 +274,15 @@ RULES & CROSS-PAGE REASONING
      - FAQ (key questions answered)
      - Contact (variant "split-form", "cards-hub", "minimal-editorial" or "floating-glass"; showForm true; email, phone and address from the business facts)
   5. Never generate only a single section when the user asked for a complete page, website, or menu.
-  6. SHOP / PRODUCT / ECOMMERCE PAGES ("product page", "shop page", "catalogue", "store"):
-     Do NOT clarify and do NOT build a services or cards grid of made-up products. The catalogue is live.
-     Create four pages when they are not already in SITE PAGES:
-     - "Shop" slug "/shop", showInNav true: a short hero plus one "products" section. products data is only eyebrow, title, subtitle, layout "grid-3", showSearch true, showCategoryFilter true, detailBase "/product", emptyMessage. It lists the real products.
-     - "Product" slug "/product", showInNav false: one "product_detail" section with backLabel "All products", backHref "/shop", showDescription true, showStock true. A product opens at /product/its-slug.
-     - "Login" slug "/login", showInNav false: one "auth" section (shopper login / register / forgot password). Prefer variant "diagonal-split", social.enabled false, brandName from brand facts, successLink to "/account".
-     - "Account" slug "/account", showInNav false: one "account" section (the signed-in customer's orders, cart and profile; visitors who aren't signed in see a sign-in prompt). Set loginHref "/login" and shopHref "/shop".
-     Also emit "update_navigation" so the header menu includes { "label": "Shop", "href": "/shop" }, keeping the existing items.
-     If the owner is already on the Shop page, use "replace_page" for that page instead of creating a duplicate.
+  6. SHOP / PRODUCT / ECOMMERCE / "LIST OUR PRODUCTS" ("product page", "shop page", "catalogue", "store", "list products", "show products", "products on this page"):
+     Do NOT clarify, do NOT answer with chat, and do NOT build a services or cards grid of made-up products. The catalogue is live via the "products" section type.
+     A page named Shop or slug "/shop" that has NO "products" section is incomplete — rebuild it with "replace_page" (keep header/footer): a short hero plus one "products" section (eyebrow, title, subtitle, layout "grid-3", showSearch true, showCategoryFilter true, detailBase "/product", emptyMessage). Never leave a marketing-only shop page when the owner asks to list products.
+     Also ensure these pages exist (create_page when missing from SITE PAGES):
+     - "Product" slug "/product", showInNav false: one "product_detail" section with backLabel "All products", backHref "/shop", showDescription true, showStock true.
+     - "Login" slug "/login", showInNav false: one "auth" section when the owner also needs shopper login.
+     - "Account" slug "/account", showInNav false: one "account" section when login is created.
+     Emit "update_navigation" so the header menu includes { "label": "Shop", "href": "/shop" }, keeping existing items.
+     If the owner is already on the Shop page (or asks to list products while that page is current), use "replace_page" on it — never create a duplicate /shop.
   7. LOGIN / SIGN UP / ACCOUNT PAGES ("login page", "sign up", "register", "customer account", "account page", "my orders"):
      "Login" ("/login") holds one "auth" section; "Account" ("/account") holds one "account" section. Create whichever is missing (both showInNav false); when the owner is on one of them, use "replace_page" or "update" instead. Do not put auth or account sections on the home page.
      The "account" section is a template the owner configures: "variant" picks the layout (sidebar-tabs, top-tabs, overview-cards, minimal-list, dark-panel); showOrders/showCart/showProfile/showPassword choose the panels; the heading, tab labels, empty-state texts and the guest prompt (guestHeading, guestText, guestButtonLabel) are editable copy. It only ever shows a customer their own data, so never write orders or customer names into it.`;
@@ -718,9 +718,14 @@ export async function runCopilot(
   // A header/menu-bar request is a navigation edit, not a restaurant menu or a page build.
   const isNavRequest = hasResolvableNavIntent(options);
   const isMenuRequest = !isNavRequest && /\b(men\w*|food|dish\w*|dining|restaurant|culinary|cafe|bar|bistro|bakery)\b/i.test(options.prompt);
+  const isShopCatalogueRequest =
+    !isNavRequest &&
+    /\b(products?|shop|store|catalogue|catalog|e-?commerce)\b/i.test(options.prompt) &&
+    /\b(list|show|display|build|creat\w*|add|make|page|catalogue|catalog|shop|store)\b/i.test(options.prompt);
   const isCompletePageRequest =
     !isNavRequest &&
     (isMenuRequest ||
+      isShopCatalogueRequest ||
       /\b(compl\w*|creat\w*|build\w*|make\w*|generat\w*|redesign\w*|rebuild\w*|all\s+sections?|full\s+page|full\s+website|whole\s+page|landing\s*page|website|about|contact|services?|pricing)\b/i.test(
         options.prompt,
       ));
@@ -729,7 +734,9 @@ export async function runCopilot(
     if (isCompletePageRequest) {
       const directive = isMenuRequest
         ? `The owner wants a complete, authentic RESTAURANT MENU page with real culinary dishes, starters, main courses, desserts/drinks, realistic prices ($14-$65), badges (Chef's Signature, Gluten-Free, Vegan), dining FAQ, table reservation CTA, and header navigation linking "Menu" to "/menu". Do NOT create a generic landing page or ask what sections they want. Generate the complete menu page now using "replace_page" and "update_navigation".`
-        : `The owner wants a complete page with ALL standard sections matching the requested page type in one shot. Do NOT clarify or ask what sections they want. Generate all sections now using "replace_page".`;
+        : isShopCatalogueRequest
+          ? `The owner wants the live product catalogue on the site. Do NOT clarify and do NOT invent product cards. If the current page is Shop (or slug /shop) or they asked to list products, use "replace_page" with a short hero plus one "products" section (layout "grid-3", showSearch true, showCategoryFilter true, detailBase "/product"). Also create_page for "/product" with one "product_detail" section when it is missing from SITE PAGES, and update_navigation to include Shop -> /shop. Generate now.`
+          : `The owner wants a complete page with ALL standard sections matching the requested page type in one shot. Do NOT clarify or ask what sections they want. Generate all sections now using "replace_page".`;
       raw = await ask([
         ...messages,
         { role: "assistant", content: JSON.stringify(raw) },
