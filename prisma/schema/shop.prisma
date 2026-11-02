@@ -26,6 +26,10 @@ model Product {
   name        String   @db.VarChar(160)
   slug        String   @db.VarChar(160)
   description String?  @db.VarChar(2000)
+  /// When false, this product cannot be returned even if the shop allows returns.
+  returnsEnabled Boolean @default(true)
+  /// Per-product return window in days. Null = use the shop default (shopReturnDays).
+  returnDays     Int?
   /// How the client configured options (size, colour, …) and which values share a price.
   optionSets  Json     @default("[]")
   /// Product photos, in display order. Each item is `{ mediaId, alt }`.

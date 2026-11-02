@@ -74,11 +74,23 @@ function toProduct(product: ProductRow): ShopProductView {
     description: product.description,
     categoryId: product.categoryId,
     categoryName: product.category?.name ?? "",
+    returnsEnabled: product.returnsEnabled,
+    returnDays: product.returnDays,
     optionSets: readOptionSets(product.optionSets),
     images: readImages(product.images),
     variants: product.variants.map(toVariant),
     updatedAt: product.updatedAt.toISOString(),
   };
+}
+
+function effectiveReturnDays(
+  shopReturnDays: number | null | undefined,
+  product: { returnsEnabled: boolean; returnDays: number | null },
+): number | null {
+  if (!shopReturnDays || shopReturnDays < 1) return null;
+  if (!product.returnsEnabled) return null;
+  const days = product.returnDays ?? shopReturnDays;
+  return days > 0 ? days : null;
 }
 
 function optionValues(optionSets: ShopOptionSetView[], variantName: string): { name: string; value: string; list?: boolean }[] {
@@ -122,7 +134,7 @@ function sharedValueImages(optionSets: ShopOptionSetView[], variantName: string)
   return [];
 }
 
-function toPublicProduct(product: ProductRow): PublicShopProduct {
+function toPublicProduct(product: ProductRow, shopReturnDays: number | null): PublicShopProduct {
   const optionSets = readOptionSets(product.optionSets);
   const variants: PublicShopVariant[] = product.variants.map((variant) => {
     const own = readImages(variant.images);
@@ -142,6 +154,7 @@ function toPublicProduct(product: ProductRow): PublicShopProduct {
     slug: product.slug,
     description: product.description,
     categoryName: product.category?.name ?? "",
+    returnDays: effectiveReturnDays(shopReturnDays, product),
     images: readImages(product.images).map(({ url, alt }) => ({ url, alt })),
     variants,
   };
@@ -388,6 +401,8 @@ export class ShopService {
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
+          returnsEnabled: input.returnsEnabled !== false,
+          returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
           images: images as Prisma.InputJsonValue,
           variants: { create: variantRows(expanded.variants) },
@@ -450,6 +465,8 @@ export class ShopService {
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
+          returnsEnabled: input.returnsEnabled !== false,
+          returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
           images: images as Prisma.InputJsonValue,
           variants: { create: variantRows(expanded.variants, quantities) },
@@ -495,7 +512,11 @@ export class ShopService {
   async publicCatalog(websiteId: string): Promise<PublicShopProduct[]> {
     const website = await prisma.website.findUnique({
       where: { id: websiteId },
-      select: { shopEnabled: true, client: { select: { shopFeatureEnabled: true } } },
+      select: {
+        shopEnabled: true,
+        shopReturnDays: true,
+        client: { select: { shopFeatureEnabled: true } },
+      },
     });
     if (!website?.shopEnabled || !website.client.shopFeatureEnabled) return [];
     const products = await prisma.product.findMany({
@@ -504,7 +525,7 @@ export class ShopService {
       orderBy: { name: "asc" },
       take: MAX_PRODUCTS,
     });
-    return products.map(toPublicProduct);
+    return products.map((product) => toPublicProduct(product, website.shopReturnDays));
   }
 
   private async resolveImages(clientId: string, images: ShopImageInput[]): Promise<{ mediaId: string; alt: string }[]> {

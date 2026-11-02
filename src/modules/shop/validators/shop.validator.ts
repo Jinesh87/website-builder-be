@@ -84,6 +84,11 @@ export const shopProductSchema = Joi.object({
   categoryId: Joi.string().guid().allow(null, "").optional().messages({
     "string.guid": "Choose a valid category",
   }),
+  returnsEnabled: Joi.boolean().optional(),
+  returnDays: Joi.number().integer().min(1).max(365).allow(null).optional().messages({
+    "number.min": "Return window must be at least 1 day",
+    "number.max": "Return window cannot exceed 365 days",
+  }),
   optionSets: Joi.array().items(optionSetSchema).min(1).max(8).required().messages({
     "array.min": "Add at least one combination",
     "array.max": "A product can have at most 8 combinations",

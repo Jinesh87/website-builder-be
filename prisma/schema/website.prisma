@@ -15,6 +15,10 @@ model Website {
   /// Latest fulfilment status at which shoppers may cancel. Null = customer cancel off.
   /// Compared against PAID / PROCESSING / SHIPPED (and earlier statuses).
   shopCancelUntilStatus ShopOrderStatus?
+  /// Default return window in days after delivery. Null = returns off for the shop.
+  shopReturnDays        Int?
+  /// Bullet points shown with the return policy on product pages. JSON string[].
+  shopReturnGuidelines  Json                @default("[]")
   /// Default address: <subdomain>.<platform domain>. Lowercase DNS label.
   subdomain       String                @unique @db.VarChar(63)
 

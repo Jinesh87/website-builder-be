@@ -25,6 +25,10 @@ export type WebsiteSummary = {
   shopEnabled: boolean;
   /** Inclusive status ceiling for shopper cancels. Null = customers cannot cancel. */
   shopCancelUntilStatus: "paid" | "processing" | "shipped" | null;
+  /** Default return window in days. Null = returns off for the shop. */
+  shopReturnDays: number | null;
+  /** Guideline bullets shown with the return policy. */
+  shopReturnGuidelines: string[];
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -108,6 +112,9 @@ export type UpdateWebsiteInput = WebsiteInfoInput & {
   shopEnabled?: boolean;
   /** Pass null to turn customer order cancellation off. */
   shopCancelUntilStatus?: "paid" | "processing" | "shipped" | null;
+  /** Pass null to turn returns off for the shop. */
+  shopReturnDays?: number | null;
+  shopReturnGuidelines?: string[];
 };
 
 export type PageInput = {
