@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isShopPageRequest, shopPagesSuggestion } from "./shop-pages.js";
+import { isShopPageRequest, pageHasShopCapability, shopPagesSuggestion } from "./shop-pages.js";
 import type { WebsiteDetail } from "../types/website.types.js";
 
 test("recognises a request for shop or shopper pages", () => {
@@ -8,6 +8,10 @@ test("recognises a request for shop or shopper pages", () => {
   assert.equal(isShopPageRequest("for a commerce purpose i need a new product page"), true);
   assert.equal(isShopPageRequest("need a login page and signup for clients"), true);
   assert.equal(isShopPageRequest("create an account page for customers"), true);
+  assert.equal(isShopPageRequest("shop page should list our products"), true);
+  assert.equal(isShopPageRequest("should list our products"), true);
+  assert.equal(isShopPageRequest("build a new page which should list our products"), true);
+  assert.equal(isShopPageRequest("show products on the shop"), true);
   assert.equal(isShopPageRequest("make the heading shorter"), false);
 });
 
@@ -51,7 +55,7 @@ test("builds login and account pages with their own section types", () => {
   assert.equal(suggestion.navigationPatch, undefined);
 });
 
-test("never overwrites pages that already exist", () => {
+test("does not recreate pages that already provide the capability", () => {
   const suggestion = shopPagesSuggestion("need a login page", {
     name: "rock",
     info: { businessName: "Rock" },
@@ -63,5 +67,77 @@ test("never overwrites pages that already exist", () => {
       header: { menu: [] },
     },
   } as unknown as WebsiteDetail);
-  assert.equal(suggestion, null);
+  assert.ok(suggestion);
+  assert.equal(suggestion.target.scope, "chat");
+  assert.equal(suggestion.createdPages, undefined);
+  assert.equal(suggestion.updatedPages, undefined);
 });
+
+test("upgrades a marketing shop page that has no products section", () => {
+  const shopId = "shop-1";
+  const suggestion = shopPagesSuggestion("shop page should list our products", {
+    name: "John's company",
+    info: { businessName: "John's company" },
+    draft: {
+      pages: [
+        {
+          id: shopId,
+          name: "shop",
+          slug: "/shop",
+          showInNav: true,
+          sections: [
+            { id: "h1", type: "header", hidden: false, settings: {}, data: {} },
+            { id: "hero1", type: "hero", hidden: false, settings: {}, data: { heading: "Discover Our Products" } },
+            { id: "f1", type: "features", hidden: false, settings: {}, data: { title: "Why Shop With Us?" } },
+            { id: "ft1", type: "footer", hidden: false, settings: {}, data: {} },
+          ],
+        },
+      ],
+      header: { menu: [{ label: "Shop", href: "/shop" }] },
+    },
+  } as unknown as WebsiteDetail, { pageId: shopId });
+
+  assert.ok(suggestion);
+  assert.equal(suggestion.createdPages?.map((page) => page.slug).join(","), "/product");
+  assert.equal(suggestion.updatedPages?.length, 1);
+  assert.equal(suggestion.updatedPages?.[0]?.pageId, shopId);
+  assert.equal(suggestion.updatedPages?.[0]?.sections?.some((section) => section.type === "products"), true);
+  assert.equal(suggestion.updatedPages?.[0]?.sections?.some((section) => section.type === "header"), true);
+  assert.equal(suggestion.after.some((section) => section.type === "products"), true);
+  assert.equal(pageHasShopCapability("shop", {
+    id: shopId,
+    name: "shop",
+    slug: "/shop",
+    sections: suggestion.updatedPages![0]!.sections!,
+  } as DraftPageLike), true);
+});
+
+test("build a new products page upgrades an existing stub shop instead of duplicating", () => {
+  const suggestion = shopPagesSuggestion("build a new page which should list our products", {
+    name: "John's company",
+    info: { businessName: "John's company" },
+    draft: {
+      pages: [
+        {
+          id: "shop-1",
+          name: "shop",
+          slug: "/shop",
+          sections: [{ type: "hero" }, { type: "features" }],
+        },
+      ],
+      header: { menu: [] },
+    },
+  } as unknown as WebsiteDetail);
+
+  assert.ok(suggestion);
+  assert.ok(suggestion.updatedPages?.some((page) => page.pageId === "shop-1"));
+  assert.ok(suggestion.createdPages?.some((page) => page.slug === "/product"));
+  assert.ok(suggestion.navigationPatch?.headerMenu?.some((item) => item.href === "/shop"));
+});
+
+type DraftPageLike = {
+  id: string;
+  name: string;
+  slug: string;
+  sections: Array<{ type: string }>;
+};

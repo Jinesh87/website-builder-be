@@ -248,7 +248,7 @@ export class WebsiteController {
       const useCopilot =
         website.builderType === BuilderType.AI && (selectedType === undefined || isEditableSectionType(selectedType));
 
-      const shopPages = shopPagesSuggestion(body.prompt, website);
+      const shopPages = shopPagesSuggestion(body.prompt, website, { pageId: body.pageId });
       const generate = (onPlan?: (layout: LayoutSlot[]) => void): Promise<AiSuggestionPayload> =>
         shopPages
           ? Promise.resolve(shopPages)
