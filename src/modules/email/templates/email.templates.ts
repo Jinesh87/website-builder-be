@@ -580,3 +580,458 @@ The ${params.brand} Team`;
     text,
   };
 }
+
+export function partnerApplicationConfirmationEmail(params: {
+  brand: string;
+  contactName: string;
+  companyName: string;
+  applicationId: string;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand);
+  const contactName = escapeHtml(params.contactName);
+  const companyName = escapeHtml(params.companyName);
+  const applicationId = escapeHtml(params.applicationId);
+
+  const html = layout(
+    params.brand,
+    `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">Partner Application Received</h1>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${contactName},</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Thank you for applying to become a partner with <strong>${brand}</strong> on behalf of <strong>${companyName}</strong>.</p>
+     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:20px 0;">
+       <p style="margin:0 0 6px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Your Application Reference ID</p>
+       <p style="margin:0;font-size:22px;font-family:monospace;font-weight:bold;color:#2563eb;">${applicationId}</p>
+     </div>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Our partnerships team is reviewing your application (usually within 2-3 business days). Once approved, you'll receive your unique referral code, agreed commission percentage, and dashboard login details.</p>
+     <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Partnerships Team</p>`,
+  );
+
+  const text = `Hi ${params.contactName},
+
+Thank you for applying to become a partner with ${params.brand} on behalf of ${params.companyName}.
+
+Your Application Reference ID: ${params.applicationId}
+
+Our team is reviewing your application (usually within 2-3 business days). Once approved, you'll receive your unique referral code, agreed commission percentage, and dashboard login details.
+
+Warm regards,
+The ${params.brand} Partnerships Team`;
+
+  return {
+    subject: `[${params.brand}] Partner Application Received: ${params.applicationId}`,
+    html,
+    text,
+  };
+}
+
+export function partnerApprovalEmail(params: {
+  brand: string;
+  contactName: string;
+  companyName: string;
+  referralCode: string;
+  commissionRate: string | number;
+  dashboardLink: string;
+  loginEmail: string;
+  loginUrl?: string;
+  temporaryPassword?: string;
+  inviteLink?: string;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand);
+  const contactName = escapeHtml(params.contactName);
+  const referralCode = escapeHtml(params.referralCode);
+  const commissionRate = escapeHtml(String(params.commissionRate));
+  const dashboardLink = escapeHtml(params.dashboardLink);
+  const loginEmail = escapeHtml(params.loginEmail);
+  const loginUrl = escapeHtml(params.loginUrl || params.dashboardLink);
+  const tempPassword = params.temporaryPassword ? escapeHtml(params.temporaryPassword) : null;
+
+  const html = layout(
+    params.brand,
+    `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">Congratulations! Your Partner Application is Approved</h1>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${contactName},</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">We are excited to welcome you to the <strong>${brand} Partner Program</strong>! Your application has been approved.</p>
+     
+     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:20px 0;">
+       <tr>
+         <td style="padding:8px 0;">
+           <span style="font-size:12px;color:#166534;text-transform:uppercase;font-weight:600;display:block;">Your Referral Code</span>
+           <span style="font-size:24px;font-family:monospace;font-weight:bold;color:#15803d;letter-spacing:2px;">${referralCode}</span>
+         </td>
+         <td style="padding:8px 0;text-align:right;">
+           <span style="font-size:12px;color:#166534;text-transform:uppercase;font-weight:600;display:block;">Commission Rate</span>
+           <span style="font-size:24px;font-weight:bold;color:#15803d;">${commissionRate}%</span>
+         </td>
+       </tr>
+     </table>
+
+     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:20px 0;">
+       <p style="margin:0 0 8px;font-size:13px;font-weight:bold;color:#1e293b;">Your Dashboard Login Access</p>
+       <p style="margin:0 0 6px;font-size:13px;color:#475569;">Login URL: <a href="${loginUrl}" style="color:#2563eb;text-decoration:none;font-weight:600;">${loginUrl}</a></p>
+       <p style="margin:0 0 6px;font-size:13px;color:#475569;">Email / Username: <strong>${loginEmail}</strong></p>
+       ${
+         tempPassword
+           ? `<p style="margin:0 0 6px;font-size:13px;color:#475569;">Temporary Password: <strong style="font-family:monospace;background:#e2e8f0;padding:2px 8px;border-radius:4px;color:#0f172a;">${tempPassword}</strong></p>
+              <p style="margin:6px 0 0;font-size:11px;color:#64748b;">(You can change your password anytime under Account Settings after logging in)</p>`
+           : `<p style="margin:0 0 6px;font-size:13px;color:#475569;">Password: <em>Use your existing account password</em></p>`
+       }
+     </div>
+
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Once logged in, navigate to the <strong>Partnership</strong> tab from your dashboard sidebar to access your live referral link, track customer signups, and view earned payouts.</p>
+     
+     <div style="margin:24px 0;">
+       <a href="${loginUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;">Log In to Dashboard</a>
+     </div>
+
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Whenever a customer completes payment with your link or code, you'll automatically earn <strong>${commissionRate}% commission</strong>.</p>
+     <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Partnerships Team</p>`,
+  );
+
+  const text = `Hi ${params.contactName},
+
+Congratulations! Your partner application with ${params.brand} has been approved.
+
+Your Referral Code: ${params.referralCode}
+Commission Rate: ${params.commissionRate}%
+
+Dashboard Login Access:
+Login URL: ${params.loginUrl || params.dashboardLink}
+Email: ${params.loginEmail}
+${params.temporaryPassword ? `Temporary Password: ${params.temporaryPassword}` : "Password: (Your existing account password)"}
+
+Log in and open the 'Partnership' tab from your dashboard sidebar to track referrals and commissions.
+
+Warm regards,
+The ${params.brand} Partnerships Team`;
+
+  return {
+    subject: `[${params.brand}] Approved! Welcome to the Partner Program - Code: ${params.referralCode}`,
+    html,
+    text,
+  };
+}
+
+export function partnerRejectionEmail(params: {
+  brand: string;
+  contactName: string;
+  companyName: string;
+  reason: string;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand);
+  const contactName = escapeHtml(params.contactName);
+  const reason = escapeHtml(params.reason);
+
+  const html = layout(
+    params.brand,
+    `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">Update Regarding Your Partner Application</h1>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${contactName},</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Thank you for your interest in the <strong>${brand} Partner Program</strong>. After carefully reviewing your application, we regret to inform you that we are unable to approve your application at this time.</p>
+     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin:20px 0;">
+       <p style="margin:0 0 6px;font-size:12px;color:#991b1b;text-transform:uppercase;font-weight:600;">Reason provided by our team</p>
+       <p style="margin:0;font-size:14px;color:#7f1d1d;line-height:1.5;">${reason}</p>
+     </div>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">If you feel this decision was in error or if your business model changes, feel free to contact us or submit a new application in the future.</p>
+     <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Partnerships Team</p>`,
+  );
+
+  const text = `Hi ${params.contactName},
+
+Thank you for your interest in the ${params.brand} Partner Program. After careful review, we regret to inform you that we cannot approve your application at this time.
+
+Reason: ${params.reason}
+
+Warm regards,
+The ${params.brand} Partnerships Team`;
+
+  return {
+    subject: `[${params.brand}] Update Regarding Your Partner Application`,
+    html,
+    text,
+  };
+}
+
+export function partnerSuspensionEmail(params: {
+  brand: string;
+  contactName: string;
+  companyName: string;
+  reason: string;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand);
+  const contactName = escapeHtml(params.contactName);
+  const reason = escapeHtml(params.reason);
+
+  const html = layout(
+    params.brand,
+    `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">Partner Account Suspended</h1>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${contactName},</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Your partner account on <strong>${brand}</strong> has been temporarily suspended.</p>
+     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:20px 0;">
+       <p style="margin:0 0 6px;font-size:12px;color:#92400e;text-transform:uppercase;font-weight:600;">Suspension Reason</p>
+       <p style="margin:0;font-size:14px;color:#78350f;line-height:1.5;">${reason}</p>
+     </div>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">While suspended, your referral code will not track new client referrals. Your existing referral history and earned commissions remain safe in our system.</p>
+     <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Partnerships Team</p>`,
+  );
+
+  const text = `Hi ${params.contactName},
+
+Your partner account on ${params.brand} has been suspended.
+
+Reason: ${params.reason}
+
+Existing history and commissions remain safe, but new referrals will not be attributed during suspension.
+
+Warm regards,
+The ${params.brand} Partnerships Team`;
+
+  return {
+    subject: `[${params.brand}] Partner Account Suspended`,
+    html,
+    text,
+  };
+}
+
+export function salesPartnerApplicationNotificationEmail(params: {
+  brand?: string;
+  applicationId: string;
+  companyName: string;
+  registrationNumber?: string | null;
+  website?: string | null;
+  businessType: string;
+  yearEstablished: string;
+  country: string;
+  state: string;
+  city: string;
+  businessAddress: string;
+  contactName: string;
+  designation: string;
+  email: string;
+  phone: string;
+  alternatePhone?: string | null;
+  partnershipType: string;
+  targetCategories: string[];
+  expectedReferrals: string;
+  marketingChannels: string[];
+  reason: string;
+  previousExperience?: boolean;
+  submittedAt?: Date;
+}): RenderedEmail {
+  const brand = escapeHtml(params.brand?.trim() || "Bytezora");
+  const applicationId = escapeHtml(params.applicationId);
+  const companyName = escapeHtml(params.companyName);
+  const contactName = escapeHtml(params.contactName);
+  const designation = escapeHtml(params.designation);
+  const email = escapeHtml(params.email);
+  const phone = escapeHtml(params.phone);
+  const altPhone = params.alternatePhone ? escapeHtml(params.alternatePhone) : null;
+  const partnershipType = escapeHtml(params.partnershipType);
+  const businessType = escapeHtml(params.businessType);
+  const yearEstablished = escapeHtml(params.yearEstablished);
+  const location = escapeHtml(
+    [params.businessAddress, params.city, params.state, params.country].filter(Boolean).join(", "),
+  );
+  const website = params.website ? escapeHtml(params.website) : null;
+  const regNo = params.registrationNumber ? escapeHtml(params.registrationNumber) : null;
+  const targetCategories = escapeHtml(params.targetCategories.join(", "));
+  const expectedReferrals = escapeHtml(params.expectedReferrals);
+  const marketingChannels = escapeHtml(params.marketingChannels.join(", "));
+  const reason = escapeHtml(params.reason).replace(/\n/g, "<br/>");
+  const experienceText = params.previousExperience ? "Yes" : "No";
+
+  const dateObj = params.submittedAt || new Date();
+  const dateStr =
+    dateObj.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      dateStyle: "medium",
+      timeStyle: "short",
+    }) + " IST";
+
+  const mailtoReply = `mailto:${encodeURIComponent(params.email)}?subject=${encodeURIComponent(
+    `Bytezora Partner Application (${params.applicationId}) - Next Steps`,
+  )}`;
+
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Partner Application: ${companyName}</title>
+  </head>
+  <body style="margin:0;padding:24px 12px;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+            <!-- Accent Stripe -->
+            <tr>
+              <td style="height:5px;background:linear-gradient(90deg, #3b82f6 0%, #10b981 100%);"></td>
+            </tr>
+            <!-- Header -->
+            <tr>
+              <td style="background-color:#0f172a;padding:28px 32px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td>
+                      <span style="display:inline-block;background-color:#1e293b;border:1px solid #334155;color:#38bdf8;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">
+                        ${brand} PARTNERS
+                      </span>
+                    </td>
+                    <td align="right">
+                      <span style="display:inline-block;background-color:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:0.5px;">
+                        NEW APPLICATION
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" style="padding-top:16px;">
+                      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">
+                        ${companyName}
+                      </h1>
+                      <p style="margin:4px 0 0;color:#94a3b8;font-size:13px;">
+                        Reference ID: <strong style="color:#67e8f9;font-family:monospace;">${applicationId}</strong> &bull; Received ${dateStr}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Quick Action Bar -->
+            <tr>
+              <td style="background-color:#f8fafc;padding:12px 32px;border-bottom:1px solid #e2e8f0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="font-size:13px;color:#475569;">
+                      Business: <strong style="color:#0f172a;">${businessType}</strong>
+                    </td>
+                    <td align="right">
+                      <a href="${mailtoReply}" style="display:inline-block;background-color:#2563eb;color:#ffffff;font-size:12px;font-weight:600;text-decoration:none;padding:6px 14px;border-radius:6px;">
+                        Reply to Applicant &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Body Details -->
+            <tr>
+              <td style="padding:28px 32px;">
+                <!-- Contact Person -->
+                <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">
+                  1. Contact Person
+                </h3>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;">
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;width:130px;">Name & Role:</td>
+                    <td style="padding:4px 0;font-weight:600;color:#0f172a;">${contactName} <span style="font-weight:normal;color:#64748b;">(${designation})</span></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;">Email:</td>
+                    <td style="padding:4px 0;"><a href="mailto:${email}" style="color:#2563eb;text-decoration:none;font-weight:500;">${email}</a></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;">Phone:</td>
+                    <td style="padding:4px 0;"><a href="tel:${phone}" style="color:#2563eb;text-decoration:none;font-weight:500;">${phone}</a>${altPhone ? ` &bull; Alt: ${altPhone}` : ""}</td>
+                  </tr>
+                </table>
+
+                <!-- Company Details -->
+                <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">
+                  2. Business Information
+                </h3>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;">
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;width:130px;">Business Type:</td>
+                    <td style="padding:4px 0;font-weight:600;color:#0f172a;">${businessType} <span style="font-weight:normal;color:#64748b;">(Est. ${yearEstablished})</span></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;">Address:</td>
+                    <td style="padding:4px 0;color:#0f172a;">${location}</td>
+                  </tr>
+                  ${website ? `<tr><td style="padding:4px 0;color:#64748b;">Website:</td><td style="padding:4px 0;"><a href="${website}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;">${website}</a></td></tr>` : ""}
+                  ${regNo ? `<tr><td style="padding:4px 0;color:#64748b;">Registration #:</td><td style="padding:4px 0;color:#0f172a;font-family:monospace;">${regNo}</td></tr>` : ""}
+                </table>
+
+                <!-- Partnership Plan -->
+                <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">
+                  3. Partnership Plan & Intentions
+                </h3>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;">
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;width:140px;">Customer Categories:</td>
+                    <td style="padding:4px 0;color:#0f172a;font-weight:500;">${targetCategories || "General"}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;">Expected Referrals:</td>
+                    <td style="padding:4px 0;color:#0f172a;font-weight:600;">${expectedReferrals} / month</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;">Marketing Channels:</td>
+                    <td style="padding:4px 0;color:#0f172a;">${marketingChannels || "Not specified"}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;color:#64748b;">Prior Experience:</td>
+                    <td style="padding:4px 0;color:#0f172a;">${experienceText}</td>
+                  </tr>
+                </table>
+
+                <!-- Reason -->
+                <h3 style="margin:0 0 12px;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">
+                  4. Why they want to partner
+                </h3>
+                <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;font-size:13px;line-height:1.6;color:#334155;">
+                  ${reason}
+                </div>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background-color:#f8fafc;padding:20px 32px;border-top:1px solid #e2e8f0;text-align:center;">
+                <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;">
+                  This is an automated notification dispatched to the Bytezora Sales team upon partner form submission.<br/>
+                  Manage all partner applications in the <strong style="color:#0f172a;">Admin Dashboard &rarr; Partner Management</strong>.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const text = `NEW PARTNER APPLICATION RECEIVED
+
+Application ID: ${params.applicationId}
+Company: ${params.companyName}
+Partnership Type: ${params.partnershipType}
+Submitted: ${dateStr}
+
+CONTACT PERSON:
+- Name: ${params.contactName} (${params.designation})
+- Email: ${params.email}
+- Phone: ${params.phone}${params.alternatePhone ? ` / ${params.alternatePhone}` : ""}
+
+BUSINESS INFORMATION:
+- Type: ${params.businessType} (Established: ${params.yearEstablished})
+- Address: ${params.businessAddress}, ${params.city}, ${params.state}, ${params.country}
+- Website: ${params.website || "N/A"}
+- Registration #: ${params.registrationNumber || "N/A"}
+
+PARTNERSHIP PLAN:
+- Target Categories: ${params.targetCategories.join(", ")}
+- Expected Referrals: ${params.expectedReferrals}
+- Marketing Channels: ${params.marketingChannels.join(", ")}
+- Previous Experience: ${params.previousExperience ? "Yes" : "No"}
+
+WHY THEY WANT TO PARTNER:
+${params.reason}
+
+Manage this submission in Admin Dashboard -> Partner Management.`;
+
+  return {
+    subject: `[${brand} Sales] New Partner Application: ${params.companyName} (${params.applicationId})`,
+    html,
+    text,
+  };
+}

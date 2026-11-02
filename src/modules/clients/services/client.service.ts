@@ -15,10 +15,10 @@ import type {
   CreateClientResult,
 } from "../types/client.types.js";
 
-/** Each client workspace currently has a single login account: its earliest CLIENT user. */
+/** Each client workspace currently has a single login account: its earliest CLIENT or PARTNER user. */
 const clientInclude = {
   users: {
-    where: { role: UserRole.CLIENT },
+    where: { role: { in: [UserRole.CLIENT, UserRole.PARTNER] } },
     orderBy: { createdAt: "asc" },
     take: 1,
   },
@@ -68,7 +68,7 @@ export class ClientService {
   async list(query: ClientListQuery): Promise<ClientListResult> {
     const search = query.search?.trim();
     const userFilter: Prisma.UserWhereInput = {
-      role: UserRole.CLIENT,
+      role: { in: [UserRole.CLIENT, UserRole.PARTNER] },
       ...(query.status ? { status: query.status } : {}),
     };
 

@@ -33,6 +33,7 @@ model Client {
   autoTopup            WalletAutoTopup?
   notifications        Notification[]
   questionnaires       Questionnaire[]
+  partnerReferrals     PartnerReferral[]    @relation("PartnerReferralClient")
 
   @@map("clients")
 }
