@@ -148,6 +148,11 @@ export const shopInventoryParamsSchema = Joi.object({
   variantId: Joi.string().guid().required(),
 });
 
+export const shopInventoryReturnsParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  productId: Joi.string().guid().required(),
+});
+
 export const shopInventoryAdjustSchema = Joi.object({
   quantity: Joi.number().integer().min(1).max(1_000_000).required().messages({
     "number.min": "Add at least 1",

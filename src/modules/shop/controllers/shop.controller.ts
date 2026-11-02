@@ -132,6 +132,14 @@ export class ShopController {
     }
   };
 
+  listProductReturns = async (req: Request<WebsiteParams & { productId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await shopInventoryService.listProductReturns(req.params.id, req.params.productId, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   listCustomers = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.json(await shopCustomersService.list(req.params.id, req.query as unknown as ShopCustomerQuery, req.user!));

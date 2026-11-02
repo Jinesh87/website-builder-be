@@ -13,6 +13,7 @@ import {
   shopInventoryLogQuerySchema,
   shopInventoryParamsSchema,
   shopInventoryQuerySchema,
+  shopInventoryReturnsParamsSchema,
   shopOrderEmailDesignSchema,
   shopOrderEmailParamsSchema,
   shopOrderEmailTemplateSchema,
@@ -54,13 +55,18 @@ shopRouter.patch(
 shopRouter.delete("/products/:productId", validate(shopProductParamsSchema, "params"), shopController.deleteProduct);
 
 shopRouter.get("/inventory", websiteParams, validate(shopInventoryQuerySchema, "query"), shopController.listInventory);
+shopRouter.get("/inventory/log", websiteParams, validate(shopInventoryLogQuerySchema, "query"), shopController.inventoryLog);
+shopRouter.get(
+  "/inventory/returns/:productId",
+  validate(shopInventoryReturnsParamsSchema, "params"),
+  shopController.listProductReturns,
+);
 shopRouter.patch(
   "/inventory/:variantId",
   validate(shopInventoryParamsSchema, "params"),
   validate(shopInventoryAdjustSchema),
   shopController.setInventory,
 );
-shopRouter.get("/inventory/log", websiteParams, validate(shopInventoryLogQuerySchema, "query"), shopController.inventoryLog);
 
 shopRouter.get("/customers", websiteParams, validate(shopCustomerQuerySchema, "query"), shopController.listCustomers);
 shopRouter.get("/customers/:customerId", validate(shopCustomerParamsSchema, "params"), shopController.getCustomer);

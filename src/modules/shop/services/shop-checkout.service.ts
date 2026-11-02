@@ -1046,7 +1046,6 @@ export class ShopCheckoutService {
     }
 
     const note = `Customer returned: ${reason}`.slice(0, 300);
-    let stockChanged = false;
 
     await prisma.$transaction(async (tx) => {
       const locked = await tx.shopOrder.findFirst({
@@ -1056,7 +1055,7 @@ export class ShopCheckoutService {
       if (!locked) {
         throw new AppError(400, "This order can no longer be returned.", "ORDER_NOT_RETURNABLE");
       }
-      stockChanged = await restoreStockOnce(tx, existing.id);
+      // Returned units stay out of sellable stock; merchants track them under Inventory → Returned.
       await tx.shopOrder.update({
         where: { id: existing.id },
         data: {
@@ -1072,8 +1071,6 @@ export class ShopCheckoutService {
         note,
       });
     });
-
-    await releaseStockForOrder(existing.websiteId, existing.id, existing.items);
 
     let refundMessage = "Return requested.";
     if (existing.razorpayPaymentId) {
@@ -1108,7 +1105,6 @@ export class ShopCheckoutService {
       refundMessage = "Return accepted.";
     }
 
-    if (stockChanged) purgeShopPages(websiteId);
     void shopOrderEmailsService.notifyStatusChange(existing.id, ShopOrderStatus.RETURNED);
     logger.info({ websiteId, orderId: existing.id, number: existing.number }, "Shop order returned by customer");
 
