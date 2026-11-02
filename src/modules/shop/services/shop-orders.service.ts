@@ -18,7 +18,8 @@ export type ShopOrderStatusLabel =
   | "shipped"
   | "delivered"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "returned";
 
 export type ShopOrderItemView = {
   id: string;
@@ -50,6 +51,7 @@ export type ShopOrderView = {
   refundedAt: string | null;
   failureReason: string | null;
   cancelReason: string | null;
+  returnReason: string | null;
   timeline: ShopOrderTimelineEvent[];
   createdAt: string;
   updatedAt: string;
@@ -76,6 +78,7 @@ const STATUS_FROM_LABEL: Record<ShopOrderStatusLabel, ShopOrderStatus> = {
   delivered: ShopOrderStatus.DELIVERED,
   failed: ShopOrderStatus.FAILED,
   cancelled: ShopOrderStatus.CANCELLED,
+  returned: ShopOrderStatus.RETURNED,
 };
 
 const LABEL_FROM_STATUS: Record<ShopOrderStatus, ShopOrderStatusLabel> = {
@@ -86,6 +89,7 @@ const LABEL_FROM_STATUS: Record<ShopOrderStatus, ShopOrderStatusLabel> = {
   [ShopOrderStatus.DELIVERED]: "delivered",
   [ShopOrderStatus.FAILED]: "failed",
   [ShopOrderStatus.CANCELLED]: "cancelled",
+  [ShopOrderStatus.RETURNED]: "returned",
 };
 
 function toView(order: {
@@ -101,6 +105,7 @@ function toView(order: {
   refundedAt: Date | null;
   failureReason: string | null;
   cancelReason: string | null;
+  returnReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; fullName: string; email: string; phone: string | null };
@@ -143,6 +148,7 @@ function toView(order: {
     refundedAt: order.refundedAt?.toISOString() ?? null,
     failureReason: order.failureReason,
     cancelReason: order.cancelReason,
+    returnReason: order.returnReason,
     timeline: (order.events ?? []).map(toTimelineEvent),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),

@@ -16,10 +16,18 @@ import { purgeShopPages } from "./shop-cache.js";
 import type {
   ShopCancelOrderInput,
   ShopOrderDetailView,
+  ShopReturnOrderInput,
   ShopOrderSummary,
   ShopRefundStatusLabel,
 } from "../types/shop-auth.types.js";
 import { canCustomerCancelOrder, cancelUntilLabel } from "../utils/shop-order-cancel.js";
+import {
+  canCustomerReturnOrder,
+  deliveredAtFromEvents,
+  orderReturnWindowDays,
+  returnDeadline,
+  type ReturnProductPolicy,
+} from "../utils/shop-order-return.js";
 import { getReservedQty, releaseStockForOrder, reserveStockForOrder } from "../utils/shop-stock-hold.js";
 import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
 import { shopOrderEmailsService } from "./shop-order-emails.service.js";
@@ -59,9 +67,35 @@ function statusLabel(status: ShopOrderStatus): ShopOrderSummary["status"] {
       return "failed";
     case ShopOrderStatus.CANCELLED:
       return "cancelled";
+    case ShopOrderStatus.RETURNED:
+      return "returned";
     default:
       return "pending";
   }
+}
+
+function returnFlags(input: {
+  status: ShopOrderStatus;
+  events: Array<{ status: ShopOrderStatus; createdAt: Date }>;
+  /** Fallback when no DELIVERED timeline event exists (older orders). */
+  updatedAt?: Date | null;
+  shopReturnDays: number | null | undefined;
+  lineProducts: Array<ReturnProductPolicy | null | undefined>;
+}): { canReturn: boolean; returnUntil: string | null } {
+  const deliveredAt =
+    deliveredAtFromEvents(input.events) ??
+    (input.status === ShopOrderStatus.DELIVERED ? input.updatedAt ?? null : null);
+  const days = orderReturnWindowDays(input.shopReturnDays, input.lineProducts);
+  const canReturn = canCustomerReturnOrder({
+    status: input.status,
+    deliveredAt,
+    shopReturnDays: input.shopReturnDays,
+    lineProducts: input.lineProducts,
+  });
+  return {
+    canReturn,
+    returnUntil: canReturn && deliveredAt && days ? returnDeadline(deliveredAt, days).toISOString() : null,
+  };
 }
 
 export function refundStatusLabel(status: ShopRefundStatus): ShopRefundStatusLabel {
@@ -89,6 +123,7 @@ export function toOrderSummary(
     "id" | "number" | "status" | "refundStatus" | "totalPaise" | "currency" | "createdAt" | "refundedAt"
   >,
   cancelUntilStatus?: ShopOrderStatus | null,
+  returns?: { canReturn: boolean; returnUntil: string | null },
 ): ShopOrderSummary {
   return {
     id: order.id,
@@ -100,6 +135,8 @@ export function toOrderSummary(
     createdAt: order.createdAt.toISOString(),
     refundedAt: order.refundedAt?.toISOString() ?? null,
     canCancel: canCustomerCancelOrder(order.status, cancelUntilStatus ?? null),
+    canReturn: returns?.canReturn ?? false,
+    returnUntil: returns?.returnUntil ?? null,
   };
 }
 
@@ -230,14 +267,41 @@ export class ShopCheckoutService {
         where: { websiteId, customerId },
         orderBy: { createdAt: "desc" },
         take: 100,
+        include: {
+          items: { select: { productId: true } },
+          events: { select: { status: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+        },
       }),
       prisma.website.findUnique({
         where: { id: websiteId },
-        select: { shopCancelUntilStatus: true },
+        select: { shopCancelUntilStatus: true, shopReturnDays: true },
       }),
     ]);
     const cancelUntil = website?.shopCancelUntilStatus ?? null;
-    return rows.map((row) => toOrderSummary(row, cancelUntil));
+    const shopReturnDays = website?.shopReturnDays ?? null;
+    const productIds = [...new Set(rows.flatMap((row) => row.items.map((item) => item.productId).filter(Boolean)))] as string[];
+    const products =
+      productIds.length > 0
+        ? await prisma.product.findMany({
+            where: { id: { in: productIds }, websiteId },
+            select: { id: true, returnsEnabled: true, returnDays: true },
+          })
+        : [];
+    const productById = new Map(products.map((product) => [product.id, product]));
+    return rows.map((row) => {
+      const lineProducts = row.items.map((item) => (item.productId ? productById.get(item.productId) ?? null : null));
+      return toOrderSummary(
+        row,
+        cancelUntil,
+        returnFlags({
+          status: row.status,
+          events: row.events,
+          updatedAt: row.updatedAt,
+          shopReturnDays,
+          lineProducts,
+        }),
+      );
+    });
   }
 
   async getCancelUntilStatus(websiteId: string) {
@@ -750,13 +814,33 @@ export class ShopCheckoutService {
       }),
       prisma.website.findUnique({
         where: { id: websiteId },
-        select: { shopCancelUntilStatus: true },
+        select: { shopCancelUntilStatus: true, shopReturnDays: true },
       }),
     ]);
     if (!order) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
     const cancelUntil = website?.shopCancelUntilStatus ?? null;
+    const productIds = [...new Set(order.items.map((item) => item.productId).filter(Boolean))] as string[];
+    const products =
+      productIds.length > 0
+        ? await prisma.product.findMany({
+            where: { id: { in: productIds }, websiteId },
+            select: { id: true, returnsEnabled: true, returnDays: true },
+          })
+        : [];
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const lineProducts = order.items.map((item) => (item.productId ? productById.get(item.productId) ?? null : null));
     return {
-      ...toOrderSummary(order, cancelUntil),
+      ...toOrderSummary(
+        order,
+        cancelUntil,
+        returnFlags({
+          status: order.status,
+          events: order.events,
+          updatedAt: order.updatedAt,
+          shopReturnDays: website?.shopReturnDays ?? null,
+          lineProducts,
+        }),
+      ),
       items: order.items.map((item) => ({
         id: item.id,
         productName: item.productName,
@@ -768,6 +852,7 @@ export class ShopCheckoutService {
       timeline: order.events.map(toTimelineEvent),
       failureReason: order.failureReason,
       cancelReason: order.cancelReason,
+      returnReason: order.returnReason,
       paidAt: order.paidAt?.toISOString() ?? null,
       updatedAt: order.updatedAt.toISOString(),
     };
@@ -893,6 +978,141 @@ export class ShopCheckoutService {
     if (!existing.razorpayPaymentId) {
       return { ...detail, failureReason: refundMessage };
     }
+    return { ...detail, failureReason: detail.failureReason || refundMessage };
+  }
+
+  /**
+   * Shopper returns a delivered order within the shop/product return window.
+   * Restores stock and refunds a captured payment (same as cancel).
+   */
+  async returnCustomerOrder(
+    websiteId: string,
+    customerId: string,
+    orderId: string,
+    input: ShopReturnOrderInput,
+  ): Promise<ShopOrderDetailView> {
+    await this.meGuard(websiteId, customerId);
+    const reason = input.reason.trim().slice(0, 500);
+    if (reason.length < 3) {
+      throw new AppError(400, "Please share a short reason for returning.", "RETURN_REASON_REQUIRED");
+    }
+
+    const [existing, website] = await Promise.all([
+      prisma.shopOrder.findFirst({
+        where: { id: orderId, websiteId, customerId },
+        include: {
+          items: true,
+          events: { select: { status: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+        },
+      }),
+      prisma.website.findUnique({
+        where: { id: websiteId },
+        select: { shopReturnDays: true, shopEnabled: true },
+      }),
+    ]);
+    if (!existing) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    if (!website?.shopEnabled) {
+      throw new AppError(403, "Shop is not available on this website.", "SHOP_DISABLED");
+    }
+
+    const productIds = [...new Set(existing.items.map((item) => item.productId).filter(Boolean))] as string[];
+    const products =
+      productIds.length > 0
+        ? await prisma.product.findMany({
+            where: { id: { in: productIds }, websiteId },
+            select: { id: true, returnsEnabled: true, returnDays: true },
+          })
+        : [];
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const lineProducts = existing.items.map((item) => (item.productId ? productById.get(item.productId) ?? null : null));
+    const deliveredAt =
+      deliveredAtFromEvents(existing.events) ??
+      (existing.status === ShopOrderStatus.DELIVERED ? existing.updatedAt : null);
+    if (
+      !canCustomerReturnOrder({
+        status: existing.status,
+        deliveredAt,
+        shopReturnDays: website.shopReturnDays,
+        lineProducts,
+      })
+    ) {
+      throw new AppError(400, "This order can no longer be returned.", "ORDER_NOT_RETURNABLE");
+    }
+    if (
+      existing.refundStatus === ShopRefundStatus.PENDING ||
+      existing.refundStatus === ShopRefundStatus.PROCESSED
+    ) {
+      throw new AppError(400, "This order already has a refund in progress.", "REFUND_ALREADY_STARTED");
+    }
+
+    const note = `Customer returned: ${reason}`.slice(0, 300);
+    let stockChanged = false;
+
+    await prisma.$transaction(async (tx) => {
+      const locked = await tx.shopOrder.findFirst({
+        where: { id: existing.id, websiteId, customerId, status: ShopOrderStatus.DELIVERED },
+        select: { id: true, status: true },
+      });
+      if (!locked) {
+        throw new AppError(400, "This order can no longer be returned.", "ORDER_NOT_RETURNABLE");
+      }
+      stockChanged = await restoreStockOnce(tx, existing.id);
+      await tx.shopOrder.update({
+        where: { id: existing.id },
+        data: {
+          status: ShopOrderStatus.RETURNED,
+          returnReason: reason,
+          failureReason: note,
+        },
+      });
+      await recordOrderStatusEvent(tx, {
+        orderId: existing.id,
+        status: ShopOrderStatus.RETURNED,
+        actorType: "CUSTOMER",
+        note,
+      });
+    });
+
+    await releaseStockForOrder(existing.websiteId, existing.id, existing.items);
+
+    let refundMessage = "Return requested.";
+    if (existing.razorpayPaymentId) {
+      const refund = await this.refundCapturedPayment(
+        existing.websiteId,
+        existing.id,
+        existing.razorpayPaymentId,
+        reason,
+        "shop_customer_return",
+      );
+      const refundNote = refund.ok
+        ? refund.refundStatus === ShopRefundStatus.PROCESSED
+          ? "Order returned; payment refunded"
+          : "Order returned; refund in progress"
+        : "Order returned; refund failed — contact the store";
+      await prisma.shopOrder.update({
+        where: { id: existing.id },
+        data: { failureReason: `${refundNote}. ${reason}`.slice(0, 300) },
+      });
+      refundMessage = refund.ok
+        ? refund.refundStatus === ShopRefundStatus.PROCESSED
+          ? "Return accepted. Your payment has been refunded."
+          : "Return accepted. Your refund is in progress."
+        : "Return accepted. Contact the store — a refund may be needed.";
+      if (!refund.ok) {
+        logger.error(
+          { websiteId, orderId: existing.id, paymentId: existing.razorpayPaymentId },
+          "Customer return refund failed",
+        );
+      }
+    } else {
+      refundMessage = "Return accepted.";
+    }
+
+    if (stockChanged) purgeShopPages(websiteId);
+    void shopOrderEmailsService.notifyStatusChange(existing.id, ShopOrderStatus.RETURNED);
+    logger.info({ websiteId, orderId: existing.id, number: existing.number }, "Shop order returned by customer");
+
+    const detail = await this.getCustomerOrder(websiteId, customerId, existing.id);
     return { ...detail, failureReason: detail.failureReason || refundMessage };
   }
 

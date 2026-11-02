@@ -7,6 +7,7 @@ import { mediaUrl } from "../../media/services/media.service.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
+import { effectiveReturnDays } from "../utils/shop-order-return.js";
 import type {
   PublicShopProduct,
   PublicShopVariant,
@@ -83,15 +84,6 @@ function toProduct(product: ProductRow): ShopProductView {
   };
 }
 
-function effectiveReturnDays(
-  shopReturnDays: number | null | undefined,
-  product: { returnsEnabled: boolean; returnDays: number | null },
-): number | null {
-  if (!shopReturnDays || shopReturnDays < 1) return null;
-  if (!product.returnsEnabled) return null;
-  const days = product.returnDays ?? shopReturnDays;
-  return days > 0 ? days : null;
-}
 
 function optionValues(optionSets: ShopOptionSetView[], variantName: string): { name: string; value: string; list?: boolean }[] {
   for (const set of optionSets) {

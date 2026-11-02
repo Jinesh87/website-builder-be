@@ -91,3 +91,10 @@ export const shopCancelOrderSchema = Joi.object({
     "any.required": "Please share why you are cancelling.",
   }),
 });
+
+export const shopReturnOrderSchema = Joi.object({
+  reason: Joi.string().trim().min(3).max(500).required().messages({
+    "string.min": "Please share a short reason (at least 3 characters).",
+    "any.required": "Please share why you are returning this order.",
+  }),
+});
