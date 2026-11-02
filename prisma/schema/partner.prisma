@@ -1,0 +1,175 @@
+/// A partner application and approved partner profile.
+model Partner {
+  id                   String        @id @default(uuid()) @db.Uuid
+  applicationId        String        @unique @db.VarChar(32)
+
+  // Company details
+  companyName          String        @db.VarChar(160)
+  registrationNumber   String?       @db.VarChar(60)
+  website              String?       @db.VarChar(255)
+  businessType         String        @db.VarChar(50)
+  yearEstablished      String        @db.VarChar(10)
+  country              String        @db.VarChar(80)
+  state                String        @db.VarChar(80)
+  city                 String        @db.VarChar(80)
+  businessAddress      String        @db.VarChar(500)
+
+  // Contact details
+  contactName          String        @db.VarChar(120)
+  designation          String        @db.VarChar(100)
+  email                String        @unique @db.VarChar(255)
+  phone                String        @db.VarChar(32)
+  alternatePhone       String?       @db.VarChar(32)
+
+  // Partnership details
+  partnershipType      String        @db.VarChar(50)
+  targetCategories     Json
+  expectedReferrals    String        @db.VarChar(30)
+  marketingChannels    Json
+  reason               String        @db.VarChar(2000)
+  previousExperience   Boolean       @default(false)
+
+  // Status & Partner Program details
+  status               PartnerStatus @default(PENDING)
+  rejectionReason      String?       @db.VarChar(1000)
+  suspensionReason     String?       @db.VarChar(1000)
+
+  // Referral code & commission settings (generated upon approval)
+  referralCode         String?       @unique @db.VarChar(50)
+  commissionRate       Decimal       @default(15.00) @db.Decimal(5, 2)
+  isCommissionActive   Boolean       @default(true)
+
+  // Linked user account for logging into the partner dashboard
+  userId               String?       @unique @db.Uuid
+  user                 User?         @relation("PartnerUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  approvedAt           DateTime?     @db.Timestamptz(6)
+  approvedBy           String?       @db.VarChar(120)
+  rejectedAt           DateTime?     @db.Timestamptz(6)
+  suspendedAt          DateTime?     @db.Timestamptz(6)
+
+  createdAt            DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(6)
+
+  referrals            PartnerReferral[]
+  commissions          PartnerCommission[]
+  activities           PartnerActivity[]
+
+  @@index([status, createdAt])
+  @@index([referralCode])
+  @@map("partners")
+}
+
+/// Audit log for partner events (approvals, rejections, suspensions, commission changes, notes)
+model PartnerActivity {
+  id          String              @id @default(uuid()) @db.Uuid
+  partnerId   String              @db.Uuid
+  kind        PartnerActivityKind
+  body        String              @db.VarChar(2000)
+  actorId     String?             @db.Uuid
+  actorName   String?             @db.VarChar(120)
+  createdAt   DateTime            @default(now()) @db.Timestamptz(6)
+
+  partner     Partner             @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, createdAt])
+  @@map("partner_activities")
+}
+
+/// A referred customer / registration attributed to a partner
+model PartnerReferral {
+  id              String                @id @default(uuid()) @db.Uuid
+  partnerId       String                @db.Uuid
+  referralCode    String                @db.VarChar(50)
+
+  // Referred user / client
+  userId          String?               @db.Uuid
+  clientId        String?               @db.Uuid
+  customerName    String                @db.VarChar(120)
+  customerEmail   String                @db.VarChar(255)
+  status          PartnerReferralStatus @default(REGISTERED)
+
+  registeredAt    DateTime              @default(now()) @db.Timestamptz(6)
+  convertedAt     DateTime?             @db.Timestamptz(6)
+  totalSpentPaise BigInt                @default(0)
+
+  partner         Partner               @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  user            User?                 @relation("PartnerReferralUser", fields: [userId], references: [id], onDelete: SetNull)
+  client          Client?               @relation("PartnerReferralClient", fields: [clientId], references: [id], onDelete: SetNull)
+  commissions     PartnerCommission[]
+
+  @@unique([partnerId, customerEmail])
+  @@index([partnerId, status])
+  @@index([referralCode])
+  @@index([clientId])
+  @@map("partner_referrals")
+}
+
+/// Earned commission on customer payments
+model PartnerCommission {
+  id                    String           @id @default(uuid()) @db.Uuid
+  partnerId             String           @db.Uuid
+  referralId            String           @db.Uuid
+  source                CommissionSource
+
+  // Order identifiers to prevent duplicate commissions
+  paymentOrderId        String?          @unique @db.Uuid
+  hostingOrderId        String?          @unique @db.Uuid
+  shopOrderId           String?          @unique @db.Uuid
+
+  orderAmountPaise      Int
+  commissionRate        Decimal          @db.Decimal(5, 2)
+  commissionAmountPaise Int
+  currency              String           @default("INR") @db.VarChar(3)
+
+  status                CommissionStatus @default(PENDING)
+  paidAt                DateTime?        @db.Timestamptz(6)
+  paymentReference      String?          @db.VarChar(120)
+  notes                 String?          @db.VarChar(500)
+
+  createdAt             DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime         @updatedAt @db.Timestamptz(6)
+
+  partner               Partner          @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  referral              PartnerReferral  @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, status])
+  @@index([createdAt])
+  @@map("partner_commissions")
+}
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum PartnerActivityKind {
+  APPLIED
+  STATUS_CHANGED
+  COMMISSION_RATE_UPDATED
+  COMMISSION_ELIGIBILITY_TOGGLED
+  REFERRAL_CODE_UPDATED
+  EMAIL_SENT
+  NOTE
+}
+
+enum PartnerReferralStatus {
+  REGISTERED
+  CONVERTED
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum CommissionSource {
+  WALLET_TOPUP
+  HOSTING
+  SHOP_ORDER
+}
+

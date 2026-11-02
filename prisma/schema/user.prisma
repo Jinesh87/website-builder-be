@@ -39,6 +39,8 @@ model User {
   shopOrderStatusEvents ShopOrderStatusEvent[]
   enquiryActivity      ContactInquiryActivity[] @relation("ContactInquiryActivityActor")
   questionnaireActivity QuestionnaireActivity[] @relation("QuestionnaireActivityActor")
+  partner              Partner?                 @relation("PartnerUser")
+  partnerReferrals     PartnerReferral[]        @relation("PartnerReferralUser")
 
   @@index([clientId])
   @@index([role, status])

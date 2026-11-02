@@ -12,7 +12,7 @@ function resolveClientIdFromToken(req: Request): string | null {
   if (!token) return null;
   try {
     const payload = verifyAccessToken(token);
-    if (payload.role === UserRole.CLIENT && payload.clientId) {
+    if ((payload.role === UserRole.CLIENT || payload.role === UserRole.PARTNER) && payload.clientId) {
       return payload.clientId;
     }
   } catch {

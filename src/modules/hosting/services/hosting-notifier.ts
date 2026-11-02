@@ -158,7 +158,7 @@ async function recipients(clientId: string) {
     where: {
       status: UserStatus.ACTIVE,
       email: { not: null },
-      OR: [{ role: UserRole.CLIENT, clientId }, { role: UserRole.SUPER_ADMIN }],
+      OR: [{ role: { in: [UserRole.CLIENT, UserRole.PARTNER] }, clientId }, { role: UserRole.SUPER_ADMIN }],
     },
     select: { email: true, fullName: true, role: true },
   });

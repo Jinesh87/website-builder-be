@@ -62,8 +62,8 @@ function toActivityView(row: ActivityRow): EnquiryActivityView {
   };
 }
 
-function salesInbox(): string {
-  return process.env.CONTACT_SALES_EMAIL?.trim() || DEFAULT_SALES_EMAIL;
+async function salesInbox(): Promise<string> {
+  return emailService.getContactSalesEmail();
 }
 
 export class EnquiryService {
@@ -166,9 +166,10 @@ export class EnquiryService {
   async reply(id: string, input: EnquiryReplyInput, actorId: string): Promise<EnquiryView> {
     const existing = await this.findOrThrow(id);
     const message = input.message.trim();
+    const replyTo = await salesInbox();
     await emailService.sendEnquiryReply({
       to: existing.email,
-      replyTo: salesInbox(),
+      replyTo,
       subject: input.subject.trim(),
       message,
       customerName: existing.name,
@@ -227,7 +228,7 @@ export class EnquiryService {
   }
 
   private async notifySales(row: EnquiryRow, actorId: string | null): Promise<EmailOutcome> {
-    const to = salesInbox();
+    const to = await salesInbox();
     let outcome: EmailOutcome;
     try {
       await emailService.sendSalesInquiry({

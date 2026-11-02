@@ -1,13 +1,16 @@
 /// Singleton (id = "default"), managed by the Super Admin.
 model MessagingConfig {
-  id                 String   @id @default("default") @db.VarChar(50)
+  id                      String   @id @default("default") @db.VarChar(50)
   /// Resend API key, AES-256-GCM encrypted with APP_ENCRYPTION_KEY.
-  resendApiKeyCipher String   @db.Text
-  fromEmail          String   @db.VarChar(255)
-  fromName           String   @db.VarChar(255)
-  enabled            Boolean  @default(true)
-  createdAt          DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+  resendApiKeyCipher      String   @db.Text
+  fromEmail               String   @db.VarChar(255)
+  fromName                String   @db.VarChar(255)
+  enabled                 Boolean  @default(true)
+  contactSalesEmail       String?  @db.VarChar(255)
+  questionnaireSalesEmail String?  @db.VarChar(255)
+  partnerSalesEmail       String?  @db.VarChar(255)
+  createdAt               DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("messaging_config")
 }
