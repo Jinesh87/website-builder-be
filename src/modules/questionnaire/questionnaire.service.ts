@@ -114,13 +114,19 @@ function toMediaRef(file: MediaRow): QuestionnaireMediaRef {
   return { ...file, url: mediaUrl(file.id) };
 }
 
-const platformTemplateWhere = (key: string): Prisma.WebsiteTemplateWhereInput => ({
-  key,
-  clientId: null,
-  isActive: true,
-  archivedAt: null,
-  ...VALID_PLATFORM_KEY_WHERE,
-});
+const platformTemplateWhere = (key: string): Prisma.WebsiteTemplateWhereInput => {
+  const isNum = /^[0-9]+$/.test(key);
+  return {
+    OR: [
+      { key },
+      ...(isNum ? [{ number: parseInt(key, 10) }] : []),
+    ],
+    clientId: null,
+    isActive: true,
+    archivedAt: null,
+    ...VALID_PLATFORM_KEY_WHERE,
+  };
+};
 
 /** Rejects ids the submitter can't use, so admins never see someone else's files. */
 async function checkAssets(answers: QuestionnaireAnswers, clientId: string | null): Promise<void> {
