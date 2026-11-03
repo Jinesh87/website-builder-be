@@ -63,6 +63,8 @@ export async function seedDesignLibrary(): Promise<void> {
       update: { name: seed.name, isSystem: true, sortOrder: index },
       select: { id: true },
     });
+    // Keep the denormalized `category` label on every template in sync when a system name changes.
+    await prisma.websiteTemplate.updateMany({ where: { categoryId: category.id }, data: { category: seed.name } });
     categoryIds.set(seed.name, category.id);
   }
 

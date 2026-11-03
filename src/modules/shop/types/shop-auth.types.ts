@@ -111,10 +111,39 @@ export type ShopUpdateCartItemInput = {
   quantity: number;
 };
 
+export type ShopCustomerAddressView = {
+  id: string;
+  label: string | null;
+  fullName: string;
+  phone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  isDefault: boolean;
+  updatedAt: string;
+};
+
+export type ShopCustomerAddressInput = {
+  label?: string;
+  fullName: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country?: string;
+  isDefault?: boolean;
+};
+
 export type ShopCustomerAccountView = {
   customer: ShopCustomerView;
   orders: ShopOrderSummary[];
   cartItems: ShopCartItemSummary[];
+  addresses: ShopCustomerAddressView[];
   /** Inclusive status ceiling for cancels on this shop. Null = cancels disabled. */
   cancelUntilStatus: ShopCancelUntilStatusLabel | null;
 };

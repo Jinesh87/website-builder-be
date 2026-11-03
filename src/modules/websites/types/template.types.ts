@@ -29,6 +29,7 @@ export const SYSTEM_TEMPLATE_CATEGORIES = [
   { slug: "portfolio", name: "Portfolio" },
   { slug: "landing-page", name: "Landing page" },
   { slug: "education", name: "Education" },
+  { slug: "e-commerce", name: "E-commerce" },
 ] as const;
 
 /** Keys of templates a Super Admin published from the editor; the design-library seeder never touches them. */

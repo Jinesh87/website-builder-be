@@ -96,6 +96,51 @@ export class ShopAuthController {
     }
   };
 
+  listAddresses = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        addresses: await shopAuthService.listAddresses(req.params.websiteId, req.shopCustomer!.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createAddress = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(201).json({
+        addresses: await shopAuthService.createAddress(req.params.websiteId, req.shopCustomer!.id, req.body),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateAddress = async (req: Request<WebsiteParams & { addressId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        addresses: await shopAuthService.updateAddress(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          req.params.addressId,
+          req.body,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteAddress = async (req: Request<WebsiteParams & { addressId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        addresses: await shopAuthService.deleteAddress(req.params.websiteId, req.shopCustomer!.id, req.params.addressId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   changePassword = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       await shopAuthService.changePassword(req.params.websiteId, req.shopCustomer!.id, req.body.currentPassword, req.body.newPassword);

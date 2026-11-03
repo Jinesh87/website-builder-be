@@ -84,6 +84,7 @@ export const shopProductSchema = Joi.object({
   categoryId: Joi.string().guid().allow(null, "").optional().messages({
     "string.guid": "Choose a valid category",
   }),
+  listed: Joi.boolean().optional(),
   returnsEnabled: Joi.boolean().optional(),
   returnDays: Joi.number().integer().min(1).max(365).allow(null).optional().messages({
     "number.min": "Return window must be at least 1 day",
