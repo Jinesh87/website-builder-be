@@ -11,6 +11,7 @@ import { prisma } from "../../../config/prisma.js";
 import {
   CommissionStatus,
   PartnerActivityKind,
+  PartnerCommissionPolicy,
   PartnerReferralStatus,
   PartnerStatus,
   Prisma,
@@ -28,7 +29,9 @@ import type {
   PartnerAuditLogsResponse,
   PartnerDetail,
   PartnerListResponse,
+  PartnerProgramConfigView,
   PartnerSummary,
+  UpdatePartnerProgramConfigInput,
 } from "../types/partner.types.js";
 import {
   formatPartnerApplicationId,
@@ -109,6 +112,7 @@ function toPartnerSummary(
     referralCode: partner.referralCode,
     commissionRate: Number(partner.commissionRate),
     isCommissionActive: partner.isCommissionActive,
+    commissionPolicy: partner.commissionPolicy,
     totalReferrals,
     convertedReferrals,
     totalCommissionPaise,
@@ -575,6 +579,7 @@ export class PartnerService {
     id: string,
     params: {
       commissionRate: number;
+      commissionPolicy?: PartnerCommissionPolicy;
       customReferralCode?: string;
       temporaryPassword?: string;
       actorId?: string;
@@ -686,6 +691,7 @@ export class PartnerService {
           referralCode,
           commissionRate: new Prisma.Decimal(params.commissionRate),
           isCommissionActive: true,
+          commissionPolicy: params.commissionPolicy ?? PartnerCommissionPolicy.GLOBAL_DEFAULT,
           userId,
           approvedAt: new Date(),
           approvedBy: params.actorName || "Admin",
@@ -698,7 +704,7 @@ export class PartnerService {
         data: {
           partnerId: id,
           kind: PartnerActivityKind.STATUS_CHANGED,
-          body: `Partner approved with referral code ${referralCode} and ${params.commissionRate}% commission rate.${createdNewUser ? ` Created partner login account for ${partner.email}.` : ""}`,
+          body: `Partner approved with referral code ${referralCode}, ${params.commissionRate}% commission rate, and policy: ${params.commissionPolicy ?? "GLOBAL_DEFAULT"}.${createdNewUser ? ` Created partner login account for ${partner.email}.` : ""}`,
           actorId: params.actorId || null,
           actorName: params.actorName || null,
         },
@@ -882,6 +888,7 @@ export class PartnerService {
     params: {
       commissionRate?: number;
       isCommissionActive?: boolean;
+      commissionPolicy?: PartnerCommissionPolicy;
       actorId?: string;
       actorName?: string;
     },
@@ -895,6 +902,7 @@ export class PartnerService {
     const currentRate = Number(partner.commissionRate);
     let rateChanged = false;
     let eligibilityChanged = false;
+    let policyChanged = false;
 
     if (params.commissionRate !== undefined && params.commissionRate !== currentRate) {
       data.commissionRate = new Prisma.Decimal(params.commissionRate);
@@ -906,10 +914,18 @@ export class PartnerService {
       eligibilityChanged = true;
     }
 
+    if (params.commissionPolicy !== undefined && params.commissionPolicy !== partner.commissionPolicy) {
+      data.commissionPolicy = params.commissionPolicy;
+      policyChanged = true;
+    }
+
     let activityKind: PartnerActivityKind = PartnerActivityKind.COMMISSION_RATE_UPDATED;
     let activityBody = "";
 
-    if (rateChanged && eligibilityChanged) {
+    if (policyChanged) {
+      activityKind = PartnerActivityKind.COMMISSION_POLICY_UPDATED;
+      activityBody = `Commission policy updated from ${partner.commissionPolicy} to ${params.commissionPolicy}${rateChanged ? ` (${currentRate}% → ${params.commissionRate}%)` : ""}`;
+    } else if (rateChanged && eligibilityChanged) {
       activityBody = `${currentRate}% → ${params.commissionRate}% (${params.isCommissionActive ? "eligibility re-enabled" : "eligibility disabled"})`;
     } else if (rateChanged) {
       activityBody = `${currentRate}% → ${params.commissionRate}%`;
@@ -1048,6 +1064,17 @@ export class PartnerService {
             registeredAt: true,
             convertedAt: true,
             totalSpentPaise: true,
+            commissions: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                status: true,
+                orderAmountPaise: true,
+                commissionAmountPaise: true,
+                source: true,
+              },
+            },
           },
         },
         commissions: {
@@ -1132,20 +1159,32 @@ export class PartnerService {
 
     const shareUrl = `${env.FRONTEND_URL}/?ref=${encodeURIComponent(partner.referralCode || "")}`;
 
+    let effectiveCommissionPolicy = partner.commissionPolicy;
+    if (effectiveCommissionPolicy === PartnerCommissionPolicy.GLOBAL_DEFAULT) {
+      const globalCfg = await prisma.partnerProgramConfig.findUnique({ where: { id: "default" } });
+      effectiveCommissionPolicy = globalCfg?.defaultCommissionPolicy ?? PartnerCommissionPolicy.FIRST_PAYMENT;
+    }
+
     return {
       partner: {
         id: partner.id,
         applicationId: partner.applicationId,
         companyName: partner.companyName,
         contactName: partner.contactName,
+        designation: partner.designation,
         email: partner.email,
         phone: partner.phone,
+        alternatePhone: partner.alternatePhone,
+        partnershipType: partner.partnershipType,
         status: partner.status,
         suspensionReason: partner.suspensionReason,
         referralCode: partner.referralCode,
         commissionRate: Number(partner.commissionRate),
         isCommissionActive: partner.isCommissionActive,
+        commissionPolicy: partner.commissionPolicy,
+        effectiveCommissionPolicy,
         shareUrl,
+        createdAt: partner.createdAt.toISOString(),
       },
       stats: {
         totalReferrals,
@@ -1156,16 +1195,30 @@ export class PartnerService {
         approvedCommissionPaise,
         paidCommissionPaise,
       },
-      referrals: partner.referrals.map((r) => ({
-        id: r.id,
-        customerName: r.customerName,
-        // Mask customer email for privacy, e.g. j***@domain.com
-        customerEmail: r.customerEmail.replace(/(^.{2})(.*)(@.*$)/, "$1***$3"),
-        status: r.status,
-        totalSpentPaise: Number(r.totalSpentPaise),
-        registeredAt: r.registeredAt.toISOString(),
-        convertedAt: r.convertedAt?.toISOString() ?? null,
-      })),
+      referrals: partner.referrals.map((r) => {
+        const latestComm = r.commissions?.[0];
+        let commissionStatus: "PENDING" | "APPROVED" | "PAID" | "NO_PAYMENT" = "NO_PAYMENT";
+        if (latestComm) {
+          if (latestComm.status === CommissionStatus.PENDING) commissionStatus = "PENDING";
+          else if (latestComm.status === CommissionStatus.APPROVED) commissionStatus = "APPROVED";
+          else if (latestComm.status === CommissionStatus.PAID) commissionStatus = "PAID";
+        }
+        return {
+          id: r.id,
+          customerName: r.customerName,
+          // Mask customer email for privacy, e.g. j***@domain.com
+          customerEmail: r.customerEmail.replace(/(^.{2})(.*)(@.*$)/, "$1***$3"),
+          status: r.status,
+          planName: r.status === PartnerReferralStatus.CONVERTED || Number(r.totalSpentPaise) > 0 ? "Business" : "—",
+          source: "Referral link",
+          totalSpentPaise: Number(r.totalSpentPaise),
+          paymentAmountPaise: latestComm ? latestComm.orderAmountPaise : (Number(r.totalSpentPaise) > 0 ? Number(r.totalSpentPaise) : null),
+          commissionAmountPaise: latestComm ? latestComm.commissionAmountPaise : null,
+          commissionStatus,
+          registeredAt: r.registeredAt.toISOString(),
+          convertedAt: r.convertedAt?.toISOString() ?? null,
+        };
+      }),
       commissions: partner.commissions.map((c) => ({
         id: c.id,
         source: c.source,
@@ -1177,6 +1230,61 @@ export class PartnerService {
         paidAt: c.paidAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
       })),
+    };
+  }
+
+  /**
+   * Super Admin: Get global partner program configuration (default commission rate and policy)
+   */
+  async getProgramConfig(): Promise<PartnerProgramConfigView> {
+    let config = await prisma.partnerProgramConfig.findUnique({
+      where: { id: "default" },
+    });
+    if (!config) {
+      config = await prisma.partnerProgramConfig.create({
+        data: {
+          id: "default",
+          defaultCommissionRate: new Prisma.Decimal(15.0),
+          defaultCommissionPolicy: PartnerCommissionPolicy.FIRST_PAYMENT,
+        },
+      });
+    }
+    return {
+      defaultCommissionRate: Number(config.defaultCommissionRate),
+      defaultCommissionPolicy: config.defaultCommissionPolicy,
+      updatedAt: config.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Super Admin: Update global partner program configuration
+   */
+  async updateProgramConfig(
+    input: UpdatePartnerProgramConfigInput,
+  ): Promise<PartnerProgramConfigView> {
+    const data: Prisma.PartnerProgramConfigUpdateInput = {};
+    if (input.defaultCommissionRate !== undefined) {
+      data.defaultCommissionRate = new Prisma.Decimal(input.defaultCommissionRate);
+    }
+    if (input.defaultCommissionPolicy !== undefined) {
+      data.defaultCommissionPolicy = input.defaultCommissionPolicy;
+    }
+
+    const config = await prisma.partnerProgramConfig.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        defaultCommissionRate: new Prisma.Decimal(input.defaultCommissionRate ?? 15.0),
+        defaultCommissionPolicy:
+          input.defaultCommissionPolicy ?? PartnerCommissionPolicy.FIRST_PAYMENT,
+      },
+      update: data,
+    });
+
+    return {
+      defaultCommissionRate: Number(config.defaultCommissionRate),
+      defaultCommissionPolicy: config.defaultCommissionPolicy,
+      updatedAt: config.updatedAt.toISOString(),
     };
   }
 }

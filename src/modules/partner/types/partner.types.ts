@@ -2,9 +2,21 @@ import type {
   CommissionSource,
   CommissionStatus,
   PartnerActivityKind,
+  PartnerCommissionPolicy,
   PartnerReferralStatus,
   PartnerStatus,
 } from "../../../generated/prisma/client.js";
+
+export type PartnerProgramConfigView = {
+  defaultCommissionRate: number;
+  defaultCommissionPolicy: PartnerCommissionPolicy;
+  updatedAt: string | null;
+};
+
+export type UpdatePartnerProgramConfigInput = {
+  defaultCommissionRate?: number;
+  defaultCommissionPolicy?: PartnerCommissionPolicy;
+};
 
 export type PartnerApplicationInput = {
   companyName: string;
@@ -48,6 +60,8 @@ export type PartnerSummary = {
   referralCode: string | null;
   commissionRate: number;
   isCommissionActive: boolean;
+  commissionPolicy: PartnerCommissionPolicy;
+  effectiveCommissionPolicy?: PartnerCommissionPolicy;
   totalReferrals: number;
   convertedReferrals: number;
   totalCommissionPaise: number;

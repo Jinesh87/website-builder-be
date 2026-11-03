@@ -54,6 +54,7 @@ export const adminPartnerController = {
     const actorName = getActorName(req);
     const result = await partnerService.approve(id, {
       commissionRate: Number(req.body.commissionRate) || 15.0,
+      commissionPolicy: req.body.commissionPolicy,
       customReferralCode: req.body.customReferralCode,
       temporaryPassword: req.body.temporaryPassword,
       actorId,
@@ -101,10 +102,25 @@ export const adminPartnerController = {
     const result = await partnerService.updateCommission(id, {
       commissionRate: req.body.commissionRate !== undefined ? Number(req.body.commissionRate) : undefined,
       isCommissionActive: req.body.isCommissionActive,
+      commissionPolicy: req.body.commissionPolicy,
       actorId,
       actorName,
     });
     res.json(result);
+  },
+
+  async getProgramConfig(_req: Request, res: Response) {
+    const config = await partnerService.getProgramConfig();
+    res.json(config);
+  },
+
+  async updateProgramConfig(req: Request, res: Response) {
+    const config = await partnerService.updateProgramConfig({
+      defaultCommissionRate:
+        req.body.defaultCommissionRate !== undefined ? Number(req.body.defaultCommissionRate) : undefined,
+      defaultCommissionPolicy: req.body.defaultCommissionPolicy,
+    });
+    res.json(config);
   },
 
   async listCommissions(req: Request, res: Response) {

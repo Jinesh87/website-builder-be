@@ -8,6 +8,7 @@ import {
   adminCommissionStatusSchema,
   adminPartnerApproveSchema,
   adminPartnerCommissionUpdateSchema,
+  adminPartnerProgramConfigSchema,
   adminPartnerQuerySchema,
   adminPartnerRejectSchema,
   adminPartnerSuspendSchema,
@@ -17,6 +18,14 @@ const adminPartnerRouter = Router();
 
 // All admin partner routes require SUPER_ADMIN role
 adminPartnerRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
+
+// Global program settings (must precede /:id)
+adminPartnerRouter.get("/config/program", adminPartnerController.getProgramConfig);
+adminPartnerRouter.patch(
+  "/config/program",
+  validate(adminPartnerProgramConfigSchema),
+  adminPartnerController.updateProgramConfig,
+);
 
 // List partners with filters & pagination
 adminPartnerRouter.get(

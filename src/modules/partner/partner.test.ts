@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateApplicationId, generateReferralCode } from "./utils/partner-codes.js";
-import { partnerApplicationSchema } from "./validators/partner.validator.js";
+import {
+  adminPartnerApproveSchema,
+  adminPartnerCommissionUpdateSchema,
+  adminPartnerProgramConfigSchema,
+  partnerApplicationSchema,
+} from "./validators/partner.validator.js";
 import { salesPartnerApplicationNotificationEmail } from "../email/templates/email.templates.js";
 
 test("generateApplicationId creates formatted reference ID", () => {
@@ -57,6 +62,35 @@ test("partnerApplicationSchema rejects invalid or missing fields", () => {
   assert.notEqual(error, undefined);
 });
 
+test("adminPartnerProgramConfigSchema validates global commission policy", () => {
+  const { error: err1, value: val1 } = adminPartnerProgramConfigSchema.validate({
+    defaultCommissionPolicy: "EVERY_RENEWAL",
+    defaultCommissionRate: 20,
+  });
+  assert.equal(err1, undefined);
+  assert.equal(val1.defaultCommissionPolicy, "EVERY_RENEWAL");
+  assert.equal(val1.defaultCommissionRate, 20);
+
+  const { error: err2 } = adminPartnerProgramConfigSchema.validate({
+    defaultCommissionPolicy: "INVALID_POLICY",
+  });
+  assert.notEqual(err2, undefined);
+});
+
+test("adminPartnerCommissionUpdateSchema validates partner policy overrides", () => {
+  const { error: err1, value: val1 } = adminPartnerCommissionUpdateSchema.validate({
+    commissionPolicy: "EVERY_RENEWAL",
+  });
+  assert.equal(err1, undefined);
+  assert.equal(val1.commissionPolicy, "EVERY_RENEWAL");
+
+  const { error: err2, value: val2 } = adminPartnerApproveSchema.validate({
+    commissionRate: 15,
+    commissionPolicy: "GLOBAL_DEFAULT",
+  });
+  assert.equal(err2, undefined);
+  assert.equal(val2.commissionPolicy, "GLOBAL_DEFAULT");
+});
 test("salesPartnerApplicationNotificationEmail renders email correctly with partner details", () => {
   const rendered = salesPartnerApplicationNotificationEmail({
     brand: "Bytezora",

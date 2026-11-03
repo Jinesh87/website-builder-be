@@ -36,9 +36,10 @@ model Partner {
   suspensionReason     String?       @db.VarChar(1000)
 
   // Referral code & commission settings (generated upon approval)
-  referralCode         String?       @unique @db.VarChar(50)
-  commissionRate       Decimal       @default(15.00) @db.Decimal(5, 2)
-  isCommissionActive   Boolean       @default(true)
+  referralCode         String?                 @unique @db.VarChar(50)
+  commissionRate       Decimal                 @default(15.00) @db.Decimal(5, 2)
+  isCommissionActive   Boolean                 @default(true)
+  commissionPolicy     PartnerCommissionPolicy @default(GLOBAL_DEFAULT)
 
   // Linked user account for logging into the partner dashboard
   userId               String?       @unique @db.Uuid
@@ -151,9 +152,26 @@ enum PartnerActivityKind {
   STATUS_CHANGED
   COMMISSION_RATE_UPDATED
   COMMISSION_ELIGIBILITY_TOGGLED
+  COMMISSION_POLICY_UPDATED
   REFERRAL_CODE_UPDATED
   EMAIL_SENT
   NOTE
+}
+
+enum PartnerCommissionPolicy {
+  GLOBAL_DEFAULT
+  FIRST_PAYMENT
+  EVERY_RENEWAL
+}
+
+/// Singleton (id = "default"), managed by the Super Admin.
+model PartnerProgramConfig {
+  id                      String                  @id @default("default") @db.VarChar(50)
+  defaultCommissionRate   Decimal                 @default(15.00) @db.Decimal(5, 2)
+  defaultCommissionPolicy PartnerCommissionPolicy @default(FIRST_PAYMENT)
+  updatedAt               DateTime                @updatedAt @db.Timestamptz(6)
+
+  @@map("partner_program_config")
 }
 
 enum PartnerReferralStatus {
