@@ -668,13 +668,14 @@ export function partnerApprovalEmail(params: {
   const dashboardLink = escapeHtml(params.dashboardLink);
   const loginEmail = escapeHtml(params.loginEmail);
   const loginUrl = escapeHtml(params.loginUrl || params.dashboardLink);
+  const inviteLink = params.inviteLink ? escapeHtml(params.inviteLink) : null;
   const tempPassword = params.temporaryPassword ? escapeHtml(params.temporaryPassword) : null;
 
   const html = layout(
     params.brand,
     `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">Congratulations! Your Partner Application is Approved</h1>
      <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${contactName},</p>
-     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">We are excited to welcome you to the <strong>${brand} Partner Program</strong>! Your application has been approved.</p>
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">We are excited to welcome you to the <strong>${brand} Partner Program</strong>! Your application has been approved and your partner account is ready.</p>
      
      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:20px 0;">
        <tr>
@@ -689,24 +690,31 @@ export function partnerApprovalEmail(params: {
        </tr>
      </table>
 
+     ${
+       inviteLink
+         ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px;margin:24px 0;text-align:center;">
+              <p style="margin:0 0 8px;font-size:15px;color:#1e40af;font-weight:bold;">Action Required: Set Your Partner Password</p>
+              <p style="margin:0 0 16px;font-size:13px;color:#3b82f6;line-height:1.5;">Click the button below to set your account password and access your dedicated Partner Dashboard immediately:</p>
+              <a href="${inviteLink}" style="display:inline-block;padding:12px 28px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">Set Password & Access Dashboard</a>
+              <p style="margin:12px 0 0;font-size:11px;color:#64748b;">This secure activation link is valid for 72 hours.</p>
+            </div>`
+         : `<div style="margin:24px 0;">
+              <a href="${loginUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;">Log In to Partner Dashboard</a>
+            </div>`
+     }
+
      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:20px 0;">
-       <p style="margin:0 0 8px;font-size:13px;font-weight:bold;color:#1e293b;">Your Dashboard Login Access</p>
-       <p style="margin:0 0 6px;font-size:13px;color:#475569;">Login URL: <a href="${loginUrl}" style="color:#2563eb;text-decoration:none;font-weight:600;">${loginUrl}</a></p>
-       <p style="margin:0 0 6px;font-size:13px;color:#475569;">Email / Username: <strong>${loginEmail}</strong></p>
+       <p style="margin:0 0 8px;font-size:13px;font-weight:bold;color:#1e293b;">Partner Portal Credentials & Access</p>
+       <p style="margin:0 0 6px;font-size:13px;color:#475569;">Partner Login Portal: <a href="${loginUrl}" style="color:#2563eb;text-decoration:none;font-weight:600;">${loginUrl}</a></p>
+       <p style="margin:0 0 6px;font-size:13px;color:#475569;">Login Email: <strong>${loginEmail}</strong></p>
        ${
-         tempPassword
-           ? `<p style="margin:0 0 6px;font-size:13px;color:#475569;">Temporary Password: <strong style="font-family:monospace;background:#e2e8f0;padding:2px 8px;border-radius:4px;color:#0f172a;">${tempPassword}</strong></p>
-              <p style="margin:6px 0 0;font-size:11px;color:#64748b;">(You can change your password anytime under Account Settings after logging in)</p>`
-           : `<p style="margin:0 0 6px;font-size:13px;color:#475569;">Password: <em>Use your existing account password</em></p>`
+         tempPassword && !inviteLink
+           ? `<p style="margin:0 0 6px;font-size:13px;color:#475569;">Temporary Password: <strong style="font-family:monospace;background:#e2e8f0;padding:2px 8px;border-radius:4px;color:#0f172a;">${tempPassword}</strong></p>`
+           : ""
        }
      </div>
 
-     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Once logged in, navigate to the <strong>Partnership</strong> tab from your dashboard sidebar to access your live referral link, track customer signups, and view earned payouts.</p>
-     
-     <div style="margin:24px 0;">
-       <a href="${loginUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;">Log In to Dashboard</a>
-     </div>
-
+     <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Your Partner Dashboard lets you track your unique referral link, monitor clicks and customer registrations, and view your approved and paid payouts in real time.</p>
      <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Whenever a customer completes payment with your link or code, you'll automatically earn <strong>${commissionRate}% commission</strong>.</p>
      <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Partnerships Team</p>`,
   );
@@ -718,12 +726,19 @@ Congratulations! Your partner application with ${params.brand} has been approved
 Your Referral Code: ${params.referralCode}
 Commission Rate: ${params.commissionRate}%
 
-Dashboard Login Access:
-Login URL: ${params.loginUrl || params.dashboardLink}
+${
+  params.inviteLink
+    ? `Set Your Password & Access Dashboard:
+${params.inviteLink}
+(Valid for 72 hours)
+`
+    : ""
+}
+Partner Portal Login: ${params.loginUrl || params.dashboardLink}
 Email: ${params.loginEmail}
-${params.temporaryPassword ? `Temporary Password: ${params.temporaryPassword}` : "Password: (Your existing account password)"}
+${params.temporaryPassword && !params.inviteLink ? `Temporary Password: ${params.temporaryPassword}` : ""}
 
-Log in and open the 'Partnership' tab from your dashboard sidebar to track referrals and commissions.
+Log into your dedicated Partner Dashboard to view your referral link and track commissions.
 
 Warm regards,
 The ${params.brand} Partnerships Team`;

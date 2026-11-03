@@ -4,6 +4,7 @@ import { authenticate, authorize } from "../../common/middleware/authenticate.js
 import { validate } from "../../common/middleware/validate.js";
 import { adminPartnerController } from "./controllers/admin-partner.controller.js";
 import {
+  adminAuditLogQuerySchema,
   adminCommissionStatusSchema,
   adminPartnerApproveSchema,
   adminPartnerCommissionUpdateSchema,
@@ -22,6 +23,13 @@ adminPartnerRouter.get(
   "/",
   validate(adminPartnerQuerySchema, "query"),
   adminPartnerController.list,
+);
+
+// List partner activities / audit logs
+adminPartnerRouter.get(
+  "/audit-logs",
+  validate(adminAuditLogQuerySchema, "query"),
+  adminPartnerController.listAuditLogs,
 );
 
 // Get single partner full details

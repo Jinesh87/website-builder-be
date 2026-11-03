@@ -73,3 +73,9 @@ export const adminPartnerQuerySchema = Joi.object({
   pageSize: Joi.number().integer().min(1).max(100).default(25),
 });
 
+export const adminAuditLogQuerySchema = Joi.object({
+  search: Joi.string().trim().max(100).allow("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+  pageSize: Joi.number().integer().min(1).max(100).default(25),
+});
+

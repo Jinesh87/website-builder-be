@@ -15,6 +15,23 @@ export function formatPartnerApplicationId(partnerNumber: number): string {
   return `PART-${partnerNumber}`;
 }
 
+export function formatPartnerReferenceId(
+  partnerNumber?: number | null,
+  applicationId?: string | null,
+  year = 2026,
+): string {
+  if (applicationId?.startsWith("PA-")) {
+    return applicationId;
+  }
+  const num =
+    partnerNumber ??
+    (applicationId ? parseInt(applicationId.replace(/\D/g, ""), 10) : 0);
+  if (num > 0) {
+    return `PA-${year}-${String(num).padStart(5, "0")}`;
+  }
+  return applicationId || `PA-${year}-00001`;
+}
+
 export function generateApplicationId(sequenceNumber?: number): string {
   if (typeof sequenceNumber === "number" && sequenceNumber > 0) {
     return formatPartnerApplicationId(sequenceNumber);

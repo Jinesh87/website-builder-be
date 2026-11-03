@@ -1,5 +1,5 @@
 -- AlterEnum
-ALTER TYPE "ShopOrderStatus" ADD VALUE 'RETURNED';
+ALTER TYPE "ShopOrderStatus" ADD VALUE IF NOT EXISTS 'RETURNED';
 
 -- AlterTable
-ALTER TABLE "shop_orders" ADD COLUMN "returnReason" VARCHAR(500);
+ALTER TABLE "shop_orders" ADD COLUMN IF NOT EXISTS "returnReason" VARCHAR(500);

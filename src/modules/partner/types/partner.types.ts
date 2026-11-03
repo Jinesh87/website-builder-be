@@ -36,6 +36,9 @@ export type PartnerSummary = {
   partnerNumber: number;
   applicationId: string;
   companyName: string;
+  city: string;
+  state: string;
+  country: string;
   contactName: string;
   email: string;
   phone: string;
@@ -50,6 +53,7 @@ export type PartnerSummary = {
   totalCommissionPaise: number;
   approvedAt: string | null;
   createdAt: string;
+  lastCommissionChange?: string;
 };
 
 export type PartnerListResponse = {
@@ -64,7 +68,33 @@ export type PartnerListResponse = {
     APPROVED: number;
     REJECTED: number;
     SUSPENDED: number;
+    COMMISSIONS: number;
+    AUDIT_LOGS: number;
   };
+};
+
+export type PartnerAuditLogItem = {
+  id: string;
+  createdAt: string;
+  kind: PartnerActivityKind;
+  body: string;
+  actorName: string;
+  partnerId: string;
+  reference: string;
+  companyName: string;
+  actionBadge: {
+    label: string;
+    variant: "orange" | "slate" | "blue" | "emerald" | "rose";
+  };
+  details: string;
+};
+
+export type PartnerAuditLogsResponse = {
+  items: PartnerAuditLogItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 };
 
 export type PartnerDetail = PartnerSummary & {
@@ -88,6 +118,7 @@ export type PartnerDetail = PartnerSummary & {
   rejectedAt: string | null;
   suspendedAt: string | null;
   userId: string | null;
+  inviteLink?: string;
   activities: {
     id: string;
     kind: PartnerActivityKind;
