@@ -213,6 +213,7 @@ export class EmailService {
 
   async sendSalesInquiry(params: {
     to: string;
+    referenceId?: string;
     senderName: string;
     senderEmail: string;
     senderPhone?: string;
@@ -240,6 +241,7 @@ export class EmailService {
 
   async sendQuestionnaireAdminNotification(params: {
     to: string;
+    referenceId?: string;
     businessName: string;
     senderName: string;
     senderEmail: string;
@@ -259,6 +261,7 @@ export class EmailService {
 
   async sendQuestionnaireCustomerConfirmation(params: {
     to: string;
+    referenceId?: string;
     businessName: string;
     customerName: string;
   }) {

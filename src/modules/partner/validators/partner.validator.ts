@@ -43,6 +43,10 @@ export const partnerApplicationSchema = Joi.object({
 
 export const adminPartnerApproveSchema = Joi.object({
   commissionRate: Joi.number().min(1).max(100).precision(2).default(15.0),
+  commissionPolicy: Joi.string()
+    .valid("GLOBAL_DEFAULT", "FIRST_PAYMENT", "EVERY_RENEWAL")
+    .default("GLOBAL_DEFAULT")
+    .optional(),
   customReferralCode: Joi.string().trim().uppercase().min(3).max(30).optional(),
   temporaryPassword: Joi.string().trim().min(6).max(72).optional(),
 });
@@ -58,7 +62,17 @@ export const adminPartnerSuspendSchema = Joi.object({
 export const adminPartnerCommissionUpdateSchema = Joi.object({
   commissionRate: Joi.number().min(1).max(100).precision(2).optional(),
   isCommissionActive: Joi.boolean().optional(),
-}).or("commissionRate", "isCommissionActive");
+  commissionPolicy: Joi.string()
+    .valid("GLOBAL_DEFAULT", "FIRST_PAYMENT", "EVERY_RENEWAL")
+    .optional(),
+}).or("commissionRate", "isCommissionActive", "commissionPolicy");
+
+export const adminPartnerProgramConfigSchema = Joi.object({
+  defaultCommissionRate: Joi.number().min(1).max(100).precision(2).optional(),
+  defaultCommissionPolicy: Joi.string()
+    .valid("FIRST_PAYMENT", "EVERY_RENEWAL")
+    .optional(),
+}).or("defaultCommissionRate", "defaultCommissionPolicy");
 
 export const adminCommissionStatusSchema = Joi.object({
   status: Joi.string().valid("PENDING", "APPROVED", "PAID", "CANCELLED").required(),
@@ -69,6 +83,12 @@ export const adminCommissionStatusSchema = Joi.object({
 export const adminPartnerQuerySchema = Joi.object({
   search: Joi.string().trim().max(100).allow("").optional(),
   status: Joi.string().valid("ALL", "PENDING", "APPROVED", "REJECTED", "SUSPENDED").default("ALL"),
+  page: Joi.number().integer().min(1).default(1),
+  pageSize: Joi.number().integer().min(1).max(100).default(25),
+});
+
+export const adminAuditLogQuerySchema = Joi.object({
+  search: Joi.string().trim().max(100).allow("").optional(),
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(25),
 });

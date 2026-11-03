@@ -59,9 +59,15 @@ function emptyToNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+export function formatQuestionnaireReferenceId(num: number): string {
+  return `QST-${num}`;
+}
+
 function toView(row: QuestionnaireRow): QuestionnaireView {
   return {
     id: row.id,
+    questionnaireNumber: row.questionnaireNumber,
+    referenceId: formatQuestionnaireReferenceId(row.questionnaireNumber),
     businessName: row.businessName,
     name: row.name,
     phone: row.phone,
@@ -246,11 +252,23 @@ export class QuestionnaireService {
 
   async list(query: QuestionnaireListQuery): Promise<QuestionnaireListResult> {
     const search = query.search?.trim();
+    let questionnaireNumberSearch: number | null = null;
+    if (search) {
+      const match = search.match(/^QST-?(\d+)$/i) || search.match(/^(\d+)$/);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          questionnaireNumberSearch = parsed;
+        }
+      }
+    }
+
     const where: Prisma.QuestionnaireWhereInput = {
       status: query.status ?? { not: QuestionnaireStatus.SPAM },
       ...(search
         ? {
             OR: [
+              ...(questionnaireNumberSearch !== null ? [{ questionnaireNumber: questionnaireNumberSearch }] : []),
               { businessName: { contains: search, mode: "insensitive" } },
               { name: { contains: search, mode: "insensitive" } },
               { email: { contains: search, mode: "insensitive" } },
@@ -441,10 +459,12 @@ export class QuestionnaireService {
     let outcome: EmailOutcome;
 
     try {
+      const referenceId = formatQuestionnaireReferenceId(row.questionnaireNumber);
       const answersSummary = formatAnswersSummary(answers, await resolveAssets(answers, row.clientId));
       await Promise.all([
         emailService.sendQuestionnaireAdminNotification({
           to,
+          referenceId,
           businessName: row.businessName,
           senderName: row.name,
           senderEmail: row.email,
@@ -457,6 +477,7 @@ export class QuestionnaireService {
         }),
         emailService.sendQuestionnaireCustomerConfirmation({
           to: row.email,
+          referenceId,
           businessName: row.businessName,
           customerName: row.name,
         }),

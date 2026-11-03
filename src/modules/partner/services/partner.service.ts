@@ -11,6 +11,7 @@ import { prisma } from "../../../config/prisma.js";
 import {
   CommissionStatus,
   PartnerActivityKind,
+  PartnerCommissionPolicy,
   PartnerReferralStatus,
   PartnerStatus,
   Prisma,
@@ -18,23 +19,60 @@ import {
 } from "../../../generated/prisma/client.js";
 import { emailService } from "../../email/services/email.service.js";
 import { authService } from "../../auth/services/auth.service.js";
+import {
+  createPasswordResetToken,
+  INVITE_TOKEN_TTL_SECONDS,
+} from "../../auth/utils/password-reset.js";
 import type {
   PartnerApplicationInput,
+  PartnerAuditLogItem,
+  PartnerAuditLogsResponse,
   PartnerDetail,
   PartnerListResponse,
+  PartnerProgramConfigView,
   PartnerSummary,
+  UpdatePartnerProgramConfigInput,
 } from "../types/partner.types.js";
 import {
+  formatPartnerApplicationId,
+  formatPartnerReferenceId,
   generateApplicationId,
   generateReferralCode,
   randomAlphanumeric,
 } from "../utils/partner-codes.js";
+
+function formatAuditDate(date: Date | string): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
+async function getNextPartnerSequence(tx: Prisma.TransactionClient): Promise<number> {
+  try {
+    const res = await tx.$queryRaw<{ nextval: string | number | bigint }[]>`SELECT nextval('"partners_partnerNumber_seq"') AS nextval`;
+    if (res?.[0]?.nextval !== undefined) {
+      return Number(res[0].nextval);
+    }
+  } catch {
+    // Fallback for non-Postgres / unit test mocks
+  }
+  const latest = await tx.partner.findFirst({
+    orderBy: { partnerNumber: "desc" },
+    select: { partnerNumber: true },
+  });
+  return (latest?.partnerNumber ?? 0) + 1;
+}
 
 function toPartnerSummary(
   partner: Partner & {
     referrals?: { status: PartnerReferralStatus }[];
     commissions?: { commissionAmountPaise: number }[];
     _count?: { referrals: number; commissions: number };
+    activities?: { kind: PartnerActivityKind; body: string; createdAt: Date }[];
   },
 ): PartnerSummary {
   const totalReferrals =
@@ -47,10 +85,24 @@ function toPartnerSummary(
     partner.commissions?.reduce((sum, c) => sum + c.commissionAmountPaise, 0) ??
     0;
 
+  let lastCommissionChange: string | undefined;
+  if (partner.activities && partner.activities.length > 0) {
+    const act = partner.activities[0];
+    const dateStr = formatAuditDate(act.createdAt);
+    lastCommissionChange = `${dateStr} · ${act.body}`;
+  } else if (partner.approvedAt) {
+    const dateStr = formatAuditDate(partner.approvedAt);
+    lastCommissionChange = `${dateStr} · Set to ${Number(partner.commissionRate)}%`;
+  }
+
   return {
     id: partner.id,
+    partnerNumber: partner.partnerNumber,
     applicationId: partner.applicationId,
     companyName: partner.companyName,
+    city: partner.city,
+    state: partner.state,
+    country: partner.country,
     contactName: partner.contactName,
     email: partner.email,
     phone: partner.phone,
@@ -60,11 +112,13 @@ function toPartnerSummary(
     referralCode: partner.referralCode,
     commissionRate: Number(partner.commissionRate),
     isCommissionActive: partner.isCommissionActive,
+    commissionPolicy: partner.commissionPolicy,
     totalReferrals,
     convertedReferrals,
     totalCommissionPaise,
     approvedAt: partner.approvedAt?.toISOString() ?? null,
     createdAt: partner.createdAt.toISOString(),
+    lastCommissionChange,
   };
 }
 
@@ -106,11 +160,13 @@ export class PartnerService {
       );
     }
 
-    const applicationId = generateApplicationId();
-
     const partner = await prisma.$transaction(async (tx) => {
+      const partnerNumber = await getNextPartnerSequence(tx);
+      const applicationId = formatPartnerApplicationId(partnerNumber);
+
       const p = await tx.partner.create({
         data: {
+          partnerNumber,
           applicationId,
           companyName: input.companyName.trim(),
           registrationNumber: input.registrationNumber?.trim() || null,
@@ -149,6 +205,8 @@ export class PartnerService {
 
       return p;
     });
+
+    const applicationId = partner.applicationId;
 
     // Send confirmation email
     try {
@@ -232,7 +290,17 @@ export class PartnerService {
 
     if (query.search?.trim()) {
       const q = query.search.trim();
+      let partnerNumberSearch: number | null = null;
+      const match = q.match(/^PART-?(\d+)$/i) || q.match(/^(\d+)$/);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          partnerNumberSearch = parsed;
+        }
+      }
+
       where.OR = [
+        ...(partnerNumberSearch !== null ? [{ partnerNumber: partnerNumberSearch }] : []),
         { companyName: { contains: q, mode: "insensitive" } },
         { contactName: { contains: q, mode: "insensitive" } },
         { email: { contains: q, mode: "insensitive" } },
@@ -249,6 +317,8 @@ export class PartnerService {
       countApproved,
       countRejected,
       countSuspended,
+      countCommissions,
+      countAuditLogs,
     ] = await Promise.all([
       prisma.partner.findMany({
         where,
@@ -268,6 +338,19 @@ export class PartnerService {
           commissions: {
             select: { commissionAmountPaise: true },
           },
+          activities: {
+            where: {
+              kind: {
+                in: [
+                  PartnerActivityKind.COMMISSION_RATE_UPDATED,
+                  PartnerActivityKind.COMMISSION_ELIGIBILITY_TOGGLED,
+                  PartnerActivityKind.STATUS_CHANGED,
+                ],
+              },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       }),
       prisma.partner.count({ where }),
@@ -275,6 +358,12 @@ export class PartnerService {
       prisma.partner.count({ where: { status: PartnerStatus.APPROVED } }),
       prisma.partner.count({ where: { status: PartnerStatus.REJECTED } }),
       prisma.partner.count({ where: { status: PartnerStatus.SUSPENDED } }),
+      prisma.partner.count({
+        where: {
+          status: { in: [PartnerStatus.APPROVED, PartnerStatus.SUSPENDED] },
+        },
+      }),
+      prisma.partnerActivity.count(),
     ]);
 
     const totalAll =
@@ -292,7 +381,133 @@ export class PartnerService {
         APPROVED: countApproved,
         REJECTED: countRejected,
         SUSPENDED: countSuspended,
+        COMMISSIONS: countCommissions,
+        AUDIT_LOGS: countAuditLogs,
       },
+    };
+  }
+
+  /**
+   * Admin: List partner activities / audit logs across all partners.
+   */
+  async listAuditLogs(query: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+  }): Promise<PartnerAuditLogsResponse> {
+    const page = Math.max(1, query.page || 1);
+    const pageSize = Math.min(100, Math.max(1, query.pageSize || 25));
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.PartnerActivityWhereInput = {};
+    if (query.search?.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { body: { contains: q, mode: "insensitive" } },
+        { actorName: { contains: q, mode: "insensitive" } },
+        { partner: { companyName: { contains: q, mode: "insensitive" } } },
+        { partner: { applicationId: { contains: q, mode: "insensitive" } } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.partnerActivity.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: pageSize,
+        include: {
+          partner: {
+            select: {
+              id: true,
+              partnerNumber: true,
+              applicationId: true,
+              companyName: true,
+              referralCode: true,
+              commissionRate: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      prisma.partnerActivity.count({ where }),
+    ]);
+
+    return {
+      items: items.map((a) => {
+        const ref = formatPartnerReferenceId(a.partner.partnerNumber, a.partner.applicationId);
+        const comp = a.partner.companyName;
+
+        let actionLabel = "Activity recorded";
+        let actionVariant: "orange" | "slate" | "blue" | "emerald" | "rose" = "slate";
+        let details = `${ref} · ${comp}`;
+
+        if (a.kind === PartnerActivityKind.APPLIED) {
+          actionLabel = "Application received";
+          actionVariant = "orange";
+          details = `${ref} · ${comp}`;
+        } else if (
+          a.kind === PartnerActivityKind.COMMISSION_RATE_UPDATED ||
+          a.kind === PartnerActivityKind.COMMISSION_ELIGIBILITY_TOGGLED
+        ) {
+          if (a.body.includes("re-enabled") || a.body.includes("enabled") || a.body.includes("ACTIVE")) {
+            actionLabel = "Commission eligibility enabled";
+            actionVariant = "blue";
+          } else if (a.body.includes("disabled") || a.body.includes("paused") || a.body.includes("INACTIVE")) {
+            actionLabel = "Commission eligibility paused";
+            actionVariant = "blue";
+          } else {
+            const cleanRate = a.body.replace(/^Commission rate set to /i, "").trim();
+            actionLabel = `Commission changed ${cleanRate}`;
+            actionVariant = "blue";
+          }
+          details = `${ref} · ${comp}`;
+        } else if (a.kind === PartnerActivityKind.STATUS_CHANGED) {
+          if (a.body.toLowerCase().includes("approved")) {
+            actionLabel = `Approved - code ${a.partner.referralCode || "ACTIVE"} - ${Number(a.partner.commissionRate)}%`;
+            actionVariant = "emerald";
+            details = `${ref} · ${comp}`;
+          } else if (a.body.toLowerCase().includes("suspended")) {
+            actionLabel = "Partner suspended";
+            actionVariant = "slate";
+            const reasonPart = a.body.replace(/^Partner suspended\.?\s*(Reason:)?/i, "").trim();
+            details = reasonPart ? `${ref} · ${comp} · ${reasonPart}` : `${ref} · ${comp}`;
+          } else if (a.body.toLowerCase().includes("rejected")) {
+            actionLabel = "Application rejected";
+            actionVariant = "rose";
+            const reasonPart = a.body.replace(/^Partner application rejected\.?\s*(Reason:)?/i, "").trim();
+            details = reasonPart ? `${ref} · ${comp} · ${reasonPart}` : `${ref} · ${comp}`;
+          } else if (a.body.toLowerCase().includes("reactivated")) {
+            actionLabel = "Partner reactivated";
+            actionVariant = "emerald";
+            details = `${ref} · ${comp}`;
+          }
+        } else if (a.kind === PartnerActivityKind.NOTE) {
+          actionLabel = "Note logged";
+          actionVariant = "slate";
+          details = `${ref} · ${comp} · ${a.body}`;
+        }
+
+        return {
+          id: a.id,
+          createdAt: a.createdAt.toISOString(),
+          kind: a.kind,
+          body: a.body,
+          actorName: a.actorName || "System",
+          partnerId: a.partner.id,
+          reference: ref,
+          companyName: comp,
+          actionBadge: {
+            label: actionLabel,
+            variant: actionVariant,
+          },
+          details,
+        };
+      }),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize) || 1,
     };
   }
 
@@ -364,6 +579,7 @@ export class PartnerService {
     id: string,
     params: {
       commissionRate: number;
+      commissionPolicy?: PartnerCommissionPolicy;
       customReferralCode?: string;
       temporaryPassword?: string;
       actorId?: string;
@@ -407,30 +623,63 @@ export class PartnerService {
       });
       if (existingUser) {
         userId = existingUser.id;
+        if (
+          existingUser.role !== UserRole.SUPER_ADMIN &&
+          existingUser.role !== UserRole.PARTNER
+        ) {
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: { role: UserRole.PARTNER },
+          });
+        }
       } else {
-        // Create client workspace for partner so they can access the platform dashboard
-        const newClient = await prisma.client.create({
-          data: {
-            businessName: partner.companyName,
-            source: ClientSource.ADMIN_CREATED,
-          },
-        });
-
-        // Create user with CLIENT role so they have full dashboard access
+        // Create user with PARTNER role (separate partner login & dashboard)
         const newUser = await prisma.user.create({
           data: {
             email: partner.email,
             fullName: partner.contactName,
             phone: partner.phone,
-            role: UserRole.CLIENT,
-            status: UserStatus.ACTIVE,
+            role: UserRole.PARTNER,
+            status: UserStatus.PENDING_VERIFICATION,
             passwordHash: await hashPassword(tempPassword),
-            emailVerifiedAt: new Date(),
-            clientId: newClient.id,
+            emailVerifiedAt: null,
+            clientId: null,
           },
         });
         userId = newUser.id;
         createdNewUser = true;
+      }
+    } else {
+      const existingUser = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+      if (
+        existingUser &&
+        existingUser.role !== UserRole.SUPER_ADMIN &&
+        existingUser.role !== UserRole.PARTNER
+      ) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { role: UserRole.PARTNER },
+        });
+      }
+    }
+
+    // Generate single-use password set token so partner can set password and activate account
+    let inviteToken: string | null = null;
+    let inviteLink: string | undefined = undefined;
+    if (userId) {
+      try {
+        inviteToken = await createPasswordResetToken(
+          userId,
+          INVITE_TOKEN_TTL_SECONDS,
+        );
+        inviteLink = `${env.FRONTEND_URL}/partner/set-password?token=${encodeURIComponent(inviteToken)}`;
+      } catch (tokenErr) {
+        logger.warn(
+          { tokenErr, userId },
+          "Could not generate password set token for approved partner",
+        );
       }
     }
 
@@ -442,6 +691,7 @@ export class PartnerService {
           referralCode,
           commissionRate: new Prisma.Decimal(params.commissionRate),
           isCommissionActive: true,
+          commissionPolicy: params.commissionPolicy ?? PartnerCommissionPolicy.GLOBAL_DEFAULT,
           userId,
           approvedAt: new Date(),
           approvedBy: params.actorName || "Admin",
@@ -454,7 +704,7 @@ export class PartnerService {
         data: {
           partnerId: id,
           kind: PartnerActivityKind.STATUS_CHANGED,
-          body: `Partner approved with referral code ${referralCode} and ${params.commissionRate}% commission rate.${createdNewUser ? ` Created login account for ${partner.email}.` : ""}`,
+          body: `Partner approved with referral code ${referralCode}, ${params.commissionRate}% commission rate, and policy: ${params.commissionPolicy ?? "GLOBAL_DEFAULT"}.${createdNewUser ? ` Created partner login account for ${partner.email}.` : ""}`,
           actorId: params.actorId || null,
           actorName: params.actorName || null,
         },
@@ -463,9 +713,9 @@ export class PartnerService {
       return p;
     });
 
-    // Send approval email with login credentials and dashboard instructions
-    const loginUrl = `${env.FRONTEND_URL}/login`;
-    const dashboardLink = `${env.FRONTEND_URL}/partnership`;
+    // Send approval email with login credentials and set-password invite link
+    const loginUrl = `${env.FRONTEND_URL}/partner/login`;
+    const dashboardLink = `${env.FRONTEND_URL}/partner/dashboard`;
     try {
       await emailService.sendPartnerApproval({
         to: partner.email,
@@ -476,6 +726,7 @@ export class PartnerService {
         dashboardLink,
         loginEmail: partner.email,
         loginUrl,
+        inviteLink,
         temporaryPassword: createdNewUser ? tempPassword : undefined,
       });
     } catch (err) {
@@ -485,7 +736,11 @@ export class PartnerService {
       );
     }
 
-    return this.getAdminDetail(id);
+    const detail = await this.getAdminDetail(id);
+    return {
+      ...detail,
+      inviteLink,
+    };
   }
 
   /**
@@ -633,6 +888,7 @@ export class PartnerService {
     params: {
       commissionRate?: number;
       isCommissionActive?: boolean;
+      commissionPolicy?: PartnerCommissionPolicy;
       actorId?: string;
       actorName?: string;
     },
@@ -643,18 +899,45 @@ export class PartnerService {
     }
 
     const data: Prisma.PartnerUpdateInput = {};
-    const logParts: string[] = [];
+    const currentRate = Number(partner.commissionRate);
+    let rateChanged = false;
+    let eligibilityChanged = false;
+    let policyChanged = false;
 
-    if (params.commissionRate !== undefined) {
+    if (params.commissionRate !== undefined && params.commissionRate !== currentRate) {
       data.commissionRate = new Prisma.Decimal(params.commissionRate);
-      logParts.push(`Commission rate set to ${params.commissionRate}%`);
+      rateChanged = true;
     }
 
-    if (params.isCommissionActive !== undefined) {
+    if (params.isCommissionActive !== undefined && params.isCommissionActive !== partner.isCommissionActive) {
       data.isCommissionActive = params.isCommissionActive;
-      logParts.push(
-        `Commission eligibility set to ${params.isCommissionActive ? "ACTIVE" : "INACTIVE"}`,
-      );
+      eligibilityChanged = true;
+    }
+
+    if (params.commissionPolicy !== undefined && params.commissionPolicy !== partner.commissionPolicy) {
+      data.commissionPolicy = params.commissionPolicy;
+      policyChanged = true;
+    }
+
+    let activityKind: PartnerActivityKind = PartnerActivityKind.COMMISSION_RATE_UPDATED;
+    let activityBody = "";
+
+    if (policyChanged) {
+      activityKind = PartnerActivityKind.COMMISSION_POLICY_UPDATED;
+      activityBody = `Commission policy updated from ${partner.commissionPolicy} to ${params.commissionPolicy}${rateChanged ? ` (${currentRate}% → ${params.commissionRate}%)` : ""}`;
+    } else if (rateChanged && eligibilityChanged) {
+      activityBody = `${currentRate}% → ${params.commissionRate}% (${params.isCommissionActive ? "eligibility re-enabled" : "eligibility disabled"})`;
+    } else if (rateChanged) {
+      activityBody = `${currentRate}% → ${params.commissionRate}%`;
+    } else if (eligibilityChanged) {
+      activityKind = PartnerActivityKind.COMMISSION_ELIGIBILITY_TOGGLED;
+      activityBody = params.isCommissionActive
+        ? `${currentRate}% → ${currentRate}% (eligibility re-enabled)`
+        : `${currentRate}% → ${currentRate}% (eligibility disabled)`;
+    } else if (params.commissionRate !== undefined) {
+      activityBody = `Set to ${params.commissionRate}%`;
+    } else {
+      activityBody = `Commission settings verified`;
     }
 
     await prisma.$transaction(async (tx) => {
@@ -662,8 +945,8 @@ export class PartnerService {
       await tx.partnerActivity.create({
         data: {
           partnerId: id,
-          kind: PartnerActivityKind.COMMISSION_RATE_UPDATED,
-          body: logParts.join(". "),
+          kind: activityKind,
+          body: activityBody,
           actorId: params.actorId || null,
           actorName: params.actorName || null,
         },
@@ -781,6 +1064,17 @@ export class PartnerService {
             registeredAt: true,
             convertedAt: true,
             totalSpentPaise: true,
+            commissions: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                status: true,
+                orderAmountPaise: true,
+                commissionAmountPaise: true,
+                source: true,
+              },
+            },
           },
         },
         commissions: {
@@ -803,8 +1097,11 @@ export class PartnerService {
       );
     }
 
-    // If application is still pending or not approved, return application details cleanly
-    if (partner.status !== PartnerStatus.APPROVED) {
+    // If application is still pending or rejected, return application details cleanly
+    if (
+      partner.status !== PartnerStatus.APPROVED &&
+      partner.status !== PartnerStatus.SUSPENDED
+    ) {
       return {
         partner: {
           id: partner.id,
@@ -816,6 +1113,7 @@ export class PartnerService {
           businessType: partner.businessType,
           partnershipType: partner.partnershipType,
           status: partner.status,
+          suspensionReason: partner.suspensionReason,
           referralCode: partner.referralCode,
           commissionRate: Number(partner.commissionRate),
           isCommissionActive: partner.isCommissionActive,
@@ -861,16 +1159,32 @@ export class PartnerService {
 
     const shareUrl = `${env.FRONTEND_URL}/?ref=${encodeURIComponent(partner.referralCode || "")}`;
 
+    let effectiveCommissionPolicy = partner.commissionPolicy;
+    if (effectiveCommissionPolicy === PartnerCommissionPolicy.GLOBAL_DEFAULT) {
+      const globalCfg = await prisma.partnerProgramConfig.findUnique({ where: { id: "default" } });
+      effectiveCommissionPolicy = globalCfg?.defaultCommissionPolicy ?? PartnerCommissionPolicy.FIRST_PAYMENT;
+    }
+
     return {
       partner: {
         id: partner.id,
+        applicationId: partner.applicationId,
         companyName: partner.companyName,
         contactName: partner.contactName,
+        designation: partner.designation,
         email: partner.email,
+        phone: partner.phone,
+        alternatePhone: partner.alternatePhone,
+        partnershipType: partner.partnershipType,
+        status: partner.status,
+        suspensionReason: partner.suspensionReason,
         referralCode: partner.referralCode,
         commissionRate: Number(partner.commissionRate),
         isCommissionActive: partner.isCommissionActive,
+        commissionPolicy: partner.commissionPolicy,
+        effectiveCommissionPolicy,
         shareUrl,
+        createdAt: partner.createdAt.toISOString(),
       },
       stats: {
         totalReferrals,
@@ -881,16 +1195,30 @@ export class PartnerService {
         approvedCommissionPaise,
         paidCommissionPaise,
       },
-      referrals: partner.referrals.map((r) => ({
-        id: r.id,
-        customerName: r.customerName,
-        // Mask customer email for privacy, e.g. j***@domain.com
-        customerEmail: r.customerEmail.replace(/(^.{2})(.*)(@.*$)/, "$1***$3"),
-        status: r.status,
-        totalSpentPaise: Number(r.totalSpentPaise),
-        registeredAt: r.registeredAt.toISOString(),
-        convertedAt: r.convertedAt?.toISOString() ?? null,
-      })),
+      referrals: partner.referrals.map((r) => {
+        const latestComm = r.commissions?.[0];
+        let commissionStatus: "PENDING" | "APPROVED" | "PAID" | "NO_PAYMENT" = "NO_PAYMENT";
+        if (latestComm) {
+          if (latestComm.status === CommissionStatus.PENDING) commissionStatus = "PENDING";
+          else if (latestComm.status === CommissionStatus.APPROVED) commissionStatus = "APPROVED";
+          else if (latestComm.status === CommissionStatus.PAID) commissionStatus = "PAID";
+        }
+        return {
+          id: r.id,
+          customerName: r.customerName,
+          // Mask customer email for privacy, e.g. j***@domain.com
+          customerEmail: r.customerEmail.replace(/(^.{2})(.*)(@.*$)/, "$1***$3"),
+          status: r.status,
+          planName: r.status === PartnerReferralStatus.CONVERTED || Number(r.totalSpentPaise) > 0 ? "Business" : "—",
+          source: "Referral link",
+          totalSpentPaise: Number(r.totalSpentPaise),
+          paymentAmountPaise: latestComm ? latestComm.orderAmountPaise : (Number(r.totalSpentPaise) > 0 ? Number(r.totalSpentPaise) : null),
+          commissionAmountPaise: latestComm ? latestComm.commissionAmountPaise : null,
+          commissionStatus,
+          registeredAt: r.registeredAt.toISOString(),
+          convertedAt: r.convertedAt?.toISOString() ?? null,
+        };
+      }),
       commissions: partner.commissions.map((c) => ({
         id: c.id,
         source: c.source,
@@ -902,6 +1230,61 @@ export class PartnerService {
         paidAt: c.paidAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
       })),
+    };
+  }
+
+  /**
+   * Super Admin: Get global partner program configuration (default commission rate and policy)
+   */
+  async getProgramConfig(): Promise<PartnerProgramConfigView> {
+    let config = await prisma.partnerProgramConfig.findUnique({
+      where: { id: "default" },
+    });
+    if (!config) {
+      config = await prisma.partnerProgramConfig.create({
+        data: {
+          id: "default",
+          defaultCommissionRate: new Prisma.Decimal(15.0),
+          defaultCommissionPolicy: PartnerCommissionPolicy.FIRST_PAYMENT,
+        },
+      });
+    }
+    return {
+      defaultCommissionRate: Number(config.defaultCommissionRate),
+      defaultCommissionPolicy: config.defaultCommissionPolicy,
+      updatedAt: config.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Super Admin: Update global partner program configuration
+   */
+  async updateProgramConfig(
+    input: UpdatePartnerProgramConfigInput,
+  ): Promise<PartnerProgramConfigView> {
+    const data: Prisma.PartnerProgramConfigUpdateInput = {};
+    if (input.defaultCommissionRate !== undefined) {
+      data.defaultCommissionRate = new Prisma.Decimal(input.defaultCommissionRate);
+    }
+    if (input.defaultCommissionPolicy !== undefined) {
+      data.defaultCommissionPolicy = input.defaultCommissionPolicy;
+    }
+
+    const config = await prisma.partnerProgramConfig.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        defaultCommissionRate: new Prisma.Decimal(input.defaultCommissionRate ?? 15.0),
+        defaultCommissionPolicy:
+          input.defaultCommissionPolicy ?? PartnerCommissionPolicy.FIRST_PAYMENT,
+      },
+      update: data,
+    });
+
+    return {
+      defaultCommissionRate: Number(config.defaultCommissionRate),
+      defaultCommissionPolicy: config.defaultCommissionPolicy,
+      updatedAt: config.updatedAt.toISOString(),
     };
   }
 }

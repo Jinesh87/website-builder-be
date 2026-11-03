@@ -146,21 +146,30 @@ export function scopeFor(actor: AuthUser): Prisma.WebsiteWhereInput {
 }
 
 function toSummary(website: WebsiteWithSummary): WebsiteSummary {
+  const publishedAt = website.publishedAt ? new Date(website.publishedAt) : null;
+  const draftUpdatedAt = website.draftUpdatedAt
+    ? new Date(website.draftUpdatedAt)
+    : website.updatedAt
+      ? new Date(website.updatedAt)
+      : new Date();
+  const createdAt = website.createdAt ? new Date(website.createdAt) : new Date();
+  const updatedAt = website.updatedAt ? new Date(website.updatedAt) : new Date();
+
   return {
     id: website.id,
     clientId: website.clientId,
-    clientName: website.client.businessName,
+    clientName: website.client?.businessName ?? "Client",
     name: website.name,
     builderType: website.builderType,
     status: website.status,
     subdomain: website.subdomain,
-    pageCount: website._count.pages,
+    pageCount: website._count?.pages ?? 0,
     generationStatus: website.generation?.status ?? null,
-    hasUnpublishedChanges: website.publishedAt !== null && website.draftUpdatedAt > website.publishedAt,
-    seoToolsEnabled: website.seoToolsEnabled,
-    isTemplateStudio: website.client.isInternal,
-    shopFeatureEnabled: website.client.shopFeatureEnabled,
-    shopEnabled: website.shopEnabled,
+    hasUnpublishedChanges: publishedAt !== null && draftUpdatedAt > publishedAt,
+    seoToolsEnabled: website.seoToolsEnabled ?? false,
+    isTemplateStudio: website.client?.isInternal ?? false,
+    shopFeatureEnabled: website.client?.shopFeatureEnabled ?? false,
+    shopEnabled: website.shopEnabled ?? false,
     shopCancelUntilStatus:
       website.shopCancelUntilStatus === "PAID"
         ? "paid"
@@ -171,21 +180,21 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
             : null,
     shopReturnDays: website.shopReturnDays ?? null,
     shopReturnGuidelines: readReturnGuidelines(website.shopReturnGuidelines),
-    publishedAt: website.publishedAt?.toISOString() ?? null,
-    createdAt: website.createdAt.toISOString(),
-    updatedAt: website.updatedAt.toISOString(),
+    publishedAt: publishedAt?.toISOString() ?? null,
+    createdAt: createdAt.toISOString(),
+    updatedAt: updatedAt.toISOString(),
   };
 }
 
 function toInfo(website: WebsiteWithPages): WebsiteInfo {
   return {
-    businessName: website.businessName,
-    websiteType: website.websiteType,
-    industry: website.industry,
-    description: website.description,
-    contactEmail: website.contactEmail,
-    contactPhone: website.contactPhone,
-    address: website.address,
+    businessName: website.businessName ?? null,
+    websiteType: website.websiteType ?? null,
+    industry: website.industry ?? null,
+    description: website.description ?? null,
+    contactEmail: website.contactEmail ?? null,
+    contactPhone: website.contactPhone ?? null,
+    address: website.address ?? null,
   };
 }
 
@@ -196,65 +205,70 @@ function toPage(page: WebsiteWithPages["pages"][number]): PageView {
     name: page.name,
     slug: page.slug,
     pageType: page.pageType,
-    visible: page.visible,
-    showInNav: page.showInNav,
-    seoTitle: page.seoTitle,
-    seoDescription: page.seoDescription,
-    seoKeywords: page.seoKeywords ?? [],
+    visible: page.visible ?? true,
+    showInNav: page.showInNav ?? true,
+    seoTitle: page.seoTitle ?? null,
+    seoDescription: page.seoDescription ?? null,
+    seoKeywords: Array.isArray(page.seoKeywords) ? page.seoKeywords : [],
     templateKey: page.templateKey ?? null,
-    sections: page.sections as unknown as Section[],
+    sections: Array.isArray(page.sections) ? (page.sections as unknown as Section[]) : [],
   };
 }
 
 function toDetail(website: WebsiteWithPages): WebsiteDetail {
-  let header = website.header as unknown as HeaderData;
-  let footer = website.footer as unknown as FooterData;
-  let pages = website.pages.map(toPage);
+  let header = (website.header && typeof website.header === "object"
+    ? website.header
+    : BLANK_HEADER) as unknown as HeaderData;
+  let footer = (website.footer && typeof website.footer === "object"
+    ? website.footer
+    : BLANK_FOOTER) as unknown as FooterData;
+  let pages = (Array.isArray(website.pages) ? website.pages : []).map(toPage);
 
   // If website header or footer has no logo, check if any page was created from a built-in template seed
   const templateKey = pages.find((p) => p.templateKey)?.templateKey;
   const seed = templateKey ? WEBSITE_TEMPLATE_SEEDS.find((s) => s.key === templateKey) : null;
   if (seed) {
-    if (!header.logo?.url && seed.header.logo) {
+    if (!header?.logo?.url && seed.header?.logo) {
       header = {
         ...header,
         logo: seed.header.logo,
-        logoDisplay: header.logoDisplay ?? seed.header.logoDisplay ?? "logo_only",
+        logoDisplay: header?.logoDisplay ?? seed.header.logoDisplay ?? "logo_only",
       };
     }
-    if (!footer.logo?.url && seed.footer.logo) {
+    if (!footer?.logo?.url && seed.footer?.logo) {
       footer = {
         ...footer,
         logo: seed.footer.logo,
-        logoDisplay: footer.logoDisplay ?? seed.footer.logoDisplay ?? "logo_only",
+        logoDisplay: footer?.logoDisplay ?? seed.footer.logoDisplay ?? "logo_only",
       };
     }
 
     pages = pages.map((page) => ({
       ...page,
-      sections: (page.sections as Section[]).map((sec) => {
+      sections: (Array.isArray(page.sections) ? (page.sections as Section[]) : []).map((sec) => {
+        if (!sec || typeof sec !== "object") return sec;
         if (sec.type === "header") {
           const secHeader = (sec.data || {}) as HeaderData;
-          if (!secHeader.logo?.url && seed.header.logo) {
+          if (!secHeader?.logo?.url && seed.header?.logo) {
             return {
               ...sec,
               data: {
                 ...secHeader,
                 logo: seed.header.logo,
-                logoDisplay: secHeader.logoDisplay ?? seed.header.logoDisplay ?? "logo_only",
+                logoDisplay: secHeader?.logoDisplay ?? seed.header?.logoDisplay ?? "logo_only",
               },
             };
           }
         }
         if (sec.type === "footer") {
           const secFooter = (sec.data || {}) as FooterData;
-          if (!secFooter.logo?.url && seed.footer.logo) {
+          if (!secFooter?.logo?.url && seed.footer?.logo) {
             return {
               ...sec,
               data: {
                 ...secFooter,
                 logo: seed.footer.logo,
-                logoDisplay: secFooter.logoDisplay ?? seed.footer.logoDisplay ?? "logo_only",
+                logoDisplay: secFooter?.logoDisplay ?? seed.footer?.logoDisplay ?? "logo_only",
               },
             };
           }
@@ -266,17 +280,40 @@ function toDetail(website: WebsiteWithPages): WebsiteDetail {
 
   ({ header, footer, pages } = liftSiteChrome({ header, footer, pages }));
 
+  const defaultTheme = THEME_SEEDS[0]?.settings ?? {
+    colors: {
+      primary: "#2563eb",
+      secondary: "#64748b",
+      background: "#ffffff",
+      surface: "#f8fafc",
+      text: "#0f172a",
+      muted: "#64748b",
+    },
+    fonts: { heading: "Inter", body: "Inter" },
+  };
+
+  const theme =
+    website.theme && typeof website.theme === "object"
+      ? (website.theme as unknown as ThemeSettings)
+      : (defaultTheme as unknown as ThemeSettings);
+
+  const draftUpdatedAt = website.draftUpdatedAt
+    ? new Date(website.draftUpdatedAt)
+    : website.updatedAt
+      ? new Date(website.updatedAt)
+      : new Date();
+
   return {
     ...toSummary(website),
-    customDomain: website.domains[0]?.hostname ?? null,
+    customDomain: website.domains?.[0]?.hostname ?? null,
     info: toInfo(website),
     generation: website.generation ? toGenerationView(website.generation) : null,
     draft: {
-      theme: website.theme as unknown as ThemeSettings,
-      header,
-      footer,
+      theme,
+      header: header ?? BLANK_HEADER,
+      footer: footer ?? BLANK_FOOTER,
       pages,
-      draftUpdatedAt: website.draftUpdatedAt.toISOString(),
+      draftUpdatedAt: draftUpdatedAt.toISOString(),
     },
   };
 }
@@ -286,10 +323,10 @@ export function toGenerationView(generation: WebsiteGeneration): GenerationView 
     status: generation.status,
     step: generation.step,
     progress: generation.progress,
-    errorMessage: generation.errorMessage,
-    createdAt: generation.createdAt.toISOString(),
-    startedAt: generation.startedAt?.toISOString() ?? null,
-    completedAt: generation.completedAt?.toISOString() ?? null,
+    errorMessage: generation.errorMessage ?? null,
+    createdAt: (generation.createdAt ? new Date(generation.createdAt) : new Date()).toISOString(),
+    startedAt: generation.startedAt ? new Date(generation.startedAt).toISOString() : null,
+    completedAt: generation.completedAt ? new Date(generation.completedAt).toISOString() : null,
   };
 }
 

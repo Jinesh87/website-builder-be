@@ -4,6 +4,7 @@ import { prisma } from "../../../config/prisma.js";
 import {
   CommissionSource,
   CommissionStatus,
+  PartnerCommissionPolicy,
   PartnerReferralStatus,
   PartnerStatus,
   type PartnerCommission,
@@ -60,6 +61,31 @@ export class PartnerCommissionService {
         return null;
       }
 
+      // Resolve effective commission policy:
+      // Can be explicitly configured on the partner (FIRST_PAYMENT or EVERY_RENEWAL),
+      // or inherit the global platform default (GLOBAL_DEFAULT).
+      let effectivePolicy = partner.commissionPolicy;
+      if (effectivePolicy === PartnerCommissionPolicy.GLOBAL_DEFAULT) {
+        const globalConfig = await prisma.partnerProgramConfig.findUnique({
+          where: { id: "default" },
+        });
+        effectivePolicy = globalConfig?.defaultCommissionPolicy ?? PartnerCommissionPolicy.FIRST_PAYMENT;
+      }
+
+      // If policy is FIRST_PAYMENT (one-time on first payment only):
+      if (effectivePolicy === PartnerCommissionPolicy.FIRST_PAYMENT) {
+        const existingForReferral = await prisma.partnerCommission.findFirst({
+          where: { referralId: referral.id },
+        });
+        if (existingForReferral) {
+          logger.info(
+            { referralId: referral.id, partnerId: partner.id, existingCommissionId: existingForReferral.id },
+            "First-payment-only commission policy is active for this partner/referral. Skipping subsequent payment/renewal.",
+          );
+          return existingForReferral;
+        }
+      }
+
       // Check if commission already recorded for this order (prevent duplicate commissions)
       if (input.paymentOrderId) {
         const existing = await prisma.partnerCommission.findUnique({
@@ -95,7 +121,7 @@ export class PartnerCommissionService {
             orderAmountPaise: input.amountPaise,
             commissionRate: partner.commissionRate,
             commissionAmountPaise,
-            status: CommissionStatus.APPROVED,
+            status: CommissionStatus.PENDING,
           },
         });
 
@@ -112,7 +138,7 @@ export class PartnerCommissionService {
           data: {
             partnerId: partner.id,
             kind: "NOTE",
-            body: `Commission earned: ₹${(commissionAmountPaise / 100).toFixed(2)} (${commissionRate}%) from customer ${referral.customerName} on ${input.source}.`,
+            body: `Commission earned: ₹${(commissionAmountPaise / 100).toFixed(2)} (${commissionRate}%, Policy: ${effectivePolicy === PartnerCommissionPolicy.EVERY_RENEWAL ? "Renewal / Recurring" : "First Payment"}) from customer ${referral.customerName} on ${input.source}.`,
           },
         });
 

@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
+import fs from "node:fs";
+import { isProduction } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { AppError } from "../errors/AppError.js";
 
@@ -45,11 +47,17 @@ export function errorHandler(
     return;
   }
 
+  try {
+    const errorLog = `[${new Date().toISOString()}] ${err instanceof Error ? err.stack || err.message : String(err)}\n`;
+    fs.appendFileSync("/tmp/cms-backend-error.log", errorLog);
+  } catch {}
+
   logger.error({ err }, "Unhandled error");
   res.status(500).json({
     error: {
       code: "INTERNAL_ERROR",
-      message: "Internal server error",
+      message: isProduction ? "Internal server error" : (err instanceof Error ? err.message : "Internal server error"),
+      details: isProduction ? undefined : (err instanceof Error ? err.stack : undefined),
     },
   });
 }
