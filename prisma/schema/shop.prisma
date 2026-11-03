@@ -254,6 +254,8 @@ model ShopOrder {
   cancelReason      String?          @db.VarChar(500)
   /// Why the shopper requested a return (required for customer-initiated returns).
   returnReason      String?          @db.VarChar(500)
+  /// Delivery address chosen at checkout (snapshot so later address edits/deletes don't change the order).
+  shippingAddress   Json?
   createdAt         DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 

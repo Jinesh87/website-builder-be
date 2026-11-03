@@ -1,7 +1,7 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { prisma } from "../../../config/prisma.js";
-import { ShopOrderStatus, ShopRefundStatus } from "../../../generated/prisma/client.js";
+import { Prisma, ShopOrderStatus, ShopRefundStatus } from "../../../generated/prisma/client.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
 import { refundStatusLabel, shopCheckoutService } from "./shop-checkout.service.js";
@@ -53,6 +53,17 @@ export type ShopOrderView = {
   failureReason: string | null;
   cancelReason: string | null;
   returnReason: string | null;
+  shippingAddress: {
+    label: string | null;
+    fullName: string;
+    phone: string;
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  } | null;
   timeline: ShopOrderTimelineEvent[];
   createdAt: string;
   updatedAt: string;
@@ -93,6 +104,27 @@ const LABEL_FROM_STATUS: Record<ShopOrderStatus, ShopOrderStatusLabel> = {
   [ShopOrderStatus.RETURNED]: "returned",
 };
 
+function parseShippingAddress(value: Prisma.JsonValue | null | undefined): ShopOrderView["shippingAddress"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const text = (key: string) => (typeof row[key] === "string" ? (row[key] as string) : "");
+  const fullName = text("fullName");
+  const line1 = text("line1");
+  const city = text("city");
+  if (!fullName || !line1 || !city) return null;
+  return {
+    label: typeof row.label === "string" ? row.label : null,
+    fullName,
+    phone: text("phone"),
+    line1,
+    line2: typeof row.line2 === "string" ? row.line2 : null,
+    city,
+    state: text("state"),
+    postalCode: text("postalCode"),
+    country: text("country") || "IN",
+  };
+}
+
 function toView(order: {
   id: string;
   number: number;
@@ -107,6 +139,7 @@ function toView(order: {
   failureReason: string | null;
   cancelReason: string | null;
   returnReason: string | null;
+  shippingAddress?: Prisma.JsonValue | null;
   createdAt: Date;
   updatedAt: Date;
   customer: { id: string; fullName: string; email: string; phone: string | null };
@@ -150,6 +183,7 @@ function toView(order: {
     failureReason: order.failureReason,
     cancelReason: order.cancelReason,
     returnReason: order.returnReason,
+    shippingAddress: parseShippingAddress(order.shippingAddress),
     timeline: (order.events ?? []).map(toTimelineEvent),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
