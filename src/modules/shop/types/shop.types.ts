@@ -47,6 +47,8 @@ export type ShopProductInput = {
   name: string;
   description?: string;
   categoryId?: string | null;
+  /** Defaults to true when omitted. Hidden from the live shop when false. */
+  listed?: boolean;
   /** Defaults to true when omitted. */
   returnsEnabled?: boolean;
   /** Null/omitted = use the shop default return window. */
@@ -116,6 +118,7 @@ export type ShopProductView = {
   description: string | null;
   categoryId: string | null;
   categoryName: string;
+  listed: boolean;
   returnsEnabled: boolean;
   /** Null = use the shop default return window. */
   returnDays: number | null;

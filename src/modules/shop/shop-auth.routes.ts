@@ -5,6 +5,8 @@ import { shopAuthController } from "./controllers/shop-auth.controller.js";
 import { authenticateShopCustomer } from "./middleware/authenticate-shop-customer.js";
 import {
   shopAddToCartSchema,
+  shopAddressParamsSchema,
+  shopAddressSchema,
   shopAuthWebsiteParamsSchema,
   shopCartItemParamsSchema,
   shopChangePasswordSchema,
@@ -66,6 +68,30 @@ shopAuthRouter.patch(
   authenticateShopCustomer,
   validate(shopProfileUpdateSchema),
   shopAuthController.updateProfile,
+);
+shopAuthRouter.get("/addresses", websiteParams, authenticateShopCustomer, shopAuthController.listAddresses);
+shopAuthRouter.post(
+  "/addresses",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-address-write", max: 30, windowSeconds: MINUTE }),
+  validate(shopAddressSchema),
+  shopAuthController.createAddress,
+);
+shopAuthRouter.patch(
+  "/addresses/:addressId",
+  validate(shopAddressParamsSchema, "params"),
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-address-write", max: 30, windowSeconds: MINUTE }),
+  validate(shopAddressSchema),
+  shopAuthController.updateAddress,
+);
+shopAuthRouter.delete(
+  "/addresses/:addressId",
+  validate(shopAddressParamsSchema, "params"),
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-address-write", max: 30, windowSeconds: MINUTE }),
+  shopAuthController.deleteAddress,
 );
 shopAuthRouter.post(
   "/change-password",
