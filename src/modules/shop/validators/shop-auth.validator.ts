@@ -104,6 +104,13 @@ export const shopCartItemParamsSchema = Joi.object({
 
 const razorpayId = Joi.string().trim().max(64).pattern(/^[A-Za-z0-9_]+$/).required();
 
+export const shopCheckoutStartSchema = Joi.object({
+  addressId: Joi.string().guid().required().messages({
+    "any.required": "Choose a delivery address before paying.",
+    "string.guid": "Choose a delivery address before paying.",
+  }),
+});
+
 export const shopCheckoutConfirmSchema = Joi.object({
   razorpayOrderId: razorpayId,
   razorpayPaymentId: razorpayId,

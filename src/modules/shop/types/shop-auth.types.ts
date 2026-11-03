@@ -56,14 +56,31 @@ export type ShopOrderItemView = {
   lineTotalPaise: number;
 };
 
+export type ShopOrderShippingAddress = {
+  label: string | null;
+  fullName: string;
+  phone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+};
+
 export type ShopOrderDetailView = ShopOrderSummary & {
   items: ShopOrderItemView[];
   timeline: ShopOrderTimelineEventView[];
   failureReason: string | null;
   cancelReason: string | null;
   returnReason: string | null;
+  shippingAddress: ShopOrderShippingAddress | null;
   paidAt: string | null;
   updatedAt: string;
+};
+
+export type ShopCheckoutStartInput = {
+  addressId?: string;
 };
 
 export type ShopCancelOrderInput = {

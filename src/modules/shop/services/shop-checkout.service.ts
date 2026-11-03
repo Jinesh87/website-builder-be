@@ -15,7 +15,9 @@ import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/servic
 import { purgeShopPages } from "./shop-cache.js";
 import type {
   ShopCancelOrderInput,
+  ShopCheckoutStartInput,
   ShopOrderDetailView,
+  ShopOrderShippingAddress,
   ShopReturnOrderInput,
   ShopOrderSummary,
   ShopRefundStatusLabel,
@@ -109,6 +111,27 @@ export function refundStatusLabel(status: ShopRefundStatus): ShopRefundStatusLab
     default:
       return "none";
   }
+}
+
+function parseShippingAddress(value: Prisma.JsonValue | null | undefined): ShopOrderShippingAddress | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const text = (key: string) => (typeof row[key] === "string" ? (row[key] as string) : "");
+  const fullName = text("fullName");
+  const line1 = text("line1");
+  const city = text("city");
+  if (!fullName || !line1 || !city) return null;
+  return {
+    label: typeof row.label === "string" ? row.label : null,
+    fullName,
+    phone: text("phone"),
+    line1,
+    line2: typeof row.line2 === "string" ? row.line2 : null,
+    city,
+    state: text("state"),
+    postalCode: text("postalCode"),
+    country: text("country") || "IN",
+  };
 }
 
 function refundStatusFromRazorpay(status: string | undefined): ShopRefundStatus {
@@ -313,7 +336,11 @@ export class ShopCheckoutService {
   }
 
   /** Builds a PENDING order from the cart and a matching Razorpay order for Checkout. */
-  async startCheckout(websiteId: string, customerId: string): Promise<ShopCheckoutSession> {
+  async startCheckout(
+    websiteId: string,
+    customerId: string,
+    input: ShopCheckoutStartInput,
+  ): Promise<ShopCheckoutSession> {
     const customer = await prisma.shopCustomer.findFirst({
       where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
       select: {
@@ -329,6 +356,28 @@ export class ShopCheckoutService {
     if (!customer.website.shopEnabled || !customer.website.client.shopFeatureEnabled) {
       throw new AppError(404, "Shop is not available on this website.", "SHOP_DISABLED");
     }
+
+    const addressId = input?.addressId?.trim();
+    if (!addressId) {
+      throw new AppError(400, "Choose a delivery address before paying.", "ADDRESS_REQUIRED");
+    }
+    const address = await prisma.shopCustomerAddress.findFirst({
+      where: { id: addressId, websiteId, customerId: customer.id },
+    });
+    if (!address) {
+      throw new AppError(400, "Choose a delivery address before paying.", "ADDRESS_REQUIRED");
+    }
+    const shippingAddress: ShopOrderShippingAddress = {
+      label: address.label,
+      fullName: address.fullName,
+      phone: address.phone,
+      line1: address.line1,
+      line2: address.line2,
+      city: address.city,
+      state: address.state,
+      postalCode: address.postalCode,
+      country: address.country,
+    };
 
     const keys = await shopPaymentKeys(websiteId);
     if (!keys) {
@@ -402,6 +451,7 @@ export class ShopCheckoutService {
           status: ShopOrderStatus.PENDING,
           currency: PAYMENT_CURRENCY,
           totalPaise,
+          shippingAddress: shippingAddress as Prisma.InputJsonValue,
           items: {
             create: cart.map((line) => ({
               productId: line.productId,
@@ -854,6 +904,7 @@ export class ShopCheckoutService {
       failureReason: order.failureReason,
       cancelReason: order.cancelReason,
       returnReason: order.returnReason,
+      shippingAddress: parseShippingAddress(order.shippingAddress),
       paidAt: order.paidAt?.toISOString() ?? null,
       updatedAt: order.updatedAt.toISOString(),
     };

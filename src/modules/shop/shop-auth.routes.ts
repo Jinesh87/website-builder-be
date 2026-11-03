@@ -13,6 +13,7 @@ import {
   shopCancelOrderSchema,
   shopReturnOrderSchema,
   shopCheckoutConfirmSchema,
+  shopCheckoutStartSchema,
   shopEmailOnlySchema,
   shopOrderParamsSchema,
   shopLoginSchema,
@@ -144,6 +145,7 @@ shopAuthRouter.post(
   websiteParams,
   authenticateShopCustomer,
   rateLimit({ name: "shop-checkout", max: 20, windowSeconds: MINUTE }),
+  validate(shopCheckoutStartSchema),
   shopAuthController.startCheckout,
 );
 shopAuthRouter.post(
