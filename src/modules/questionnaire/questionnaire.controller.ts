@@ -35,6 +35,8 @@ export class QuestionnaireController {
           ? "Thank you! Your website questionnaire has been submitted and sent to our team."
           : "Thank you! We have received your website questionnaire.",
         id: questionnaire?.id,
+        referenceId: questionnaire?.referenceId,
+        questionnaireNumber: questionnaire?.questionnaireNumber,
         emailDispatched,
       });
     } catch (error) {

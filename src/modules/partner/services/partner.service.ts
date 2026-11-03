@@ -25,10 +25,27 @@ import type {
   PartnerSummary,
 } from "../types/partner.types.js";
 import {
+  formatPartnerApplicationId,
   generateApplicationId,
   generateReferralCode,
   randomAlphanumeric,
 } from "../utils/partner-codes.js";
+
+async function getNextPartnerSequence(tx: Prisma.TransactionClient): Promise<number> {
+  try {
+    const res = await tx.$queryRaw<{ nextval: string | number | bigint }[]>`SELECT nextval('"partners_partnerNumber_seq"') AS nextval`;
+    if (res?.[0]?.nextval !== undefined) {
+      return Number(res[0].nextval);
+    }
+  } catch {
+    // Fallback for non-Postgres / unit test mocks
+  }
+  const latest = await tx.partner.findFirst({
+    orderBy: { partnerNumber: "desc" },
+    select: { partnerNumber: true },
+  });
+  return (latest?.partnerNumber ?? 0) + 1;
+}
 
 function toPartnerSummary(
   partner: Partner & {
@@ -49,6 +66,7 @@ function toPartnerSummary(
 
   return {
     id: partner.id,
+    partnerNumber: partner.partnerNumber,
     applicationId: partner.applicationId,
     companyName: partner.companyName,
     contactName: partner.contactName,
@@ -106,11 +124,13 @@ export class PartnerService {
       );
     }
 
-    const applicationId = generateApplicationId();
-
     const partner = await prisma.$transaction(async (tx) => {
+      const partnerNumber = await getNextPartnerSequence(tx);
+      const applicationId = formatPartnerApplicationId(partnerNumber);
+
       const p = await tx.partner.create({
         data: {
+          partnerNumber,
           applicationId,
           companyName: input.companyName.trim(),
           registrationNumber: input.registrationNumber?.trim() || null,
@@ -149,6 +169,8 @@ export class PartnerService {
 
       return p;
     });
+
+    const applicationId = partner.applicationId;
 
     // Send confirmation email
     try {
@@ -232,7 +254,17 @@ export class PartnerService {
 
     if (query.search?.trim()) {
       const q = query.search.trim();
+      let partnerNumberSearch: number | null = null;
+      const match = q.match(/^PART-?(\d+)$/i) || q.match(/^(\d+)$/);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          partnerNumberSearch = parsed;
+        }
+      }
+
       where.OR = [
+        ...(partnerNumberSearch !== null ? [{ partnerNumber: partnerNumberSearch }] : []),
         { companyName: { contains: q, mode: "insensitive" } },
         { contactName: { contains: q, mode: "insensitive" } },
         { email: { contains: q, mode: "insensitive" } },

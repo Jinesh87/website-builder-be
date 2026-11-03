@@ -262,6 +262,7 @@ export function contactFormLeadEmail(params: {
 
 export function salesInquiryEmail(params: {
   brand?: string;
+  referenceId?: string;
   to: string;
   senderName: string;
   senderEmail: string;
@@ -271,6 +272,7 @@ export function salesInquiryEmail(params: {
   submittedAt?: Date;
 }): RenderedEmail {
   const brandName = params.brand?.trim() || "Bytezora";
+  const referenceId = params.referenceId ? escapeHtml(params.referenceId.trim()) : null;
   const name = escapeHtml(params.senderName.trim());
   const email = escapeHtml(params.senderEmail.trim());
   const recipient = escapeHtml(params.to.trim());
@@ -351,6 +353,14 @@ export function salesInquiryEmail(params: {
                     Client Contact Details
                   </p>
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    ${
+                      referenceId
+                        ? `<tr>
+                            <td style="padding:6px 0;width:120px;color:#64748b;font-size:13px;font-weight:600;">Reference ID:</td>
+                            <td style="padding:6px 0;color:#2563eb;font-size:15px;font-weight:700;font-family:monospace;">${referenceId}</td>
+                          </tr>`
+                        : ""
+                    }
                     <tr>
                       <td style="padding:6px 0;width:120px;color:#64748b;font-size:13px;font-weight:600;">Full name:</td>
                       <td style="padding:6px 0;color:#0f172a;font-size:15px;font-weight:700;">${name}</td>
@@ -464,8 +474,9 @@ India Headquarters: Ground Floor, 287/A, Ernakulam, Kerala - 682315
 Support: Support@bytezoracoders.com | Phone: +91 (999) 50-70483
 `;
 
+  const refTag = referenceId ? ` (${referenceId})` : "";
   return {
-    subject: `[Bytezora Sales] New Inquiry: ${subject} from ${params.senderName}`,
+    subject: `[${brandName} Sales] New Inquiry${refTag}: ${subject} from ${params.senderName}`,
     html,
     text,
   };
@@ -473,6 +484,7 @@ Support: Support@bytezoracoders.com | Phone: +91 (999) 50-70483
 
 export function questionnaireAdminEmail(params: {
   brand: string;
+  referenceId?: string;
   to: string;
   businessName: string;
   senderName: string;
@@ -485,6 +497,7 @@ export function questionnaireAdminEmail(params: {
   submittedAt?: Date;
 }): RenderedEmail {
   const brand = escapeHtml(params.brand);
+  const referenceId = params.referenceId ? escapeHtml(params.referenceId.trim()) : null;
   const businessName = escapeHtml(params.businessName);
   const name = escapeHtml(params.senderName);
   const email = escapeHtml(params.senderEmail);
@@ -503,6 +516,7 @@ export function questionnaireAdminEmail(params: {
     `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">New Website Questionnaire: ${businessName}</h1>
      <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">A new website brief was submitted on ${dateStr} IST.</p>
      <table style="width:100%;margin-bottom:20px;border-collapse:collapse;font-size:14px;">
+       ${referenceId ? `<tr><td style="padding:6px 0;color:#64748b;width:140px;">Reference ID:</td><td style="padding:6px 0;font-weight:700;font-family:monospace;color:#2563eb;">${referenceId}</td></tr>` : ""}
        <tr><td style="padding:6px 0;color:#64748b;width:140px;">Business:</td><td style="padding:6px 0;font-weight:600;color:#0f172a;">${businessName}</td></tr>
        <tr><td style="padding:6px 0;color:#64748b;">Contact Name:</td><td style="padding:6px 0;color:#0f172a;">${name}</td></tr>
        <tr><td style="padding:6px 0;color:#64748b;">Email:</td><td style="padding:6px 0;color:#0f172a;"><a href="mailto:${email}" style="color:#2563eb;">${email}</a></td></tr>
@@ -528,7 +542,7 @@ export function questionnaireAdminEmail(params: {
 
   const text = `New Website Questionnaire: ${params.businessName}
 Submitted: ${dateStr} IST
-
+${params.referenceId ? `Reference ID: ${params.referenceId}\n` : ""}
 Client Details:
 - Business: ${params.businessName}
 - Name:     ${params.senderName}
@@ -540,8 +554,9 @@ ${params.answersSummary}
 
 ${params.filesLink ? `Files Link: ${params.filesLink}\n` : ""}${params.notes ? `Notes:\n${params.notes}\n` : ""}`;
 
+  const refTag = referenceId ? ` (${referenceId})` : "";
   return {
-    subject: `[${params.brand}] New Website Questionnaire: ${params.businessName} (${params.senderName})`,
+    subject: `[${params.brand}] New Website Questionnaire${refTag}: ${params.businessName} (${params.senderName})`,
     html,
     text,
   };
@@ -549,10 +564,12 @@ ${params.filesLink ? `Files Link: ${params.filesLink}\n` : ""}${params.notes ? `
 
 export function questionnaireCustomerConfirmationEmail(params: {
   brand: string;
+  referenceId?: string;
   businessName: string;
   customerName: string;
 }): RenderedEmail {
   const brand = escapeHtml(params.brand);
+  const referenceId = params.referenceId ? escapeHtml(params.referenceId.trim()) : null;
   const businessName = escapeHtml(params.businessName);
   const customerName = escapeHtml(params.customerName);
 
@@ -561,6 +578,14 @@ export function questionnaireCustomerConfirmationEmail(params: {
     `<h1 style="margin:0 0 12px;font-size:20px;color:#1e293b;">We received your questionnaire!</h1>
      <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Hi ${customerName},</p>
      <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">Thank you for submitting the website brief for <strong>${businessName}</strong>. Our team has received your answers and our AI website builder is preparing your initial design.</p>
+     ${
+       referenceId
+         ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin:16px 0;">
+              <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#1e40af;font-weight:600;">Your Reference ID</p>
+              <p style="margin:0;font-size:18px;font-family:monospace;font-weight:bold;color:#2563eb;">${referenceId}</p>
+            </div>`
+         : ""
+     }
      <p style="margin:0 0 16px;line-height:1.5;color:#475569;font-size:14px;">We will review your requirements and reach out to you shortly with next steps.</p>
      <p style="margin:24px 0 0;line-height:1.5;color:#64748b;font-size:13px;">Warm regards,<br/>The ${brand} Team</p>`,
   );
@@ -568,14 +593,15 @@ export function questionnaireCustomerConfirmationEmail(params: {
   const text = `Hi ${params.customerName},
 
 Thank you for submitting the website brief for ${params.businessName}. Our team has received your answers and our AI website builder is preparing your initial design.
-
+${params.referenceId ? `\nYour Reference ID: ${params.referenceId}\n` : ""}
 We will review your requirements and reach out to you shortly with next steps.
 
 Warm regards,
 The ${params.brand} Team`;
 
+  const refTag = referenceId ? ` (${referenceId})` : "";
   return {
-    subject: `We've received your questionnaire for ${params.businessName} - ${params.brand}`,
+    subject: `We've received your questionnaire${refTag} for ${params.businessName} - ${params.brand}`,
     html,
     text,
   };

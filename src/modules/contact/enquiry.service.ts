@@ -36,9 +36,15 @@ function emptyToNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+export function formatEnquiryReferenceId(num: number): string {
+  return `ENQ-${num}`;
+}
+
 function toView(row: EnquiryRow): EnquiryView {
   return {
     id: row.id,
+    enquiryNumber: row.enquiryNumber,
+    referenceId: formatEnquiryReferenceId(row.enquiryNumber),
     name: row.name,
     email: row.email,
     phone: row.phone,
@@ -89,11 +95,23 @@ export class EnquiryService {
 
   async list(query: EnquiryListQuery): Promise<EnquiryListResult> {
     const search = query.search?.trim();
+    let enquiryNumberSearch: number | null = null;
+    if (search) {
+      const match = search.match(/^ENQ-?(\d+)$/i) || search.match(/^(\d+)$/);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          enquiryNumberSearch = parsed;
+        }
+      }
+    }
+
     const where: Prisma.ContactInquiryWhereInput = {
       status: query.status ?? { not: ContactInquiryStatus.SPAM },
       ...(search
         ? {
             OR: [
+              ...(enquiryNumberSearch !== null ? [{ enquiryNumber: enquiryNumberSearch }] : []),
               { name: { contains: search, mode: "insensitive" } },
               { email: { contains: search, mode: "insensitive" } },
               { phone: { contains: search, mode: "insensitive" } },
@@ -233,6 +251,7 @@ export class EnquiryService {
     try {
       await emailService.sendSalesInquiry({
         to,
+        referenceId: formatEnquiryReferenceId(row.enquiryNumber),
         senderName: row.name,
         senderEmail: row.email,
         senderPhone: row.phone ?? undefined,

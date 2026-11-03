@@ -5,10 +5,10 @@ import { partnerApplicationSchema } from "./validators/partner.validator.js";
 import { salesPartnerApplicationNotificationEmail } from "../email/templates/email.templates.js";
 
 test("generateApplicationId creates formatted reference ID", () => {
-  const id1 = generateApplicationId();
-  const id2 = generateApplicationId();
-  assert.match(id1, /^PART-\d{4}-[A-Z0-9]{4}$/);
-  assert.notEqual(id1, id2);
+  const id1 = generateApplicationId(1);
+  const id2 = generateApplicationId(2);
+  assert.equal(id1, "PART-1");
+  assert.equal(id2, "PART-2");
 });
 
 test("generateReferralCode formats alphanumeric code with seed or default prefix", () => {

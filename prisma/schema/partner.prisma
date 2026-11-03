@@ -1,6 +1,7 @@
 /// A partner application and approved partner profile.
 model Partner {
   id                   String        @id @default(uuid()) @db.Uuid
+  partnerNumber        Int           @unique @default(autoincrement())
   applicationId        String        @unique @db.VarChar(32)
 
   // Company details

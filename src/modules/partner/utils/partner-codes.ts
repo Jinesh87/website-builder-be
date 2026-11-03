@@ -11,9 +11,15 @@ export function randomAlphanumeric(length: number): string {
   return result;
 }
 
-export function generateApplicationId(): string {
-  const yearMonth = new Date().toISOString().slice(2, 7).replace("-", ""); // e.g. "2611"
-  return `PART-${yearMonth}-${randomAlphanumeric(4)}`;
+export function formatPartnerApplicationId(partnerNumber: number): string {
+  return `PART-${partnerNumber}`;
+}
+
+export function generateApplicationId(sequenceNumber?: number): string {
+  if (typeof sequenceNumber === "number" && sequenceNumber > 0) {
+    return formatPartnerApplicationId(sequenceNumber);
+  }
+  return formatPartnerApplicationId(1);
 }
 
 export function generateReferralCode(seedName?: string): string {

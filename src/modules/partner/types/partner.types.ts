@@ -33,6 +33,7 @@ export type PartnerApplicationInput = {
 
 export type PartnerSummary = {
   id: string;
+  partnerNumber: number;
   applicationId: string;
   companyName: string;
   contactName: string;
