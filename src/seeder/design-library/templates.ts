@@ -4,6 +4,7 @@ import type {
   TemplatePage,
 } from "../../modules/websites/types/template.types.js";
 import { BUSINESS_TEMPLATES } from "./business/index.js";
+import { ECOMMERCE_TEMPLATES } from "./ecommerce/index.js";
 import { EDUCATION_TEMPLATES } from "./education/index.js";
 import { LANDING_TEMPLATES } from "./landing/index.js";
 import { PORTFOLIO_TEMPLATES } from "./portfolio/index.js";
@@ -24,4 +25,5 @@ export const WEBSITE_TEMPLATE_SEEDS: WebsiteTemplateSeed[] = [
   ...EDUCATION_TEMPLATES.map((edu) => edu.template),
   ...LANDING_TEMPLATES.map((landing) => landing.template),
   ...PORTFOLIO_TEMPLATES.map((portfolio) => portfolio.template),
+  ...ECOMMERCE_TEMPLATES,
 ];

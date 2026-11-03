@@ -9,7 +9,7 @@ import { signShopAccessToken, signShopRefreshToken, verifyShopRefreshToken } fro
 import { env, isProduction } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
-import { Prisma, type ShopCustomer } from "../../../generated/prisma/client.js";
+import { Prisma, type ShopCustomer, type ShopCustomerAddress } from "../../../generated/prisma/client.js";
 import { emailService } from "../../email/services/email.service.js";
 import { clearLoginLockout, getLoginLockStatus, recordFailedLoginAttempt } from "../../auth/utils/login-lockout.js";
 import {
@@ -34,6 +34,8 @@ import type {
   ShopAddToCartInput,
   ShopCartItemSummary,
   ShopCustomerAccountView,
+  ShopCustomerAddressInput,
+  ShopCustomerAddressView,
   ShopAuthResult,
   ShopProfileUpdateInput,
   ShopCustomerView,
@@ -44,6 +46,7 @@ import type {
 import { shopCheckoutService } from "./shop-checkout.service.js";
 
 const dummyPasswordHash = hashPassword(randomUUID());
+const MAX_ADDRESSES = 10;
 
 const INVALID_CREDENTIALS = () => new AppError(401, "Email or password is incorrect.", "INVALID_CREDENTIALS");
 const INVALID_REFRESH = () => new AppError(401, "Your session has expired. Please log in again.", "INVALID_TOKEN");
@@ -58,6 +61,38 @@ function toPublicCustomer(customer: ShopCustomer): ShopCustomerView {
     phone: customer.phone,
     emailVerified: customer.emailVerifiedAt !== null,
     createdAt: customer.createdAt.toISOString(),
+  };
+}
+
+function toAddress(row: ShopCustomerAddress): ShopCustomerAddressView {
+  return {
+    id: row.id,
+    label: row.label,
+    fullName: row.fullName,
+    phone: row.phone,
+    line1: row.line1,
+    line2: row.line2,
+    city: row.city,
+    state: row.state,
+    postalCode: row.postalCode,
+    country: row.country,
+    isDefault: row.isDefault,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function addressData(input: ShopCustomerAddressInput) {
+  return {
+    label: input.label?.trim() || null,
+    fullName: input.fullName.trim(),
+    phone: input.phone.trim(),
+    line1: input.line1.trim(),
+    line2: input.line2?.trim() || null,
+    city: input.city.trim(),
+    state: input.state.trim(),
+    postalCode: input.postalCode.trim(),
+    country: (input.country?.trim() || "IN").toUpperCase(),
+    isDefault: input.isDefault === true,
   };
 }
 
@@ -320,12 +355,110 @@ export class ShopAuthService {
 
   async account(websiteId: string, customerId: string): Promise<ShopCustomerAccountView> {
     const customer = await this.me(websiteId, customerId);
-    const [orders, cartItems, cancelUntilStatus] = await Promise.all([
+    const [orders, cartItems, addresses, cancelUntilStatus] = await Promise.all([
       shopCheckoutService.listCustomerOrders(websiteId, customerId),
       this.listCart(websiteId, customerId),
+      this.listAddresses(websiteId, customerId),
       shopCheckoutService.getCancelUntilStatus(websiteId),
     ]);
-    return { customer, orders, cartItems, cancelUntilStatus };
+    return { customer, orders, cartItems, addresses, cancelUntilStatus };
+  }
+
+  async listAddresses(websiteId: string, customerId: string): Promise<ShopCustomerAddressView[]> {
+    await this.me(websiteId, customerId);
+    const rows = await prisma.shopCustomerAddress.findMany({
+      where: { websiteId, customerId },
+      orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }],
+    });
+    return rows.map(toAddress);
+  }
+
+  async createAddress(
+    websiteId: string,
+    customerId: string,
+    input: ShopCustomerAddressInput,
+  ): Promise<ShopCustomerAddressView[]> {
+    const customer = await prisma.shopCustomer.findFirst({
+      where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
+      select: { id: true, clientId: true },
+    });
+    if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    const count = await prisma.shopCustomerAddress.count({ where: { customerId: customer.id } });
+    if (count >= MAX_ADDRESSES) {
+      throw new AppError(409, `You can save up to ${MAX_ADDRESSES} addresses.`, "ADDRESS_LIMIT");
+    }
+    const data = addressData(input);
+    const makeDefault = data.isDefault || count === 0;
+    await prisma.$transaction(async (tx) => {
+      if (makeDefault) {
+        await tx.shopCustomerAddress.updateMany({
+          where: { customerId: customer.id, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
+      await tx.shopCustomerAddress.create({
+        data: {
+          websiteId,
+          clientId: customer.clientId,
+          customerId: customer.id,
+          ...data,
+          isDefault: makeDefault,
+        },
+      });
+    });
+    return this.listAddresses(websiteId, customerId);
+  }
+
+  async updateAddress(
+    websiteId: string,
+    customerId: string,
+    addressId: string,
+    input: ShopCustomerAddressInput,
+  ): Promise<ShopCustomerAddressView[]> {
+    await this.me(websiteId, customerId);
+    const existing = await prisma.shopCustomerAddress.findFirst({
+      where: { id: addressId, websiteId, customerId },
+      select: { id: true, isDefault: true },
+    });
+    if (!existing) throw new AppError(404, "Address not found", "ADDRESS_NOT_FOUND");
+    const data = addressData(input);
+    const makeDefault = data.isDefault || existing.isDefault;
+    await prisma.$transaction(async (tx) => {
+      if (makeDefault) {
+        await tx.shopCustomerAddress.updateMany({
+          where: { customerId, isDefault: true, id: { not: existing.id } },
+          data: { isDefault: false },
+        });
+      }
+      await tx.shopCustomerAddress.update({
+        where: { id: existing.id },
+        data: { ...data, isDefault: makeDefault },
+      });
+    });
+    return this.listAddresses(websiteId, customerId);
+  }
+
+  async deleteAddress(websiteId: string, customerId: string, addressId: string): Promise<ShopCustomerAddressView[]> {
+    await this.me(websiteId, customerId);
+    const existing = await prisma.shopCustomerAddress.findFirst({
+      where: { id: addressId, websiteId, customerId },
+      select: { id: true, isDefault: true },
+    });
+    if (!existing) throw new AppError(404, "Address not found", "ADDRESS_NOT_FOUND");
+    await prisma.$transaction(async (tx) => {
+      await tx.shopCustomerAddress.delete({ where: { id: existing.id } });
+      if (existing.isDefault) {
+        const next = await tx.shopCustomerAddress.findFirst({
+          where: { customerId },
+          orderBy: { updatedAt: "desc" },
+          select: { id: true },
+        });
+        if (next) {
+          await tx.shopCustomerAddress.update({ where: { id: next.id }, data: { isDefault: true } });
+        }
+      }
+    });
+    return this.listAddresses(websiteId, customerId);
   }
 
   async listCart(websiteId: string, customerId: string): Promise<ShopCartItemSummary[]> {

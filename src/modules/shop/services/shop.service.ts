@@ -75,6 +75,7 @@ function toProduct(product: ProductRow): ShopProductView {
     description: product.description,
     categoryId: product.categoryId,
     categoryName: product.category?.name ?? "",
+    listed: product.listed !== false,
     returnsEnabled: product.returnsEnabled,
     returnDays: product.returnDays,
     optionSets: readOptionSets(product.optionSets),
@@ -393,6 +394,7 @@ export class ShopService {
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
+          listed: input.listed !== false,
           returnsEnabled: input.returnsEnabled !== false,
           returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
@@ -457,6 +459,7 @@ export class ShopService {
           name: input.name.trim(),
           slug,
           description: emptyToNull(input.description),
+          listed: input.listed !== false,
           returnsEnabled: input.returnsEnabled !== false,
           returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
@@ -512,7 +515,7 @@ export class ShopService {
     });
     if (!website?.shopEnabled || !website.client.shopFeatureEnabled) return [];
     const products = await prisma.product.findMany({
-      where: { websiteId },
+      where: { websiteId, listed: true },
       include: productInclude,
       orderBy: { name: "asc" },
       take: MAX_PRODUCTS,

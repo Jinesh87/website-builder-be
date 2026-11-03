@@ -53,6 +53,36 @@ export const shopProfileUpdateSchema = Joi.object({
   .min(1)
   .messages({ "object.min": "Add at least one profile field to update" });
 
+const addressPhone = Joi.string()
+  .trim()
+  .pattern(/^\+?[0-9 ()-]{7,20}$/)
+  .required()
+  .messages({ "string.pattern.base": "Enter a valid phone number" });
+
+export const shopAddressSchema = Joi.object({
+  label: Joi.string().trim().max(40).allow("").optional(),
+  fullName: Joi.string().trim().min(2).max(120).required(),
+  phone: addressPhone,
+  line1: Joi.string().trim().min(3).max(200).required().messages({
+    "string.min": "Enter a street address",
+  }),
+  line2: Joi.string().trim().max(200).allow("").optional(),
+  city: Joi.string().trim().min(2).max(80).required(),
+  state: Joi.string().trim().min(2).max(80).required(),
+  postalCode: Joi.string()
+    .trim()
+    .pattern(/^[A-Za-z0-9][A-Za-z0-9 \-]{2,18}[A-Za-z0-9]$/)
+    .required()
+    .messages({ "string.pattern.base": "Enter a valid PIN / postal code" }),
+  country: Joi.string().trim().uppercase().length(2).default("IN"),
+  isDefault: Joi.boolean().optional(),
+});
+
+export const shopAddressParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+  addressId: Joi.string().guid().required(),
+});
+
 export const shopChangePasswordSchema = Joi.object({
   currentPassword: Joi.string().min(1).max(200).required(),
   newPassword: password.required(),
