@@ -26,6 +26,8 @@ model Product {
   name        String   @db.VarChar(160)
   slug        String   @db.VarChar(160)
   description String?  @db.VarChar(2000)
+  /// When false, the product is hidden from the live shop catalogue.
+  listed         Boolean @default(true)
   /// When false, this product cannot be returned even if the shop allows returns.
   returnsEnabled Boolean @default(true)
   /// Per-product return window in days. Null = use the shop default (shopReturnDays).
