@@ -4,9 +4,11 @@ import { authenticate, authorize } from "../../common/middleware/authenticate.js
 import { validate } from "../../common/middleware/validate.js";
 import { adminPartnerController } from "./controllers/admin-partner.controller.js";
 import {
+  adminAuditLogQuerySchema,
   adminCommissionStatusSchema,
   adminPartnerApproveSchema,
   adminPartnerCommissionUpdateSchema,
+  adminPartnerProgramConfigSchema,
   adminPartnerQuerySchema,
   adminPartnerRejectSchema,
   adminPartnerSuspendSchema,
@@ -17,11 +19,26 @@ const adminPartnerRouter = Router();
 // All admin partner routes require SUPER_ADMIN role
 adminPartnerRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 
+// Global program settings (must precede /:id)
+adminPartnerRouter.get("/config/program", adminPartnerController.getProgramConfig);
+adminPartnerRouter.patch(
+  "/config/program",
+  validate(adminPartnerProgramConfigSchema),
+  adminPartnerController.updateProgramConfig,
+);
+
 // List partners with filters & pagination
 adminPartnerRouter.get(
   "/",
   validate(adminPartnerQuerySchema, "query"),
   adminPartnerController.list,
+);
+
+// List partner activities / audit logs
+adminPartnerRouter.get(
+  "/audit-logs",
+  validate(adminAuditLogQuerySchema, "query"),
+  adminPartnerController.listAuditLogs,
 );
 
 // Get single partner full details

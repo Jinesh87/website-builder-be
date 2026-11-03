@@ -308,7 +308,9 @@ export class AuthService {
     }
 
     const token = await createPasswordResetToken(user.id);
-    const resetLink = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+    const isPartner = user.role === UserRole.PARTNER;
+    const linkPath = isPartner ? "/partner/set-password" : "/reset-password";
+    const resetLink = `${env.FRONTEND_URL}${linkPath}?token=${encodeURIComponent(token)}`;
     try {
       await emailService.sendPasswordReset({
         to: email,

@@ -15,6 +15,7 @@ import {
   submitQuestionnaireSchema,
   updateQuestionnaireSchema,
 } from "./questionnaire.validator.js";
+import { formatQuestionnaireReferenceId } from "./questionnaire.service.js";
 
 const sampleAnswers = {
   businessType: "Restaurant / Café",
@@ -259,5 +260,10 @@ test("questionnaire admin schemas accept valid status transitions and reject emp
       .error,
     undefined,
   );
+});
+
+test("formatQuestionnaireReferenceId creates clean sequential reference ID starting from 1", () => {
+  assert.equal(formatQuestionnaireReferenceId(1), "QST-1");
+  assert.equal(formatQuestionnaireReferenceId(99), "QST-99");
 });
 

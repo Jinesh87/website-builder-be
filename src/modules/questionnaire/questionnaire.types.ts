@@ -84,6 +84,8 @@ export type CreateQuestionnaireInput = {
 
 export type QuestionnaireView = {
   id: string;
+  questionnaireNumber: number;
+  referenceId: string;
   businessName: string;
   name: string;
   phone: string;

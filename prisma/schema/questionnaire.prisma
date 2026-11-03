@@ -1,7 +1,8 @@
 /// A questionnaire submitted by a prospective or existing client for an AI website build.
 model Questionnaire {
-  id           String              @id @default(uuid()) @db.Uuid
-  businessName String              @db.VarChar(160)
+  id                  String              @id @default(uuid()) @db.Uuid
+  questionnaireNumber Int                 @unique @default(autoincrement())
+  businessName        String              @db.VarChar(160)
   name         String              @db.VarChar(120)
   phone        String              @db.VarChar(50)
   email        String              @db.VarChar(255)

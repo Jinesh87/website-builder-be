@@ -8,6 +8,18 @@ function getParam(req: Request, name: string): string {
   return Array.isArray(val) ? val[0] : (val ?? "");
 }
 
+function getActorName(req: Request): string {
+  if (req.body?.actorName && typeof req.body.actorName === "string") {
+    return req.body.actorName.startsWith("Admin") ? req.body.actorName : `Admin (${req.body.actorName})`;
+  }
+  if (req.user?.email) {
+    const name = req.user.email.split("@")[0];
+    const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
+    return `Admin (${capitalized})`;
+  }
+  return "Admin (Priya S.)";
+}
+
 export const adminPartnerController = {
   async list(req: Request, res: Response) {
     const query = {
@@ -20,6 +32,16 @@ export const adminPartnerController = {
     res.json(result);
   },
 
+  async listAuditLogs(req: Request, res: Response) {
+    const query = {
+      search: req.query.search as string | undefined,
+      page: Number(req.query.page) || 1,
+      pageSize: Number(req.query.pageSize) || 25,
+    };
+    const result = await partnerService.listAuditLogs(query);
+    res.json(result);
+  },
+
   async getDetail(req: Request, res: Response) {
     const id = getParam(req, "id");
     const detail = await partnerService.getAdminDetail(id);
@@ -29,9 +51,10 @@ export const adminPartnerController = {
   async approve(req: Request, res: Response) {
     const id = getParam(req, "id");
     const actorId = req.user?.id;
-    const actorName = req.user?.email || "Admin";
+    const actorName = getActorName(req);
     const result = await partnerService.approve(id, {
       commissionRate: Number(req.body.commissionRate) || 15.0,
+      commissionPolicy: req.body.commissionPolicy,
       customReferralCode: req.body.customReferralCode,
       temporaryPassword: req.body.temporaryPassword,
       actorId,
@@ -43,7 +66,7 @@ export const adminPartnerController = {
   async reject(req: Request, res: Response) {
     const id = getParam(req, "id");
     const actorId = req.user?.id;
-    const actorName = req.user?.email || "Admin";
+    const actorName = getActorName(req);
     const result = await partnerService.reject(id, {
       reason: req.body.reason,
       actorId,
@@ -55,7 +78,7 @@ export const adminPartnerController = {
   async suspend(req: Request, res: Response) {
     const id = getParam(req, "id");
     const actorId = req.user?.id;
-    const actorName = req.user?.email || "Admin";
+    const actorName = getActorName(req);
     const result = await partnerService.suspend(id, {
       reason: req.body.reason,
       actorId,
@@ -67,7 +90,7 @@ export const adminPartnerController = {
   async reactivate(req: Request, res: Response) {
     const id = getParam(req, "id");
     const actorId = req.user?.id;
-    const actorName = req.user?.email || "Admin";
+    const actorName = getActorName(req);
     const result = await partnerService.reactivate(id, { actorId, actorName });
     res.json(result);
   },
@@ -75,14 +98,29 @@ export const adminPartnerController = {
   async updateCommission(req: Request, res: Response) {
     const id = getParam(req, "id");
     const actorId = req.user?.id;
-    const actorName = req.user?.email || "Admin";
+    const actorName = getActorName(req);
     const result = await partnerService.updateCommission(id, {
       commissionRate: req.body.commissionRate !== undefined ? Number(req.body.commissionRate) : undefined,
       isCommissionActive: req.body.isCommissionActive,
+      commissionPolicy: req.body.commissionPolicy,
       actorId,
       actorName,
     });
     res.json(result);
+  },
+
+  async getProgramConfig(_req: Request, res: Response) {
+    const config = await partnerService.getProgramConfig();
+    res.json(config);
+  },
+
+  async updateProgramConfig(req: Request, res: Response) {
+    const config = await partnerService.updateProgramConfig({
+      defaultCommissionRate:
+        req.body.defaultCommissionRate !== undefined ? Number(req.body.defaultCommissionRate) : undefined,
+      defaultCommissionPolicy: req.body.defaultCommissionPolicy,
+    });
+    res.json(config);
   },
 
   async listCommissions(req: Request, res: Response) {

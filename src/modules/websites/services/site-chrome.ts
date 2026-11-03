@@ -1,25 +1,29 @@
 import type { FooterData, HeaderData, SectionSettings } from "../types/site-content.types.js";
 
-type ChromeSection = { id?: string; type: string; hidden: boolean; settings: SectionSettings; data: unknown };
-type ChromePage = { slug: string; pageType?: string; sections: readonly ChromeSection[] };
+type ChromeSection = { id?: string; type: string; hidden?: boolean; settings?: SectionSettings; data?: unknown };
+type ChromePage = { slug: string; pageType?: string; sections?: readonly ChromeSection[] };
 
 /** Ids of a page's own header/footer, which replace the site-wide one on that page (hidden = none). */
 const PAGE_CHROME_IDS: Readonly<Record<string, string>> = { header: "page-header", footer: "page-footer" };
 
-export function isChromeSection(section: { type: string }): boolean {
-  return section.type === "header" || section.type === "footer";
+export function isChromeSection(section: unknown): boolean {
+  if (!section || typeof section !== "object" || !("type" in section)) return false;
+  const s = section as { type: unknown };
+  return s.type === "header" || s.type === "footer";
 }
 
 /** A header/footer copied onto a page before they became site-wide; a page's own one is not a copy. */
-function isChromeCopy(section: { id?: string; type: string }): boolean {
-  return isChromeSection(section) && section.id !== PAGE_CHROME_IDS[section.type];
+function isChromeCopy(section: unknown): boolean {
+  if (!section || typeof section !== "object") return false;
+  const s = section as { id?: string; type?: string };
+  return typeof s.type === "string" && isChromeSection(s) && s.id !== PAGE_CHROME_IDS[s.type];
 }
 
 /** Site header/footer data taken from a page's own header/footer section, with its style and visibility. */
 function fromSection<T extends HeaderData | FooterData>(base: T, section: ChromeSection): T {
-  const { settings: _settings, hidden: _hidden, ...data } = (section.data ?? {}) as T;
-  const next = { ...base, ...data, settings: section.settings } as T;
-  if (section.hidden) next.hidden = true;
+  const { settings: _settings, hidden: _hidden, ...data } = (section?.data ?? {}) as T;
+  const next = { ...(base || {}), ...data, settings: section?.settings } as T;
+  if (section?.hidden) next.hidden = true;
   else delete next.hidden;
   return next;
 }
@@ -35,12 +39,25 @@ export function liftSiteChrome<P extends ChromePage>(content: {
   footer: FooterData;
   pages: P[];
 }): { header: HeaderData; footer: FooterData; pages: P[] } {
-  if (!content.pages.some((page) => page.sections.some(isChromeCopy))) return content;
+  if (!content || !Array.isArray(content.pages)) {
+    return {
+      header: (content?.header ?? { design: "logo-left", sticky: true }) as HeaderData,
+      footer: (content?.footer ?? { design: "simple", columns: [], social: [] }) as FooterData,
+      pages: Array.isArray(content?.pages) ? content.pages : [],
+    };
+  }
 
-  const isHome = (page: P) => page.pageType === "HOME" || page.slug === "/";
+  const hasCopies = content.pages.some(
+    (page) => Array.isArray(page?.sections) && page.sections.some(isChromeCopy),
+  );
+  if (!hasCopies) return content;
+
+  const isHome = (page: P) => page?.pageType === "HOME" || page?.slug === "/";
   const ordered = [...content.pages.filter(isHome), ...content.pages.filter((page) => !isHome(page))];
   const find = (type: "header" | "footer") =>
-    ordered.flatMap((page) => page.sections).find((section) => isChromeCopy(section) && section.type === type);
+    ordered
+      .flatMap((page) => (Array.isArray(page?.sections) ? page.sections : []))
+      .find((section) => isChromeCopy(section) && (section as { type?: string }).type === type);
   const headerSection = find("header");
   const footerSection = find("footer");
 
@@ -48,7 +65,7 @@ export function liftSiteChrome<P extends ChromePage>(content: {
     header: headerSection ? fromSection(content.header, headerSection) : content.header,
     footer: footerSection ? fromSection(content.footer, footerSection) : content.footer,
     pages: content.pages.map((page) =>
-      page.sections.some(isChromeCopy)
+      Array.isArray(page?.sections) && page.sections.some(isChromeCopy)
         ? { ...page, sections: page.sections.filter((section) => !isChromeCopy(section)) }
         : page,
     ),

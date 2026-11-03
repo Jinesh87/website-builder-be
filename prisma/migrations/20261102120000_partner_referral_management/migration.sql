@@ -1,23 +1,38 @@
 -- AlterEnum
-ALTER TYPE "UserRole" ADD VALUE 'PARTNER';
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'PARTNER';
 
 -- CreateEnum
-CREATE TYPE "PartnerStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED');
+DO $$ BEGIN
+    CREATE TYPE "PartnerStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "PartnerActivityKind" AS ENUM ('APPLIED', 'STATUS_CHANGED', 'COMMISSION_RATE_UPDATED', 'COMMISSION_ELIGIBILITY_TOGGLED', 'REFERRAL_CODE_UPDATED', 'EMAIL_SENT', 'NOTE');
+DO $$ BEGIN
+    CREATE TYPE "PartnerActivityKind" AS ENUM ('APPLIED', 'STATUS_CHANGED', 'COMMISSION_RATE_UPDATED', 'COMMISSION_ELIGIBILITY_TOGGLED', 'REFERRAL_CODE_UPDATED', 'EMAIL_SENT', 'NOTE');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "PartnerReferralStatus" AS ENUM ('REGISTERED', 'CONVERTED');
+DO $$ BEGIN
+    CREATE TYPE "PartnerReferralStatus" AS ENUM ('REGISTERED', 'CONVERTED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "CommissionStatus" AS ENUM ('PENDING', 'APPROVED', 'PAID', 'CANCELLED');
+DO $$ BEGIN
+    CREATE TYPE "CommissionStatus" AS ENUM ('PENDING', 'APPROVED', 'PAID', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "CommissionSource" AS ENUM ('WALLET_TOPUP', 'HOSTING', 'SHOP_ORDER');
+DO $$ BEGIN
+    CREATE TYPE "CommissionSource" AS ENUM ('WALLET_TOPUP', 'HOSTING', 'SHOP_ORDER');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
-CREATE TABLE "partners" (
+CREATE TABLE IF NOT EXISTS "partners" (
     "id" UUID NOT NULL,
     "applicationId" VARCHAR(32) NOT NULL,
     "companyName" VARCHAR(160) NOT NULL,
@@ -58,7 +73,7 @@ CREATE TABLE "partners" (
 );
 
 -- CreateTable
-CREATE TABLE "partner_activities" (
+CREATE TABLE IF NOT EXISTS "partner_activities" (
     "id" UUID NOT NULL,
     "partnerId" UUID NOT NULL,
     "kind" "PartnerActivityKind" NOT NULL,
@@ -71,7 +86,7 @@ CREATE TABLE "partner_activities" (
 );
 
 -- CreateTable
-CREATE TABLE "partner_referrals" (
+CREATE TABLE IF NOT EXISTS "partner_referrals" (
     "id" UUID NOT NULL,
     "partnerId" UUID NOT NULL,
     "referralCode" VARCHAR(50) NOT NULL,
@@ -88,7 +103,7 @@ CREATE TABLE "partner_referrals" (
 );
 
 -- CreateTable
-CREATE TABLE "partner_commissions" (
+CREATE TABLE IF NOT EXISTS "partner_commissions" (
     "id" UUID NOT NULL,
     "partnerId" UUID NOT NULL,
     "referralId" UUID NOT NULL,
@@ -111,70 +126,91 @@ CREATE TABLE "partner_commissions" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partners_applicationId_key" ON "partners"("applicationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "partners_applicationId_key" ON "partners"("applicationId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partners_email_key" ON "partners"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "partners_email_key" ON "partners"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partners_referralCode_key" ON "partners"("referralCode");
+CREATE UNIQUE INDEX IF NOT EXISTS "partners_referralCode_key" ON "partners"("referralCode");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partners_userId_key" ON "partners"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "partners_userId_key" ON "partners"("userId");
 
 -- CreateIndex
-CREATE INDEX "partners_status_createdAt_idx" ON "partners"("status", "createdAt");
+CREATE INDEX IF NOT EXISTS "partners_status_createdAt_idx" ON "partners"("status", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "partners_referralCode_idx" ON "partners"("referralCode");
+CREATE INDEX IF NOT EXISTS "partners_referralCode_idx" ON "partners"("referralCode");
 
 -- CreateIndex
-CREATE INDEX "partner_activities_partnerId_createdAt_idx" ON "partner_activities"("partnerId", "createdAt");
+CREATE INDEX IF NOT EXISTS "partner_activities_partnerId_createdAt_idx" ON "partner_activities"("partnerId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "partner_referrals_partnerId_status_idx" ON "partner_referrals"("partnerId", "status");
+CREATE INDEX IF NOT EXISTS "partner_referrals_partnerId_status_idx" ON "partner_referrals"("partnerId", "status");
 
 -- CreateIndex
-CREATE INDEX "partner_referrals_referralCode_idx" ON "partner_referrals"("referralCode");
+CREATE INDEX IF NOT EXISTS "partner_referrals_referralCode_idx" ON "partner_referrals"("referralCode");
 
 -- CreateIndex
-CREATE INDEX "partner_referrals_clientId_idx" ON "partner_referrals"("clientId");
+CREATE INDEX IF NOT EXISTS "partner_referrals_clientId_idx" ON "partner_referrals"("clientId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partner_referrals_partnerId_customerEmail_key" ON "partner_referrals"("partnerId", "customerEmail");
+CREATE UNIQUE INDEX IF NOT EXISTS "partner_referrals_partnerId_customerEmail_key" ON "partner_referrals"("partnerId", "customerEmail");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partner_commissions_paymentOrderId_key" ON "partner_commissions"("paymentOrderId");
+CREATE UNIQUE INDEX IF NOT EXISTS "partner_commissions_paymentOrderId_key" ON "partner_commissions"("paymentOrderId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partner_commissions_hostingOrderId_key" ON "partner_commissions"("hostingOrderId");
+CREATE UNIQUE INDEX IF NOT EXISTS "partner_commissions_hostingOrderId_key" ON "partner_commissions"("hostingOrderId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "partner_commissions_shopOrderId_key" ON "partner_commissions"("shopOrderId");
+CREATE UNIQUE INDEX IF NOT EXISTS "partner_commissions_shopOrderId_key" ON "partner_commissions"("shopOrderId");
 
 -- CreateIndex
-CREATE INDEX "partner_commissions_partnerId_status_idx" ON "partner_commissions"("partnerId", "status");
+CREATE INDEX IF NOT EXISTS "partner_commissions_partnerId_status_idx" ON "partner_commissions"("partnerId", "status");
 
 -- CreateIndex
-CREATE INDEX "partner_commissions_createdAt_idx" ON "partner_commissions"("createdAt");
+CREATE INDEX IF NOT EXISTS "partner_commissions_createdAt_idx" ON "partner_commissions"("createdAt");
 
 -- AddForeignKey
-ALTER TABLE "partners" ADD CONSTRAINT "partners_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partners" ADD CONSTRAINT "partners_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "partner_activities" ADD CONSTRAINT "partner_activities_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partner_activities" ADD CONSTRAINT "partner_activities_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "partner_referrals" ADD CONSTRAINT "partner_referrals_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partner_referrals" ADD CONSTRAINT "partner_referrals_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "partner_referrals" ADD CONSTRAINT "partner_referrals_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partner_referrals" ADD CONSTRAINT "partner_referrals_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "partner_referrals" ADD CONSTRAINT "partner_referrals_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partner_referrals" ADD CONSTRAINT "partner_referrals_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_partnerId_fkey" FOREIGN KEY ("partnerId") REFERENCES "partners"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_referralId_fkey" FOREIGN KEY ("referralId") REFERENCES "partner_referrals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "partner_commissions" ADD CONSTRAINT "partner_commissions_referralId_fkey" FOREIGN KEY ("referralId") REFERENCES "partner_referrals"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

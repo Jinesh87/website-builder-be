@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { AppError } from "../../common/errors/AppError.js";
 import { enquiryReplyEmail, salesInquiryEmail } from "../email/templates/email.templates.js";
 import { inquiryEmailFailure } from "./enquiry-email.js";
+import { formatEnquiryReferenceId } from "./enquiry.service.js";
 import {
   addEnquiryNoteSchema,
   contactInquirySchema,
@@ -122,4 +123,9 @@ test("enquiry admin schemas accept the workflow statuses and reject empty update
 
   assert.equal(addEnquiryNoteSchema.validate({ body: "  Called, follow up Monday  " }).value.body, "Called, follow up Monday");
   assert.notEqual(addEnquiryNoteSchema.validate({ body: "   " }).error, undefined);
+});
+
+test("formatEnquiryReferenceId creates clean sequential reference ID starting from 1", () => {
+  assert.equal(formatEnquiryReferenceId(1), "ENQ-1");
+  assert.equal(formatEnquiryReferenceId(25), "ENQ-25");
 });

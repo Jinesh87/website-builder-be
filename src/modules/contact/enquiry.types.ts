@@ -6,6 +6,8 @@ import type {
 
 export type EnquiryView = {
   id: string;
+  enquiryNumber: number;
+  referenceId: string;
   name: string;
   email: string;
   phone: string | null;

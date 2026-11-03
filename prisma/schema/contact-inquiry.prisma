@@ -1,7 +1,8 @@
 /// A message submitted from the public marketing contact form.
 model ContactInquiry {
-  id          String               @id @default(uuid()) @db.Uuid
-  name        String               @db.VarChar(120)
+  id            String               @id @default(uuid()) @db.Uuid
+  enquiryNumber Int                  @unique @default(autoincrement())
+  name          String               @db.VarChar(120)
   email       String               @db.VarChar(255)
   phone       String?              @db.VarChar(50)
   subject     String               @db.VarChar(200)
