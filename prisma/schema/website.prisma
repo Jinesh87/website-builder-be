@@ -63,8 +63,9 @@ model Website {
   products           Product[]
   shopPayment        ShopPaymentConfig?
   inventoryMovements InventoryMovement[]
-  shopCustomers      ShopCustomer[]
-  shopCartItems      ShopCartItem[]
+  shopCustomers           ShopCustomer[]
+  shopCustomerAddresses   ShopCustomerAddress[]
+  shopCartItems           ShopCartItem[]
   shopOrders              ShopOrder[]
   shopOrderEmailDesign    ShopOrderEmailDesign?
   shopOrderEmailTemplates ShopOrderEmailTemplate[]
