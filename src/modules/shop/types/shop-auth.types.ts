@@ -37,6 +37,8 @@ export type ShopOrderSummary = {
   canReturn: boolean;
   /** Inclusive deadline for a customer return, when canReturn is true. */
   returnUntil: string | null;
+  /** True when payment was captured and an invoice can be downloaded. */
+  canDownloadInvoice: boolean;
 };
 
 export type ShopOrderTimelineEventView = {
@@ -76,6 +78,8 @@ export type ShopOrderDetailView = ShopOrderSummary & {
   returnReason: string | null;
   shippingAddress: ShopOrderShippingAddress | null;
   paidAt: string | null;
+  /** True when payment was captured and an invoice can be downloaded. */
+  canDownloadInvoice: boolean;
   updatedAt: string;
 };
 

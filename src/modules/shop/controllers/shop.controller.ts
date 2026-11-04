@@ -2,6 +2,10 @@ import type { NextFunction, Request, Response } from "express";
 import { shopCustomersService, type ShopCustomerQuery } from "../services/shop-customers.service.js";
 import { shopInventoryService } from "../services/shop-inventory.service.js";
 import {
+  shopInvoiceTemplateService,
+  type ShopInvoiceDesignInput,
+} from "../services/shop-invoice-template.service.js";
+import {
   shopOrderEmailsService,
   type ShopOrderEmailDesignInput,
   type ShopOrderEmailTemplateInput,
@@ -255,6 +259,31 @@ export class ShopController {
         template: await shopOrderEmailsService.reset(
           req.params.id,
           req.params.status as ShopOrderEmailStatusLabel,
+          req.user!,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getInvoiceTemplateDesign = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        design: await shopInvoiceTemplateService.getDesign(req.params.id, req.user!),
+        layouts: shopInvoiceTemplateService.layouts(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateInvoiceTemplateDesign = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        design: await shopInvoiceTemplateService.updateDesign(
+          req.params.id,
+          req.body as ShopInvoiceDesignInput,
           req.user!,
         ),
       });

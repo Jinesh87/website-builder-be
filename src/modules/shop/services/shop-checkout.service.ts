@@ -143,7 +143,7 @@ function refundStatusFromRazorpay(status: string | undefined): ShopRefundStatus 
 export function toOrderSummary(
   order: Pick<
     ShopOrder,
-    "id" | "number" | "status" | "refundStatus" | "totalPaise" | "currency" | "createdAt" | "refundedAt"
+    "id" | "number" | "status" | "refundStatus" | "totalPaise" | "currency" | "createdAt" | "refundedAt" | "paidAt"
   >,
   cancelUntilStatus?: ShopOrderStatus | null,
   returns?: { canReturn: boolean; returnUntil: string | null },
@@ -160,6 +160,7 @@ export function toOrderSummary(
     canCancel: canCustomerCancelOrder(order.status, cancelUntilStatus ?? null),
     canReturn: returns?.canReturn ?? false,
     returnUntil: returns?.returnUntil ?? null,
+    canDownloadInvoice: order.paidAt != null,
   };
 }
 
@@ -906,6 +907,7 @@ export class ShopCheckoutService {
       returnReason: order.returnReason,
       shippingAddress: parseShippingAddress(order.shippingAddress),
       paidAt: order.paidAt?.toISOString() ?? null,
+      canDownloadInvoice: order.paidAt != null,
       updatedAt: order.updatedAt.toISOString(),
     };
   }

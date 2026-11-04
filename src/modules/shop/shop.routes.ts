@@ -16,6 +16,7 @@ import {
   shopInventoryLogQuerySchema,
   shopInventoryParamsSchema,
   shopInventoryQuerySchema,
+  shopInvoiceDesignSchema,
   shopInventoryReturnsParamsSchema,
   shopOrderEmailDesignSchema,
   shopOrderEmailParamsSchema,
@@ -164,6 +165,18 @@ shopRouter.post(
   "/order-emails/:status/reset",
   validate(shopOrderEmailParamsSchema, "params"),
   shopController.resetOrderEmailTemplate,
+);
+
+shopRouter.get(
+  "/invoice-template",
+  websiteParams,
+  shopController.getInvoiceTemplateDesign,
+);
+shopRouter.put(
+  "/invoice-template",
+  websiteParams,
+  validate(shopInvoiceDesignSchema),
+  shopController.updateInvoiceTemplateDesign,
 );
 
 shopRouter.get("/payments", websiteParams, shopController.getPaymentConfig);

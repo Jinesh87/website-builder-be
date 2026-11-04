@@ -162,6 +162,12 @@ shopAuthRouter.get(
   authenticateShopCustomer,
   shopAuthController.getOrder,
 );
+shopAuthRouter.get(
+  "/orders/:orderId/invoice",
+  validate(shopOrderParamsSchema, "params"),
+  authenticateShopCustomer,
+  shopAuthController.downloadOrderInvoice,
+);
 shopAuthRouter.post(
   "/orders/:orderId/cancel",
   validate(shopOrderParamsSchema, "params"),
