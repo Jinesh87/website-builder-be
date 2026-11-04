@@ -133,6 +133,50 @@ export type PartnerDetail = PartnerSummary & {
   suspendedAt: string | null;
   userId: string | null;
   inviteLink?: string;
+  accountHolderName?: string | null;
+  bankAccountNumber?: string | null;
+  ifscCode?: string | null;
+  upiId?: string | null;
+  panNumber?: string | null;
+  bankDetails?: {
+    accountHolderName?: string;
+    bankAccountNumber?: string;
+    ifscCode?: string;
+    upiId?: string;
+    panNumber?: string;
+  };
+  stats?: {
+    totalReferrals: number;
+    convertedReferrals: number;
+    totalEarnedPaise: number;
+    approvedCommissionPaise: number;
+    paidCommissionPaise: number;
+    pendingPayoutRequestsPaise: number;
+    availableForWithdrawalPaise: number;
+  };
+  referrals?: {
+    id: string;
+    customerName: string;
+    customerEmail: string;
+    status: PartnerReferralStatus;
+    planName: string;
+    totalSpentPaise: number;
+    paymentAmountPaise: number | null;
+    commissionAmountPaise: number | null;
+    registeredAt: string;
+    convertedAt: string | null;
+  }[];
+  commissions?: {
+    id: string;
+    orderAmountPaise: number;
+    commissionRate: number;
+    commissionAmountPaise: number;
+    status: CommissionStatus;
+    customerName: string;
+    createdAt: string;
+    paidAt: string | null;
+  }[];
+  payoutRequests?: PartnerPayoutRequestView[];
   activities: {
     id: string;
     kind: PartnerActivityKind;
@@ -141,4 +185,50 @@ export type PartnerDetail = PartnerSummary & {
     createdAt: string;
   }[];
 };
+
+export type PartnerPayoutDetailsInput = {
+  accountHolderName?: string | null;
+  bankAccountNumber?: string | null;
+  ifscCode?: string | null;
+  upiId?: string | null;
+  panNumber?: string | null;
+};
+
+export type PartnerPayoutRequestInput = {
+  amountPaise: number;
+  payoutMethod?: "BANK_TRANSFER" | "UPI";
+};
+
+export type AdminResolvePayoutRequestInput = {
+  status: "APPROVED" | "REJECTED";
+  payoutMethod?: "BANK_TRANSFER" | "UPI";
+  transactionReference?: string | null;
+  invoiceNumber?: string | null;
+  adminNotes?: string | null;
+  rejectionReason?: string | null;
+};
+
+export type PartnerPayoutRequestView = {
+  id: string;
+  requestNumber: number;
+  formattedId: string;
+  partnerId: string;
+  partnerName?: string;
+  partnerEmail?: string;
+  amountPaise: number;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  requestedAt: string;
+  processedAt: string | null;
+  payoutMethod: "BANK_TRANSFER" | "UPI";
+  accountHolderName: string | null;
+  bankAccountNumber: string | null;
+  ifscCode: string | null;
+  upiId: string | null;
+  transactionReference: string | null;
+  invoiceNumber: string | null;
+  adminNotes: string | null;
+  rejectionReason: string | null;
+  actorName: string | null;
+};
+
 

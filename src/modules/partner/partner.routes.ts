@@ -3,7 +3,11 @@ import { authenticate } from "../../common/middleware/authenticate.js";
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { partnerController } from "./controllers/partner.controller.js";
-import { partnerApplicationSchema } from "./validators/partner.validator.js";
+import {
+  partnerApplicationSchema,
+  partnerPayoutDetailsSchema,
+  partnerPayoutRequestSchema,
+} from "./validators/partner.validator.js";
 
 const MINUTE = 60;
 const HOUR = 60 * MINUTE;
@@ -23,6 +27,22 @@ partnerRouter.get("/dashboard", authenticate, partnerController.getDashboard);
 
 // Partner protected: Commissions list
 partnerRouter.get("/commissions", authenticate, partnerController.getCommissions);
+
+// Partner protected: Save / update bank & UPI payout details
+partnerRouter.put(
+  "/payout-details",
+  authenticate,
+  validate(partnerPayoutDetailsSchema),
+  partnerController.updatePayoutDetails,
+);
+
+// Partner protected: Submit payout withdrawal request
+partnerRouter.post(
+  "/payout-requests",
+  authenticate,
+  validate(partnerPayoutRequestSchema),
+  partnerController.requestPayout,
+);
 
 export default partnerRouter;
 

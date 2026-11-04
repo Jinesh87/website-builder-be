@@ -93,3 +93,26 @@ export const adminAuditLogQuerySchema = Joi.object({
   pageSize: Joi.number().integer().min(1).max(100).default(25),
 });
 
+export const partnerPayoutDetailsSchema = Joi.object({
+  accountHolderName: Joi.string().trim().max(120).allow("", null).optional(),
+  bankAccountNumber: Joi.string().trim().max(60).allow("", null).optional(),
+  ifscCode: Joi.string().trim().uppercase().max(30).allow("", null).optional(),
+  upiId: Joi.string().trim().max(100).allow("", null).optional(),
+  panNumber: Joi.string().trim().uppercase().max(30).allow("", null).optional(),
+});
+
+export const partnerPayoutRequestSchema = Joi.object({
+  amountPaise: Joi.number().integer().positive().required(),
+  payoutMethod: Joi.string().valid("BANK_TRANSFER", "UPI").optional().default("BANK_TRANSFER"),
+});
+
+export const adminResolvePayoutRequestSchema = Joi.object({
+  status: Joi.string().valid("APPROVED", "REJECTED").required(),
+  payoutMethod: Joi.string().valid("BANK_TRANSFER", "UPI").optional(),
+  transactionReference: Joi.string().trim().max(120).allow("", null).optional(),
+  invoiceNumber: Joi.string().trim().max(60).allow("", null).optional(),
+  adminNotes: Joi.string().trim().max(500).allow("", null).optional(),
+  rejectionReason: Joi.string().trim().max(500).allow("", null).optional(),
+});
+
+

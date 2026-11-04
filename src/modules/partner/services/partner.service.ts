@@ -14,6 +14,8 @@ import {
   PartnerCommissionPolicy,
   PartnerReferralStatus,
   PartnerStatus,
+  PayoutMethod,
+  PayoutRequestStatus,
   Prisma,
   type Partner,
 } from "../../../generated/prisma/client.js";
@@ -24,11 +26,15 @@ import {
   INVITE_TOKEN_TTL_SECONDS,
 } from "../../auth/utils/password-reset.js";
 import type {
+  AdminResolvePayoutRequestInput,
   PartnerApplicationInput,
   PartnerAuditLogItem,
   PartnerAuditLogsResponse,
   PartnerDetail,
   PartnerListResponse,
+  PartnerPayoutDetailsInput,
+  PartnerPayoutRequestInput,
+  PartnerPayoutRequestView,
   PartnerProgramConfigView,
   PartnerSummary,
   UpdatePartnerProgramConfigInput,
@@ -522,10 +528,24 @@ export class PartnerService {
           orderBy: { createdAt: "desc" },
         },
         referrals: {
-          select: { status: true },
+          include: {
+            commissions: {
+              orderBy: { createdAt: "desc" },
+            },
+          },
+          orderBy: { registeredAt: "desc" },
         },
         commissions: {
-          select: { commissionAmountPaise: true },
+          include: {
+            referral: {
+              select: { customerName: true, customerEmail: true },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        },
+        payoutRequests: {
+          orderBy: { requestedAt: "desc" },
+          take: 50,
         },
       },
     });
@@ -535,6 +555,79 @@ export class PartnerService {
     }
 
     const summary = toPartnerSummary(partner);
+
+    const totalEarnedPaise = partner.commissions.reduce((s, c) => s + c.commissionAmountPaise, 0);
+    const approvedCommissionPaise = partner.commissions
+      .filter((c) => c.status === CommissionStatus.APPROVED)
+      .reduce((s, c) => s + c.commissionAmountPaise, 0);
+    const paidCommissionPaise = partner.commissions
+      .filter((c) => c.status === CommissionStatus.PAID)
+      .reduce((s, c) => s + c.commissionAmountPaise, 0);
+    const pendingPayoutRequestsPaise = partner.payoutRequests
+      .filter((pr) => pr.status === PayoutRequestStatus.PENDING)
+      .reduce((s, pr) => s + pr.amountPaise, 0);
+    const availableForWithdrawalPaise = Math.max(0, approvedCommissionPaise - pendingPayoutRequestsPaise);
+
+    const bankDetails = {
+      accountHolderName: partner.accountHolderName ?? "",
+      bankAccountNumber: partner.bankAccountNumber ?? "",
+      ifscCode: partner.ifscCode ?? "",
+      upiId: partner.upiId ?? "",
+      panNumber: partner.panNumber ?? "",
+    };
+
+    const referrals = partner.referrals.map((r) => {
+      const latestComm = r.commissions?.[0];
+      return {
+        id: r.id,
+        customerName: r.customerName,
+        customerEmail: r.customerEmail,
+        status: r.status,
+        planName: r.status === PartnerReferralStatus.CONVERTED || Number(r.totalSpentPaise) > 0 ? "Standard" : "—",
+        totalSpentPaise: Number(r.totalSpentPaise),
+        paymentAmountPaise: latestComm ? latestComm.orderAmountPaise : (Number(r.totalSpentPaise) > 0 ? Number(r.totalSpentPaise) : null),
+        commissionAmountPaise: latestComm ? latestComm.commissionAmountPaise : null,
+        registeredAt: r.registeredAt.toISOString(),
+        convertedAt: r.convertedAt?.toISOString() ?? null,
+      };
+    });
+
+    const commissions = partner.commissions.map((c) => ({
+      id: c.id,
+      orderAmountPaise: c.orderAmountPaise,
+      commissionRate: Number(c.commissionRate),
+      commissionAmountPaise: c.commissionAmountPaise,
+      status: c.status,
+      customerName: c.referral.customerName,
+      createdAt: c.createdAt.toISOString(),
+      paidAt: c.paidAt?.toISOString() ?? null,
+    }));
+
+    const payoutRequests = partner.payoutRequests.map((pr) => ({
+      id: pr.id,
+      requestNumber: pr.requestNumber,
+      formattedId: `PO-2026-${String(pr.requestNumber).padStart(4, "0")}`,
+      partnerId: pr.partnerId,
+      partnerName: partner.companyName,
+      partnerContact: partner.contactName,
+      partnerEmail: partner.email,
+      partnerPhone: partner.phone,
+      partnerReferralCode: partner.referralCode,
+      amountPaise: pr.amountPaise,
+      status: pr.status,
+      requestedAt: pr.requestedAt.toISOString(),
+      processedAt: pr.processedAt?.toISOString() ?? null,
+      payoutMethod: pr.payoutMethod,
+      accountHolderName: pr.accountHolderName,
+      bankAccountNumber: pr.bankAccountNumber,
+      ifscCode: pr.ifscCode,
+      upiId: pr.upiId,
+      transactionReference: pr.transactionReference,
+      invoiceNumber: pr.invoiceNumber,
+      adminNotes: pr.adminNotes,
+      rejectionReason: pr.rejectionReason,
+      actorName: pr.actorName,
+    }));
 
     return {
       ...summary,
@@ -558,6 +651,24 @@ export class PartnerService {
       rejectedAt: partner.rejectedAt?.toISOString() ?? null,
       suspendedAt: partner.suspendedAt?.toISOString() ?? null,
       userId: partner.userId,
+      accountHolderName: partner.accountHolderName ?? null,
+      bankAccountNumber: partner.bankAccountNumber ?? null,
+      ifscCode: partner.ifscCode ?? null,
+      upiId: partner.upiId ?? null,
+      panNumber: partner.panNumber ?? null,
+      bankDetails,
+      stats: {
+        totalReferrals: partner.referrals.length,
+        convertedReferrals: partner.referrals.filter((r) => r.status === PartnerReferralStatus.CONVERTED).length,
+        totalEarnedPaise,
+        approvedCommissionPaise,
+        paidCommissionPaise,
+        pendingPayoutRequestsPaise,
+        availableForWithdrawalPaise,
+      },
+      referrals,
+      commissions,
+      payoutRequests,
       activities: partner.activities.map((a) => ({
         id: a.id,
         kind: a.kind,
@@ -1086,6 +1197,10 @@ export class PartnerService {
             },
           },
         },
+        payoutRequests: {
+          orderBy: { requestedAt: "desc" },
+          take: 50,
+        },
       },
     });
 
@@ -1128,9 +1243,20 @@ export class PartnerService {
           pendingCommissionPaise: 0,
           approvedCommissionPaise: 0,
           paidCommissionPaise: 0,
+          pendingPayoutRequestsPaise: 0,
+          availableForWithdrawalPaise: 0,
+          hasPayoutMethod: false,
+        },
+        bankDetails: {
+          accountHolderName: partner.accountHolderName ?? "",
+          bankAccountNumber: partner.bankAccountNumber ?? "",
+          ifscCode: partner.ifscCode ?? "",
+          upiId: partner.upiId ?? "",
+          panNumber: partner.panNumber ?? "",
         },
         referrals: [],
         commissions: [],
+        payoutRequests: [],
       };
     }
 
@@ -1156,6 +1282,15 @@ export class PartnerService {
       if (c.status === CommissionStatus.PAID)
         paidCommissionPaise += c.commissionAmountPaise;
     }
+
+    const pendingPayoutRequestsPaise = (partner.payoutRequests || [])
+      .filter((pr) => pr.status === PayoutRequestStatus.PENDING)
+      .reduce((sum, pr) => sum + pr.amountPaise, 0);
+
+    const availableForWithdrawalPaise = Math.max(
+      0,
+      approvedCommissionPaise - pendingPayoutRequestsPaise,
+    );
 
     const shareUrl = `${env.FRONTEND_URL}/?ref=${encodeURIComponent(partner.referralCode || "")}`;
 
@@ -1194,6 +1329,18 @@ export class PartnerService {
         pendingCommissionPaise,
         approvedCommissionPaise,
         paidCommissionPaise,
+        pendingPayoutRequestsPaise,
+        availableForWithdrawalPaise,
+        hasPayoutMethod: Boolean(
+          partner.upiId || (partner.bankAccountNumber && partner.ifscCode),
+        ),
+      },
+      bankDetails: {
+        accountHolderName: partner.accountHolderName ?? "",
+        bankAccountNumber: partner.bankAccountNumber ?? "",
+        ifscCode: partner.ifscCode ?? "",
+        upiId: partner.upiId ?? "",
+        panNumber: partner.panNumber ?? "",
       },
       referrals: partner.referrals.map((r) => {
         const latestComm = r.commissions?.[0];
@@ -1206,7 +1353,6 @@ export class PartnerService {
         return {
           id: r.id,
           customerName: r.customerName,
-          // Mask customer email for privacy, e.g. j***@domain.com
           customerEmail: r.customerEmail.replace(/(^.{2})(.*)(@.*$)/, "$1***$3"),
           status: r.status,
           planName: r.status === PartnerReferralStatus.CONVERTED || Number(r.totalSpentPaise) > 0 ? "Business" : "—",
@@ -1230,6 +1376,409 @@ export class PartnerService {
         paidAt: c.paidAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
       })),
+      payoutRequests: (partner.payoutRequests || []).map((pr) => ({
+        id: pr.id,
+        requestNumber: pr.requestNumber,
+        formattedId: `PO-2026-${String(pr.requestNumber).padStart(4, "0")}`,
+        partnerId: pr.partnerId,
+        amountPaise: pr.amountPaise,
+        status: pr.status,
+        requestedAt: pr.requestedAt.toISOString(),
+        processedAt: pr.processedAt?.toISOString() ?? null,
+        payoutMethod: pr.payoutMethod,
+        accountHolderName: pr.accountHolderName,
+        bankAccountNumber: pr.bankAccountNumber,
+        ifscCode: pr.ifscCode,
+        upiId: pr.upiId,
+        transactionReference: pr.transactionReference,
+        invoiceNumber: pr.invoiceNumber,
+        adminNotes: pr.adminNotes,
+        rejectionReason: pr.rejectionReason,
+        actorName: pr.actorName,
+      })),
+    };
+  }
+
+  /**
+   * Partner: Save or update bank / UPI payout details
+   */
+  async updatePartnerPayoutDetails(
+    userIdOrPartnerId: string,
+    input: PartnerPayoutDetailsInput,
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: userIdOrPartnerId },
+      select: { id: true, email: true },
+    });
+
+    const partner = await prisma.partner.findFirst({
+      where: {
+        OR: [
+          { id: userIdOrPartnerId },
+          { userId: userIdOrPartnerId },
+          ...(user?.email
+            ? [{ email: { equals: user.email, mode: "insensitive" as const } }]
+            : []),
+        ],
+      },
+    });
+
+    if (!partner) {
+      throw new AppError(404, "Partner not found", "PARTNER_NOT_FOUND");
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.partner.update({
+        where: { id: partner.id },
+        data: {
+          accountHolderName: input.accountHolderName?.trim() || null,
+          bankAccountNumber: input.bankAccountNumber?.trim() || null,
+          ifscCode: input.ifscCode?.trim().toUpperCase() || null,
+          upiId: input.upiId?.trim() || null,
+          panNumber: input.panNumber?.trim().toUpperCase() || null,
+        },
+      });
+
+      await tx.partnerActivity.create({
+        data: {
+          partnerId: partner.id,
+          kind: PartnerActivityKind.BANK_DETAILS_UPDATED,
+          body: `Bank & payout details updated${row.upiId ? ` (UPI: ${row.upiId})` : ""}${
+            row.bankAccountNumber ? ` (Bank: ****${row.bankAccountNumber.slice(-4)})` : ""
+          }.`,
+        },
+      });
+
+      return row;
+    });
+
+    return {
+      accountHolderName: updated.accountHolderName,
+      bankAccountNumber: updated.bankAccountNumber,
+      ifscCode: updated.ifscCode,
+      upiId: updated.upiId,
+      panNumber: updated.panNumber,
+    };
+  }
+
+  /**
+   * Partner: Request a commission withdrawal (Full or custom amount)
+   */
+  async requestPayout(
+    userIdOrPartnerId: string,
+    input: PartnerPayoutRequestInput,
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: userIdOrPartnerId },
+      select: { id: true, email: true },
+    });
+
+    const partner = await prisma.partner.findFirst({
+      where: {
+        OR: [
+          { id: userIdOrPartnerId },
+          { userId: userIdOrPartnerId },
+          ...(user?.email
+            ? [{ email: { equals: user.email, mode: "insensitive" as const } }]
+            : []),
+        ],
+      },
+      include: {
+        commissions: {
+          where: { status: CommissionStatus.APPROVED },
+          select: { commissionAmountPaise: true },
+        },
+        payoutRequests: {
+          where: { status: PayoutRequestStatus.PENDING },
+          select: { amountPaise: true },
+        },
+      },
+    });
+
+    if (!partner) {
+      throw new AppError(404, "Partner not found", "PARTNER_NOT_FOUND");
+    }
+
+    if (partner.status !== PartnerStatus.APPROVED) {
+      throw new AppError(400, "Partner account must be active to request payout", "PARTNER_NOT_ACTIVE");
+    }
+
+    const hasUpi = Boolean(partner.upiId?.trim());
+    const hasBank = Boolean(partner.bankAccountNumber?.trim() && partner.ifscCode?.trim());
+    if (!hasUpi && !hasBank) {
+      throw new AppError(
+        400,
+        "Please provide your Bank Account or UPI ID in your Profile before requesting a payout",
+        "PAYOUT_DETAILS_REQUIRED",
+      );
+    }
+
+    const preferredMethod: PayoutMethod = input.payoutMethod === "UPI" && hasUpi
+      ? PayoutMethod.UPI
+      : hasBank
+        ? PayoutMethod.BANK_TRANSFER
+        : PayoutMethod.UPI;
+
+    const approvedTotal = partner.commissions.reduce((s, c) => s + c.commissionAmountPaise, 0);
+    const pendingRequestsTotal = partner.payoutRequests.reduce((s, pr) => s + pr.amountPaise, 0);
+    const availablePaise = Math.max(0, approvedTotal - pendingRequestsTotal);
+
+    if (input.amountPaise <= 0) {
+      throw new AppError(400, "Withdrawal amount must be greater than zero", "INVALID_AMOUNT");
+    }
+
+    if (input.amountPaise > availablePaise) {
+      throw new AppError(
+        400,
+        `Withdrawal amount (₹${(input.amountPaise / 100).toFixed(2)}) exceeds available approved balance (₹${(availablePaise / 100).toFixed(2)})`,
+        "INSUFFICIENT_BALANCE",
+      );
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.partnerPayoutRequest.create({
+        data: {
+          partnerId: partner.id,
+          amountPaise: input.amountPaise,
+          payoutMethod: preferredMethod,
+          accountHolderName: partner.accountHolderName,
+          bankAccountNumber: partner.bankAccountNumber,
+          ifscCode: partner.ifscCode,
+          upiId: partner.upiId,
+          status: PayoutRequestStatus.PENDING,
+        },
+      });
+
+      await tx.partnerActivity.create({
+        data: {
+          partnerId: partner.id,
+          kind: PartnerActivityKind.PAYOUT_REQUESTED,
+          body: `Payout request submitted: ₹${(input.amountPaise / 100).toFixed(2)} via ${preferredMethod === PayoutMethod.UPI ? "UPI" : "Bank Transfer"} (Req #PO-2026-${String(row.requestNumber).padStart(4, "0")}).`,
+        },
+      });
+
+      return row;
+    });
+
+    return {
+      id: created.id,
+      requestNumber: created.requestNumber,
+      formattedId: `PO-2026-${String(created.requestNumber).padStart(4, "0")}`,
+      amountPaise: created.amountPaise,
+      status: created.status,
+      requestedAt: created.requestedAt.toISOString(),
+      payoutMethod: created.payoutMethod,
+    };
+  }
+
+  /**
+   * Admin: List all payout requests with status filter & pagination
+   */
+  async adminListPayoutRequests(query: {
+    status?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = Math.max(1, query.page || 1);
+    const pageSize = Math.min(100, Math.max(1, query.pageSize || 25));
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.PartnerPayoutRequestWhereInput = {};
+
+    if (query.status && query.status !== "ALL") {
+      where.status = query.status as PayoutRequestStatus;
+    }
+
+    if (query.search?.trim()) {
+      const q = query.search.trim();
+      where.OR = [
+        { partner: { companyName: { contains: q, mode: "insensitive" } } },
+        { partner: { contactName: { contains: q, mode: "insensitive" } } },
+        { partner: { email: { contains: q, mode: "insensitive" } } },
+        { transactionReference: { contains: q, mode: "insensitive" } },
+        { invoiceNumber: { contains: q, mode: "insensitive" } },
+        { upiId: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    const [items, total, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+      prisma.partnerPayoutRequest.findMany({
+        where,
+        orderBy: { requestedAt: "desc" },
+        skip,
+        take: pageSize,
+        include: {
+          partner: {
+            select: {
+              id: true,
+              companyName: true,
+              contactName: true,
+              email: true,
+              phone: true,
+              referralCode: true,
+            },
+          },
+        },
+      }),
+      prisma.partnerPayoutRequest.count({ where }),
+      prisma.partnerPayoutRequest.count({ where: { status: PayoutRequestStatus.PENDING } }),
+      prisma.partnerPayoutRequest.count({ where: { status: PayoutRequestStatus.APPROVED } }),
+      prisma.partnerPayoutRequest.count({ where: { status: PayoutRequestStatus.REJECTED } }),
+    ]);
+
+    return {
+      items: items.map((pr) => ({
+        id: pr.id,
+        requestNumber: pr.requestNumber,
+        formattedId: `PO-2026-${String(pr.requestNumber).padStart(4, "0")}`,
+        partnerId: pr.partnerId,
+        partnerName: pr.partner.companyName,
+        partnerContact: pr.partner.contactName,
+        partnerEmail: pr.partner.email,
+        partnerPhone: pr.partner.phone,
+        partnerReferralCode: pr.partner.referralCode,
+        amountPaise: pr.amountPaise,
+        status: pr.status,
+        requestedAt: pr.requestedAt.toISOString(),
+        processedAt: pr.processedAt?.toISOString() ?? null,
+        payoutMethod: pr.payoutMethod,
+        accountHolderName: pr.accountHolderName,
+        bankAccountNumber: pr.bankAccountNumber,
+        ifscCode: pr.ifscCode,
+        upiId: pr.upiId,
+        transactionReference: pr.transactionReference,
+        invoiceNumber: pr.invoiceNumber,
+        adminNotes: pr.adminNotes,
+        rejectionReason: pr.rejectionReason,
+        actorName: pr.actorName,
+      })),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize) || 1,
+      counts: {
+        ALL: pendingCount + approvedCount + rejectedCount,
+        PENDING: pendingCount,
+        APPROVED: approvedCount,
+        REJECTED: rejectedCount,
+      },
+    };
+  }
+
+  /**
+   * Admin: Approve or Reject a payout request
+   */
+  async adminResolvePayoutRequest(
+    requestId: string,
+    input: AdminResolvePayoutRequestInput,
+    actor?: { id: string; name: string },
+  ) {
+    const existing = await prisma.partnerPayoutRequest.findUnique({
+      where: { id: requestId },
+      include: { partner: true },
+    });
+
+    if (!existing) {
+      throw new AppError(404, "Payout request not found", "NOT_FOUND");
+    }
+
+    if (existing.status !== PayoutRequestStatus.PENDING) {
+      throw new AppError(400, `Payout request is already ${existing.status}`, "ALREADY_RESOLVED");
+    }
+
+    const resolved = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      if (input.status === "REJECTED") {
+        const row = await tx.partnerPayoutRequest.update({
+          where: { id: requestId },
+          data: {
+            status: PayoutRequestStatus.REJECTED,
+            processedAt: now,
+            rejectionReason: input.rejectionReason?.trim() || "Rejected by admin",
+            actorId: actor?.id || null,
+            actorName: actor?.name || "Admin",
+          },
+        });
+
+        await tx.partnerActivity.create({
+          data: {
+            partnerId: existing.partnerId,
+            kind: PartnerActivityKind.PAYOUT_REJECTED,
+            body: `Payout request #PO-2026-${String(existing.requestNumber).padStart(4, "0")} (₹${(existing.amountPaise / 100).toFixed(2)}) was rejected. Reason: ${input.rejectionReason || "None"}.`,
+            actorId: actor?.id || null,
+            actorName: actor?.name || "Admin",
+          },
+        });
+
+        return row;
+      }
+
+      // APPROVED flow
+      const invoiceNumber = input.invoiceNumber?.trim() || `INV-PO-2026-${String(existing.requestNumber).padStart(4, "0")}`;
+      const transactionReference = input.transactionReference?.trim() || "MANUAL_BANK_TRANSFER";
+      const payoutMethod = (input.payoutMethod as PayoutMethod) || existing.payoutMethod;
+
+      const row = await tx.partnerPayoutRequest.update({
+        where: { id: requestId },
+        data: {
+          status: PayoutRequestStatus.APPROVED,
+          processedAt: now,
+          payoutMethod,
+          transactionReference,
+          invoiceNumber,
+          adminNotes: input.adminNotes?.trim() || null,
+          actorId: actor?.id || null,
+          actorName: actor?.name || "Admin",
+        },
+      });
+
+      // Mark oldest approved commissions up to amountPaise as PAID
+      const approvedCommissions = await tx.partnerCommission.findMany({
+        where: {
+          partnerId: existing.partnerId,
+          status: CommissionStatus.APPROVED,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      let remainingToMark = existing.amountPaise;
+      for (const comm of approvedCommissions) {
+        if (remainingToMark <= 0) break;
+        await tx.partnerCommission.update({
+          where: { id: comm.id },
+          data: {
+            status: CommissionStatus.PAID,
+            paidAt: now,
+            paymentReference: transactionReference,
+          },
+        });
+        remainingToMark -= comm.commissionAmountPaise;
+      }
+
+      await tx.partnerActivity.create({
+        data: {
+          partnerId: existing.partnerId,
+          kind: PartnerActivityKind.PAYOUT_APPROVED,
+          body: `Payout approved & settled: ₹${(existing.amountPaise / 100).toFixed(2)} via ${payoutMethod === PayoutMethod.UPI ? "UPI" : "Bank Transfer"} (Ref: ${transactionReference}, Invoice: ${invoiceNumber}).`,
+          actorId: actor?.id || null,
+          actorName: actor?.name || "Admin",
+        },
+      });
+
+      return row;
+    });
+
+    return {
+      id: resolved.id,
+      requestNumber: resolved.requestNumber,
+      formattedId: `PO-2026-${String(resolved.requestNumber).padStart(4, "0")}`,
+      amountPaise: resolved.amountPaise,
+      status: resolved.status,
+      processedAt: resolved.processedAt?.toISOString() ?? null,
+      transactionReference: resolved.transactionReference,
+      invoiceNumber: resolved.invoiceNumber,
     };
   }
 

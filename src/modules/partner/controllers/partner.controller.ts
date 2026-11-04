@@ -43,5 +43,31 @@ export const partnerController = {
     );
     res.json(result);
   },
+
+  /**
+   * Partner: Update Bank / UPI payout details
+   */
+  async updatePayoutDetails(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ message: "Authentication required" });
+      return;
+    }
+    const result = await partnerService.updatePartnerPayoutDetails(userId, req.body);
+    res.json(result);
+  },
+
+  /**
+   * Partner: Request commission withdrawal
+   */
+  async requestPayout(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ message: "Authentication required" });
+      return;
+    }
+    const result = await partnerService.requestPayout(userId, req.body);
+    res.status(201).json(result);
+  },
 };
 
