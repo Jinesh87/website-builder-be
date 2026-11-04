@@ -8,6 +8,7 @@ import { prisma } from "../../../config/prisma.js";
 import {
   Prisma,
   WebsiteOfflineReason,
+  WebsiteVersionSource,
   type SavedSection,
   type WebsiteGeneration,
   type WebsiteTemplate,
@@ -1014,11 +1015,25 @@ export class WebsiteService {
             websiteId: website.id,
             version: versionNumber,
             status: PublishStatus.SUCCEEDED,
+            source: WebsiteVersionSource.MANUAL,
             snapshot: snapshot as unknown as Prisma.InputJsonValue,
             publishedById: actor.id,
             completedAt: now,
           },
         });
+        // Keep an immediate system backup at first publish, so restore history starts on day one.
+        if (!previousVersion) {
+          await tx.websiteVersion.create({
+            data: {
+              websiteId: website.id,
+              version: versionNumber + 1,
+              status: PublishStatus.SUCCEEDED,
+              source: WebsiteVersionSource.BACKUP,
+              snapshot: snapshot as unknown as Prisma.InputJsonValue,
+              completedAt: now,
+            },
+          });
+        }
         const claimed = await tx.website.updateMany({
           where: { id: website.id, draftUpdatedAt: website.draftUpdatedAt },
           data: { liveVersionId: version.id, publishedAt: now, status: WebsiteStatus.PUBLISHED, offlineReason: null },
@@ -1070,6 +1085,7 @@ export class WebsiteService {
         id: true,
         version: true,
         status: true,
+        source: true,
         createdAt: true,
         completedAt: true,
         publishedBy: { select: { fullName: true } },
@@ -1079,11 +1095,35 @@ export class WebsiteService {
       id: version.id,
       version: version.version,
       status: version.status,
+      source: version.source,
       isLive: version.id === website.liveVersionId,
       publishedByName: version.publishedBy?.fullName ?? null,
       createdAt: version.createdAt.toISOString(),
       completedAt: version.completedAt?.toISOString() ?? null,
     }));
+  }
+
+  /** Points the live website back to an existing successful version snapshot. */
+  async restoreVersion(id: string, versionId: string, actor: AuthUser): Promise<WebsiteDetail> {
+    const website = await prisma.website.findFirst({
+      where: { id, ...scopeFor(actor) },
+      include: detailInclude,
+    });
+    if (!website) throw NOT_FOUND();
+    const version = await prisma.websiteVersion.findFirst({
+      where: { id: versionId, websiteId: website.id, status: PublishStatus.SUCCEEDED },
+      select: { id: true },
+    });
+    if (!version) throw new AppError(404, "Version not found for this website.", "VERSION_NOT_FOUND");
+
+    await prisma.website.update({
+      where: { id: website.id },
+      data: { liveVersionId: version.id, publishedAt: new Date(), status: WebsiteStatus.PUBLISHED, offlineReason: null },
+    });
+    logger.info({ websiteId: website.id, versionId: version.id, actorId: actor.id }, "Website restored to version");
+    const hostnames = (website.domains || []).map((d) => d.hostname);
+    await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
+    return this.get(id, actor);
   }
 
   private async findAccessibleOrThrow(id: string, actor: AuthUser): Promise<{ id: string; clientId: string }> {

@@ -166,6 +166,7 @@ export type WebsiteVersionView = {
   id: string;
   version: number;
   status: "PENDING" | "SUCCEEDED" | "FAILED";
+  source: "MANUAL" | "BACKUP";
   isLive: boolean;
   publishedByName: string | null;
   createdAt: string;

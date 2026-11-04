@@ -52,6 +52,11 @@ enum PublishStatus {
   FAILED
 }
 
+enum WebsiteVersionSource {
+  MANUAL
+  BACKUP
+}
+
 enum DomainStatus {
   PENDING_DNS
   ACTIVE

@@ -66,9 +66,11 @@ model Website {
   shopCustomers           ShopCustomer[]
   shopCustomerAddresses   ShopCustomerAddress[]
   shopCartItems           ShopCartItem[]
+  shopWishlistItems       ShopWishlistItem[]
   shopOrders              ShopOrder[]
   shopOrderEmailDesign    ShopOrderEmailDesign?
   shopOrderEmailTemplates ShopOrderEmailTemplate[]
+  shopInvoiceDesign       ShopInvoiceDesign?
 
   /// Target for (websiteId, clientId) foreign keys, which guarantee child rows
   /// can never point at a website owned by a different client.

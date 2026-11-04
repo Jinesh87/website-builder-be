@@ -163,6 +163,11 @@ export const pageContentParamsSchema = Joi.object({
   pageId: Joi.string().guid().required(),
 });
 
+export const websiteVersionParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  versionId: Joi.string().guid().required(),
+});
+
 /** Current editor document format; bump with a migration when the stored shape changes. */
 export const EDITOR_SCHEMA_VERSION = 1;
 

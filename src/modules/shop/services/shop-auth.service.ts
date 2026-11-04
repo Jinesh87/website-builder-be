@@ -33,6 +33,7 @@ import { mediaUrl } from "../../media/services/media.service.js";
 import type {
   ShopAddToCartInput,
   ShopCartItemSummary,
+  ShopWishlistItemSummary,
   ShopCustomerAccountView,
   ShopCustomerAddressInput,
   ShopCustomerAddressView,
@@ -355,13 +356,14 @@ export class ShopAuthService {
 
   async account(websiteId: string, customerId: string): Promise<ShopCustomerAccountView> {
     const customer = await this.me(websiteId, customerId);
-    const [orders, cartItems, addresses, cancelUntilStatus] = await Promise.all([
+    const [orders, cartItems, wishlistItems, addresses, cancelUntilStatus] = await Promise.all([
       shopCheckoutService.listCustomerOrders(websiteId, customerId),
       this.listCart(websiteId, customerId),
+      this.listWishlist(websiteId, customerId),
       this.listAddresses(websiteId, customerId),
       shopCheckoutService.getCancelUntilStatus(websiteId),
     ]);
-    return { customer, orders, cartItems, addresses, cancelUntilStatus };
+    return { customer, orders, cartItems, wishlistItems, addresses, cancelUntilStatus };
   }
 
   async listAddresses(websiteId: string, customerId: string): Promise<ShopCustomerAddressView[]> {
@@ -472,6 +474,59 @@ export class ShopAuthService {
       },
     });
     return rows.map((row) => toCartItemSummary(row));
+  }
+
+  async listWishlist(websiteId: string, customerId: string): Promise<ShopWishlistItemSummary[]> {
+    await this.me(websiteId, customerId);
+    const rows = await prisma.shopWishlistItem.findMany({
+      where: { websiteId, customerId, product: { listed: true } },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        product: {
+          include: {
+            category: { select: { name: true } },
+          },
+        },
+        variant: { select: { id: true, name: true, pricePaise: true, images: true } },
+      },
+    });
+    return rows.map((row) => toWishlistItemSummary(row));
+  }
+
+  async addToWishlist(websiteId: string, customerId: string, variantId: string): Promise<ShopWishlistItemSummary[]> {
+    const customer = await prisma.shopCustomer.findFirst({
+      where: { id: customerId, websiteId, status: UserStatus.ACTIVE },
+      select: { id: true, clientId: true },
+    });
+    if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
+    const variant = await prisma.productVariant.findFirst({
+      where: { id: variantId, product: { websiteId, listed: true } },
+      select: { id: true, productId: true },
+    });
+    if (!variant) throw new AppError(404, "That variant is no longer available.", "VARIANT_NOT_FOUND");
+    await prisma.shopWishlistItem.upsert({
+      where: { customerId_variantId: { customerId: customer.id, variantId: variant.id } },
+      update: {},
+      create: {
+        websiteId,
+        clientId: customer.clientId,
+        customerId: customer.id,
+        productId: variant.productId,
+        variantId: variant.id,
+      },
+    });
+    return this.listWishlist(websiteId, customerId);
+  }
+
+  async removeFromWishlist(websiteId: string, customerId: string, variantId: string): Promise<ShopWishlistItemSummary[]> {
+    await this.me(websiteId, customerId);
+    const row = await prisma.shopWishlistItem.findFirst({
+      where: { websiteId, customerId, variantId },
+      select: { id: true },
+    });
+    if (!row) throw new AppError(404, "That wishlist item was not found.", "WISHLIST_ITEM_NOT_FOUND");
+    await prisma.shopWishlistItem.delete({ where: { id: row.id } });
+    return this.listWishlist(websiteId, customerId);
   }
 
   /** Adds a variant to the shopper's cart, or bumps quantity when that line already exists. */
@@ -704,6 +759,21 @@ type CartRow = {
   variant: { id: string; name: string; pricePaise: number; quantity: number; images: Prisma.JsonValue };
 };
 
+type WishlistRow = {
+  id: string;
+  updatedAt: Date;
+  productId: string;
+  variantId: string;
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    images: Prisma.JsonValue;
+    category: { name: string } | null;
+  };
+  variant: { id: string; name: string; pricePaise: number; images: Prisma.JsonValue };
+};
+
 function firstImageUrl(images: Prisma.JsonValue): string | undefined {
   if (!Array.isArray(images) || images.length === 0) return undefined;
   const first = images[0];
@@ -722,6 +792,23 @@ function toCartItemSummary(row: CartRow): ShopCartItemSummary {
     quantity: row.quantity,
     pricePaise: row.variant.pricePaise,
     imageUrl: firstImageUrl(row.variant.images) ?? firstImageUrl(row.product.images),
+  };
+}
+
+function toWishlistItemSummary(row: WishlistRow): ShopWishlistItemSummary {
+  return {
+    id: row.id,
+    productId: row.productId,
+    variantId: row.variantId,
+    productName: row.product.name,
+    variantName: row.variant.name,
+    productSlug: row.product.slug,
+    categoryName: row.product.category?.name ?? "",
+    pricePaise: row.variant.pricePaise,
+    imageUrl:
+      firstImageUrl(row.product.images) ??
+      firstImageUrl(row.variant.images),
+    addedAt: row.updatedAt.toISOString(),
   };
 }
 

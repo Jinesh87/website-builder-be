@@ -16,6 +16,7 @@ import {
   paymentsQuerySchema,
   planChoiceSchema,
   subscriptionsQuerySchema,
+  updateClientBackupPolicySchema,
   updatePackageSchema,
   updatePlanSchema,
   updateSettingsSchema,
@@ -121,3 +122,9 @@ adminHostingRouter.get(
 );
 adminHostingRouter.get("/clients", validate(clientsOverviewQuerySchema, "query"), hostingController.clients);
 adminHostingRouter.get("/clients/:clientId", byClient, hostingController.clientHosting);
+adminHostingRouter.patch(
+  "/clients/:clientId/backup-policy",
+  byClient,
+  validate(updateClientBackupPolicySchema),
+  hostingController.updateClientBackupPolicy,
+);

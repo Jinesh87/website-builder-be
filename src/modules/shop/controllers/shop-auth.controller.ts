@@ -2,7 +2,9 @@ import type { NextFunction, Request, Response } from "express";
 import { clearShopAuthCookies, getShopRefreshToken, setShopAuthCookies } from "../../../common/utils/cookies.js";
 import { shopAuthService } from "../services/shop-auth.service.js";
 import { shopCheckoutService } from "../services/shop-checkout.service.js";
+import { shopInvoiceService } from "../services/shop-invoice.service.js";
 import type { ShopAuthResult } from "../types/shop-auth.types.js";
+import { htmlToPdf } from "../utils/html-to-pdf.js";
 
 type WebsiteParams = { websiteId: string };
 
@@ -177,6 +179,44 @@ export class ShopAuthController {
     }
   };
 
+  listWishlist = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        wishlistItems: await shopAuthService.listWishlist(req.params.websiteId, req.shopCustomer!.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addToWishlist = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        wishlistItems: await shopAuthService.addToWishlist(req.params.websiteId, req.shopCustomer!.id, req.body.variantId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  removeFromWishlist = async (
+    req: Request<WebsiteParams & { variantId: string }>,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      res.status(200).json({
+        wishlistItems: await shopAuthService.removeFromWishlist(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          req.params.variantId,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   addToCart = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.status(200).json({
@@ -241,6 +281,29 @@ export class ShopAuthController {
       res.status(200).json({
         order: await shopCheckoutService.getCustomerOrder(req.params.websiteId, req.shopCustomer!.id, req.params.orderId),
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  downloadOrderInvoice = async (req: Request<WebsiteParams & { orderId: string }>, res: Response, next: NextFunction) => {
+    try {
+      const invoice = await shopInvoiceService.renderCustomerInvoice(
+        req.params.websiteId,
+        req.shopCustomer!.id,
+        req.params.orderId,
+      );
+      const asPdf = String(req.query.format ?? "").toLowerCase() === "pdf";
+      if (asPdf) {
+        const pdf = await htmlToPdf(invoice.html);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${invoice.filename}"`);
+        res.status(200).send(pdf);
+        return;
+      }
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Content-Disposition", `inline; filename="${invoice.filename.replace(/\.pdf$/i, ".html")}"`);
+      res.status(200).send(invoice.html);
     } catch (error) {
       next(error);
     }
