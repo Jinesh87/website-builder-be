@@ -144,4 +144,30 @@ export const adminPartnerController = {
     });
     res.json(result);
   },
+
+  async listPayoutRequests(req: Request, res: Response) {
+    const status = req.query.status as string | undefined;
+    const search = req.query.search as string | undefined;
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 25;
+    const result = await partnerService.adminListPayoutRequests({
+      status,
+      search,
+      page,
+      pageSize,
+    });
+    res.json(result);
+  },
+
+  async resolvePayoutRequest(req: Request, res: Response) {
+    const requestId = getParam(req, "requestId");
+    const actorId = req.user?.id;
+    const actorName = req.user?.email || "Admin";
+    const result = await partnerService.adminResolvePayoutRequest(
+      requestId,
+      req.body,
+      actorId ? { id: actorId, name: actorName } : undefined,
+    );
+    res.json(result);
+  },
 };
