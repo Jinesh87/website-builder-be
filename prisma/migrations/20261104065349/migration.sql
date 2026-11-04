@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "shop_invoice_designs" ALTER COLUMN "updatedAt" DROP DEFAULT;
+ALTER TABLE IF EXISTS "shop_invoice_designs" ALTER COLUMN "updatedAt" DROP DEFAULT;

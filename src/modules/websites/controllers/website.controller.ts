@@ -16,6 +16,7 @@ import type { TemplateListQuery, WebsiteListQuery } from "../types/website.types
 
 
 type IdParams = { id: string };
+type VersionParams = { id: string; versionId: string };
 type TemplateParams = { templateId: string };
 type TemplateKeyParams = { key: string };
 type SavedSectionParams = { id: string; savedSectionId: string };
@@ -220,6 +221,14 @@ export class WebsiteController {
   listVersions = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ versions: await websiteService.listVersions(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  restoreVersion = async (req: Request<VersionParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ website: await websiteService.restoreVersion(req.params.id, req.params.versionId, req.user!) });
     } catch (error) {
       next(error);
     }

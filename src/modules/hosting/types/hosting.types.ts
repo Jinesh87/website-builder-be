@@ -21,6 +21,8 @@ export type HostingPackageView = {
   description: string;
   features: string[];
   featured: boolean;
+  /** Automatic backup cadence in days for websites on this package. Null = disabled. */
+  websiteBackupDays: number | null;
   /** Priced per website: the website's own price, else `defaultPrices`. */
   isCustom: boolean;
   prices: CyclePrices;
@@ -190,6 +192,8 @@ export type UpdatePackageInput = {
   /** Custom package only: the default price; 0 = none. Omitted = unchanged. */
   defaultQuarterlyPaise?: number;
   defaultYearlyPaise?: number;
+  /** Automatic backup cadence in days for websites on this package. Null = disabled. */
+  websiteBackupDays?: number | null;
   featured: boolean;
   active: boolean;
 };
@@ -228,7 +232,15 @@ export type ClientOwnerView = {
 export type PaidTotals = { payments: number; amountPaise: number; collectedPaise: number };
 
 export type ClientHostingView = {
-  client: { id: string; businessName: string; source: ClientSource; createdAt: string; owner: ClientOwnerView | null };
+  client: {
+    id: string;
+    businessName: string;
+    source: ClientSource;
+    createdAt: string;
+    owner: ClientOwnerView | null;
+    /** Null means package-level settings apply for this company. */
+    websiteBackupDaysOverride: number | null;
+  };
   balance: number;
   websites: Array<{
     id: string;
@@ -275,6 +287,11 @@ export type ClientOverviewList = {
   total: number;
   page: number;
   pageSize: number;
+};
+
+export type UpdateClientBackupPolicyInput = {
+  /** Null = use package-level automatic backup cadence. */
+  websiteBackupDaysOverride: number | null;
 };
 
 export type SubscriptionListQuery = {

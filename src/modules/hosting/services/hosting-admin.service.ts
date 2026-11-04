@@ -24,6 +24,7 @@ import type {
   HostingSettingsView,
   PaymentListQuery,
   SubscriptionListQuery,
+  UpdateClientBackupPolicyInput,
   UpdateHostingSettingsInput,
   UpdatePackageInput,
 } from "../types/hosting.types.js";
@@ -204,8 +205,9 @@ export class HostingAdminService {
           defaultYearlyPaise: input.defaultYearlyPaise ?? before.defaultYearlyPaise,
         }
       : { quarterlyPricePaise: input.quarterlyPricePaise, yearlyPricePaise: input.yearlyPricePaise };
+    const websiteBackupDays = input.websiteBackupDays === undefined ? before.websiteBackupDays : input.websiteBackupDays;
     const features = [...new Set(input.features.map((feature) => feature.trim()).filter(Boolean))];
-    const after = { ...before, ...prices, active: input.active };
+    const after = { ...before, ...prices, active: input.active, websiteBackupDays };
 
     await prisma.$transaction(async (tx) => {
       if (input.featured) {
@@ -213,7 +215,15 @@ export class HostingAdminService {
       }
       await tx.hostingPackage.update({
         where: { id: packageId },
-        data: { name: input.name.trim(), description: input.description.trim(), features, featured: input.featured, active: input.active, ...prices },
+        data: {
+          name: input.name.trim(),
+          description: input.description.trim(),
+          features,
+          featured: input.featured,
+          active: input.active,
+          websiteBackupDays,
+          ...prices,
+        },
       });
       const others = await tx.hostingPackage.findMany({ where: { id: { not: packageId } } });
       const config = await tx.hostingConfig.findUnique({ where: { id: CONFIG_ID } });
@@ -234,6 +244,18 @@ export class HostingAdminService {
     });
     logger.info({ actorId: actor.id, packageId, active: input.active }, "Hosting package updated");
     return this.settings();
+  }
+
+  async updateClientBackupPolicy(clientId: string, input: UpdateClientBackupPolicyInput, actor: AuthUser): Promise<ClientHostingView> {
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { websiteBackupDaysOverride: input.websiteBackupDaysOverride },
+    });
+    logger.info(
+      { actorId: actor.id, clientId, websiteBackupDaysOverride: input.websiteBackupDaysOverride },
+      "Client website backup policy updated",
+    );
+    return this.clientHosting(clientId);
   }
 
   /** Gives every published site without a plan a free period, so turning billing on takes nothing offline. */
@@ -410,6 +432,7 @@ export class HostingAdminService {
         id: true,
         businessName: true,
         source: true,
+        websiteBackupDaysOverride: true,
         createdAt: true,
         users: ownerSelect,
         wallet: { select: { balance: true } },
@@ -454,6 +477,7 @@ export class HostingAdminService {
         source: client.source,
         createdAt: client.createdAt.toISOString(),
         owner: client.users[0] ?? null,
+        websiteBackupDaysOverride: client.websiteBackupDaysOverride ?? null,
       },
       balance: Number(client.wallet?.balance ?? 0),
       websites: client.websites.map((website) => ({
