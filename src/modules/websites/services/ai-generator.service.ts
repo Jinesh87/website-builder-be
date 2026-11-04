@@ -1199,7 +1199,7 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
      "showOrders": true, "showCart": true, "showProfile": true, "showPassword": true,
      "ordersLabel": "Orders", "cartLabel": "Cart", "profileLabel": "Profile", "passwordLabel": "Password", "logoutLabel": "Log out", "saveLabel": "Save changes",
      "emptyOrdersText": "You haven't placed any orders yet.", "emptyCartText": "Your cart is empty.",
-     "loginHref": "/login", "shopHref": "/shop", "redirectWhenLoggedOut": false,
+     "loginHref": "/login", "logoutRedirectHref": "/login", "shopHref": "/shop", "redirectWhenLoggedOut": false,
      "guestHeading": "Sign in to see your account", "guestText": "...", "guestButtonLabel": "Log in"
    }
    Visitors who aren't signed in see the guest prompt (or are sent to loginHref when redirectWhenLoggedOut is true).
