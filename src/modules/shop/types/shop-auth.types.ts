@@ -123,6 +123,19 @@ export type ShopCartItemSummary = {
   imageUrl?: string;
 };
 
+export type ShopWishlistItemSummary = {
+  id: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  variantName: string;
+  productSlug: string;
+  categoryName: string;
+  pricePaise: number;
+  imageUrl?: string;
+  addedAt: string;
+};
+
 export type ShopAddToCartInput = {
   variantId: string;
   quantity?: number;
@@ -164,6 +177,7 @@ export type ShopCustomerAccountView = {
   customer: ShopCustomerView;
   orders: ShopOrderSummary[];
   cartItems: ShopCartItemSummary[];
+  wishlistItems: ShopWishlistItemSummary[];
   addresses: ShopCustomerAddressView[];
   /** Inclusive status ceiling for cancels on this shop. Null = cancels disabled. */
   cancelUntilStatus: ShopCancelUntilStatusLabel | null;

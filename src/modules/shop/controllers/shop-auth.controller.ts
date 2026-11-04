@@ -179,6 +179,44 @@ export class ShopAuthController {
     }
   };
 
+  listWishlist = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        wishlistItems: await shopAuthService.listWishlist(req.params.websiteId, req.shopCustomer!.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addToWishlist = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        wishlistItems: await shopAuthService.addToWishlist(req.params.websiteId, req.shopCustomer!.id, req.body.variantId),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  removeFromWishlist = async (
+    req: Request<WebsiteParams & { variantId: string }>,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      res.status(200).json({
+        wishlistItems: await shopAuthService.removeFromWishlist(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          req.params.variantId,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   addToCart = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.status(200).json({
