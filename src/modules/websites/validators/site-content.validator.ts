@@ -1599,6 +1599,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     emptyOrdersText: optionalText(200),
     emptyCartText: optionalText(200),
     loginHref: Joi.string().trim().max(200).pattern(SAFE_HREF).allow("").optional().description("Page with the login section, such as /login"),
+    logoutRedirectHref: Joi.string().trim().max(200).pattern(SAFE_HREF).allow("").optional().description("Page to open after logging out, such as /login"),
     shopHref: Joi.string().trim().max(200).pattern(SAFE_HREF).allow("").optional().description("Page that lists the products, such as /shop"),
     redirectWhenLoggedOut: Joi.boolean().optional(),
     guestHeading: optionalText(160),

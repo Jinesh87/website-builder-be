@@ -224,6 +224,8 @@ export type AccountData = {
   emptyCartText?: string;
   /** Page that holds the login section, such as "/login". */
   loginHref?: string;
+  /** Where the customer lands after logging out; defaults to loginHref when left empty. */
+  logoutRedirectHref?: string;
   /** Page that lists the products, linked from empty states. */
   shopHref?: string;
   /** Sends logged-out visitors straight to the login page instead of showing the prompt. */
