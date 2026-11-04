@@ -41,6 +41,13 @@ model Partner {
   isCommissionActive   Boolean                 @default(true)
   commissionPolicy     PartnerCommissionPolicy @default(GLOBAL_DEFAULT)
 
+  // Payout bank / UPI details
+  accountHolderName    String?                 @db.VarChar(120)
+  bankAccountNumber    String?                 @db.VarChar(60)
+  ifscCode             String?                 @db.VarChar(30)
+  upiId                String?                 @db.VarChar(100)
+  panNumber            String?                 @db.VarChar(30)
+
   // Linked user account for logging into the partner dashboard
   userId               String?       @unique @db.Uuid
   user                 User?         @relation("PartnerUser", fields: [userId], references: [id], onDelete: SetNull)
@@ -56,6 +63,7 @@ model Partner {
   referrals            PartnerReferral[]
   commissions          PartnerCommission[]
   activities           PartnerActivity[]
+  payoutRequests       PartnerPayoutRequest[]
 
   @@index([status, createdAt])
   @@index([referralCode])
@@ -156,6 +164,56 @@ enum PartnerActivityKind {
   REFERRAL_CODE_UPDATED
   EMAIL_SENT
   NOTE
+  PAYOUT_REQUESTED
+  PAYOUT_APPROVED
+  PAYOUT_REJECTED
+  BANK_DETAILS_UPDATED
+}
+
+enum PayoutRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayoutMethod {
+  BANK_TRANSFER
+  UPI
+}
+
+/// A payout request submitted by a partner to withdraw their approved commission
+model PartnerPayoutRequest {
+  id                   String              @id @default(uuid()) @db.Uuid
+  requestNumber        Int                 @unique @default(autoincrement())
+  partnerId            String              @db.Uuid
+  amountPaise          Int
+  status               PayoutRequestStatus @default(PENDING)
+  requestedAt          DateTime            @default(now()) @db.Timestamptz(6)
+  processedAt          DateTime?           @db.Timestamptz(6)
+
+  // Payout destination snapshot
+  payoutMethod         PayoutMethod        @default(BANK_TRANSFER)
+  accountHolderName    String?             @db.VarChar(120)
+  bankAccountNumber    String?             @db.VarChar(60)
+  ifscCode             String?             @db.VarChar(30)
+  upiId                String?             @db.VarChar(100)
+
+  // Settlement details entered by admin upon approval
+  transactionReference String?             @db.VarChar(120)
+  invoiceNumber        String?             @db.VarChar(60)
+  adminNotes           String?             @db.VarChar(500)
+  rejectionReason      String?             @db.VarChar(500)
+  actorId              String?             @db.Uuid
+  actorName            String?             @db.VarChar(120)
+
+  createdAt            DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @db.Timestamptz(6)
+
+  partner              Partner             @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, status])
+  @@index([status, createdAt])
+  @@map("partner_payout_requests")
 }
 
 enum PartnerCommissionPolicy {
