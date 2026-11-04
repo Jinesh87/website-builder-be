@@ -12,6 +12,7 @@ import {
   adminPartnerQuerySchema,
   adminPartnerRejectSchema,
   adminPartnerSuspendSchema,
+  adminResolvePayoutRequestSchema,
 } from "./validators/partner.validator.js";
 
 const adminPartnerRouter = Router();
@@ -25,6 +26,14 @@ adminPartnerRouter.patch(
   "/config/program",
   validate(adminPartnerProgramConfigSchema),
   adminPartnerController.updateProgramConfig,
+);
+
+// List payout requests across all partners (must precede /:id)
+adminPartnerRouter.get("/payout-requests", adminPartnerController.listPayoutRequests);
+adminPartnerRouter.patch(
+  "/payout-requests/:requestId",
+  validate(adminResolvePayoutRequestSchema),
+  adminPartnerController.resolvePayoutRequest,
 );
 
 // List partners with filters & pagination

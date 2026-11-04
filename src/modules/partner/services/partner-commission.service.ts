@@ -121,7 +121,7 @@ export class PartnerCommissionService {
             orderAmountPaise: input.amountPaise,
             commissionRate: partner.commissionRate,
             commissionAmountPaise,
-            status: CommissionStatus.PENDING,
+            status: CommissionStatus.APPROVED,
           },
         });
 
