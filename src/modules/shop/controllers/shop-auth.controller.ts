@@ -215,7 +215,11 @@ export class ShopAuthController {
   startCheckout = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.status(200).json({
-        checkout: await shopCheckoutService.startCheckout(req.params.websiteId, req.shopCustomer!.id),
+        checkout: await shopCheckoutService.startCheckout(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          (req.body ?? {}) as { addressId?: string },
+        ),
       });
     } catch (error) {
       next(error);
