@@ -10,6 +10,8 @@ model Client {
   shopFeatureEnabled Boolean      @default(false)
   /// AI model chosen by the client; null = use the platform default from AiConfig.
   aiModel            String?      @db.VarChar(100)
+  /// Overrides plan-level automatic website backup cadence in days. Null = use package setting.
+  websiteBackupDaysOverride Int?
   /// Platform-owned workspace (the Template Studio): hidden from client lists, never billed or published.
   isInternal         Boolean      @default(false)
   createdAt          DateTime     @default(now()) @db.Timestamptz(6)

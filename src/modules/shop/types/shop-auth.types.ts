@@ -37,6 +37,8 @@ export type ShopOrderSummary = {
   canReturn: boolean;
   /** Inclusive deadline for a customer return, when canReturn is true. */
   returnUntil: string | null;
+  /** True when payment was captured and an invoice can be downloaded. */
+  canDownloadInvoice: boolean;
 };
 
 export type ShopOrderTimelineEventView = {
@@ -76,6 +78,8 @@ export type ShopOrderDetailView = ShopOrderSummary & {
   returnReason: string | null;
   shippingAddress: ShopOrderShippingAddress | null;
   paidAt: string | null;
+  /** True when payment was captured and an invoice can be downloaded. */
+  canDownloadInvoice: boolean;
   updatedAt: string;
 };
 
@@ -119,6 +123,19 @@ export type ShopCartItemSummary = {
   imageUrl?: string;
 };
 
+export type ShopWishlistItemSummary = {
+  id: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  variantName: string;
+  productSlug: string;
+  categoryName: string;
+  pricePaise: number;
+  imageUrl?: string;
+  addedAt: string;
+};
+
 export type ShopAddToCartInput = {
   variantId: string;
   quantity?: number;
@@ -160,6 +177,7 @@ export type ShopCustomerAccountView = {
   customer: ShopCustomerView;
   orders: ShopOrderSummary[];
   cartItems: ShopCartItemSummary[];
+  wishlistItems: ShopWishlistItemSummary[];
   addresses: ShopCustomerAddressView[];
   /** Inclusive status ceiling for cancels on this shop. Null = cancels disabled. */
   cancelUntilStatus: ShopCancelUntilStatusLabel | null;

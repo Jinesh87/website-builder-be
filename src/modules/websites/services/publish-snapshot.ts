@@ -55,7 +55,11 @@ export function buildPublishSnapshot(
           seoTitle: page.seoTitle,
           seoDescription: page.seoDescription,
           seoKeywords: page.seoKeywords,
-          sections: page.sections.filter((section: Section) => !section.hidden),
+          // Hidden page-level header/footer still carry page chrome intent ("none" on this page),
+          // so keep those markers in snapshots while dropping other hidden content sections.
+          sections: page.sections.filter(
+            (section: Section) => !section.hidden || section.type === "header" || section.type === "footer",
+          ),
         };
         const before = previousPages.get(page.id);
         const kept = before && pageContentKey(before) === pageContentKey(next) ? (before.lastModified ?? previousPublishedAt) : undefined;

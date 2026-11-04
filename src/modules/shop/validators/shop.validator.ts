@@ -226,3 +226,9 @@ export const shopOrderEmailDesignSchema = Joi.object({
   showLogo: Joi.boolean().required(),
   logoMediaId: Joi.string().guid().allow(null).optional(),
 });
+
+export const shopInvoiceDesignSchema = Joi.object({
+  layout: Joi.string().valid("classic", "minimal", "bold", "modern").required(),
+  showLogo: Joi.boolean().required(),
+  logoMediaId: Joi.string().guid().allow(null).optional(),
+});

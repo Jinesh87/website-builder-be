@@ -5,6 +5,7 @@ import { shopAuthController } from "./controllers/shop-auth.controller.js";
 import { authenticateShopCustomer } from "./middleware/authenticate-shop-customer.js";
 import {
   shopAddToCartSchema,
+  shopAddToWishlistSchema,
   shopAddressParamsSchema,
   shopAddressSchema,
   shopAuthWebsiteParamsSchema,
@@ -16,6 +17,7 @@ import {
   shopCheckoutStartSchema,
   shopEmailOnlySchema,
   shopOrderParamsSchema,
+  shopProductParamsSchema,
   shopLoginSchema,
   shopProfileUpdateSchema,
   shopResetPasswordSchema,
@@ -140,6 +142,22 @@ shopAuthRouter.delete(
   shopAuthController.removeCartItem,
 );
 
+shopAuthRouter.get("/wishlist", websiteParams, authenticateShopCustomer, shopAuthController.listWishlist);
+shopAuthRouter.post(
+  "/wishlist",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-wishlist-write", max: 60, windowSeconds: MINUTE }),
+  validate(shopAddToWishlistSchema),
+  shopAuthController.addToWishlist,
+);
+shopAuthRouter.delete(
+  "/wishlist/:variantId",
+  validate(shopProductParamsSchema, "params"),
+  authenticateShopCustomer,
+  shopAuthController.removeFromWishlist,
+);
+
 shopAuthRouter.post(
   "/checkout",
   websiteParams,
@@ -161,6 +179,12 @@ shopAuthRouter.get(
   validate(shopOrderParamsSchema, "params"),
   authenticateShopCustomer,
   shopAuthController.getOrder,
+);
+shopAuthRouter.get(
+  "/orders/:orderId/invoice",
+  validate(shopOrderParamsSchema, "params"),
+  authenticateShopCustomer,
+  shopAuthController.downloadOrderInvoice,
 );
 shopAuthRouter.post(
   "/orders/:orderId/cancel",

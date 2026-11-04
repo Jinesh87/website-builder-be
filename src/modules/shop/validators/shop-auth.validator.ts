@@ -102,6 +102,15 @@ export const shopCartItemParamsSchema = Joi.object({
   itemId: Joi.string().guid().required(),
 });
 
+export const shopProductParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+  variantId: Joi.string().guid().required(),
+});
+
+export const shopAddToWishlistSchema = Joi.object({
+  variantId: Joi.string().guid().required(),
+});
+
 const razorpayId = Joi.string().trim().max(64).pattern(/^[A-Za-z0-9_]+$/).required();
 
 export const shopCheckoutStartSchema = Joi.object({

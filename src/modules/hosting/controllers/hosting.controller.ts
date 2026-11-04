@@ -151,6 +151,14 @@ export class HostingController {
     }
   };
 
+  updateClientBackupPolicy = async (req: Request<ClientParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ hosting: await hostingAdminService.updateClientBackupPolicy(req.params.clientId, req.body, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   subscriptions = async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json(await hostingAdminService.listSubscriptions(req.query as unknown as SubscriptionListQuery));
