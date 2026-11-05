@@ -476,7 +476,7 @@ Support: Support@bytezoracoders.com | Phone: +91 (999) 50-70483
 
   const refTag = referenceId ? ` (${referenceId})` : "";
   return {
-    subject: `[${brandName} Sales] New Inquiry${refTag}: ${subject} from ${params.senderName}`,
+    subject: `${brandName} Sales: New Inquiry${refTag} - ${subject} from ${params.senderName}`,
     html,
     text,
   };
@@ -556,7 +556,7 @@ ${params.filesLink ? `Files Link: ${params.filesLink}\n` : ""}${params.notes ? `
 
   const refTag = referenceId ? ` (${referenceId})` : "";
   return {
-    subject: `[${params.brand}] New Website Questionnaire${refTag}: ${params.businessName} (${params.senderName})`,
+    subject: `${params.brand}: New Website Questionnaire${refTag} - ${params.businessName} (${params.senderName})`,
     html,
     text,
   };
@@ -643,7 +643,7 @@ Warm regards,
 The ${params.brand} Partnerships Team`;
 
   return {
-    subject: `[${params.brand}] Partner Application Received: ${params.applicationId}`,
+    subject: `${params.brand}: Partner Application Received - ${params.applicationId}`,
     html,
     text,
   };
@@ -744,7 +744,7 @@ Warm regards,
 The ${params.brand} Partnerships Team`;
 
   return {
-    subject: `[${params.brand}] Approved! Welcome to the Partner Program - Code: ${params.referralCode}`,
+    subject: `${params.brand}: Approved! Welcome to the Partner Program - Code: ${params.referralCode}`,
     html,
     text,
   };
@@ -783,7 +783,7 @@ Warm regards,
 The ${params.brand} Partnerships Team`;
 
   return {
-    subject: `[${params.brand}] Update Regarding Your Partner Application`,
+    subject: `${params.brand}: Update Regarding Your Partner Application`,
     html,
     text,
   };
@@ -824,7 +824,7 @@ Warm regards,
 The ${params.brand} Partnerships Team`;
 
   return {
-    subject: `[${params.brand}] Partner Account Suspended`,
+    subject: `${params.brand}: Partner Account Suspended`,
     html,
     text,
   };
@@ -1071,7 +1071,7 @@ ${params.reason}
 Manage this submission in Admin Dashboard -> Partner Management.`;
 
   return {
-    subject: `[${brand} Sales] New Partner Application: ${params.companyName} (${params.applicationId})`,
+    subject: `${brand} Sales: New Partner Application - ${params.companyName} (${params.applicationId})`,
     html,
     text,
   };
