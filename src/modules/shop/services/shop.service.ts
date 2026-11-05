@@ -7,6 +7,7 @@ import { mediaUrl } from "../../media/services/media.service.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { purgeShopPages } from "./shop-cache.js";
+import { effectiveGst, payableUnitPaise } from "../utils/shop-gst.js";
 import { effectiveReturnDays } from "../utils/shop-order-return.js";
 import type {
   PublicShopProduct,
@@ -76,6 +77,8 @@ function toProduct(product: ProductRow): ShopProductView {
     categoryId: product.categoryId,
     categoryName: product.category?.name ?? "",
     listed: product.listed !== false,
+    gstPercent: product.gstPercent ?? null,
+    priceIncludesGst: product.priceIncludesGst ?? null,
     returnsEnabled: product.returnsEnabled,
     returnDays: product.returnDays,
     optionSets: readOptionSets(product.optionSets),
@@ -127,15 +130,19 @@ function sharedValueImages(optionSets: ShopOptionSetView[], variantName: string)
   return [];
 }
 
-function toPublicProduct(product: ProductRow, shopReturnDays: number | null): PublicShopProduct {
+function toPublicProduct(
+  product: ProductRow,
+  shop: { shopReturnDays: number | null; shopGstPercent: number; shopPriceIncludesGst: boolean },
+): PublicShopProduct {
   const optionSets = readOptionSets(product.optionSets);
+  const gst = effectiveGst(product, shop);
   const variants: PublicShopVariant[] = product.variants.map((variant) => {
     const own = readImages(variant.images);
     const images = own.length > 0 ? own : sharedValueImages(optionSets, variant.name);
     return {
     id: variant.id,
     name: variant.name,
-    pricePaise: variant.pricePaise,
+    pricePaise: payableUnitPaise(variant.pricePaise, gst),
     quantity: variant.quantity,
     images: images.map(({ url, alt }) => ({ url, alt })),
     options: optionValues(optionSets, variant.name),
@@ -147,7 +154,9 @@ function toPublicProduct(product: ProductRow, shopReturnDays: number | null): Pu
     slug: product.slug,
     description: product.description,
     categoryName: product.category?.name ?? "",
-    returnDays: effectiveReturnDays(shopReturnDays, product),
+    gstPercent: gst.gstPercent,
+    priceIncludesGst: gst.priceIncludesGst,
+    returnDays: effectiveReturnDays(shop.shopReturnDays, product),
     images: readImages(product.images).map(({ url, alt }) => ({ url, alt })),
     variants,
   };
@@ -395,6 +404,8 @@ export class ShopService {
           slug,
           description: emptyToNull(input.description),
           listed: input.listed !== false,
+          gstPercent: input.gstPercent ?? null,
+          priceIncludesGst: input.priceIncludesGst ?? null,
           returnsEnabled: input.returnsEnabled !== false,
           returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
@@ -460,6 +471,8 @@ export class ShopService {
           slug,
           description: emptyToNull(input.description),
           listed: input.listed !== false,
+          gstPercent: input.gstPercent ?? null,
+          priceIncludesGst: input.priceIncludesGst ?? null,
           returnsEnabled: input.returnsEnabled !== false,
           returnDays: input.returnDays ?? null,
           optionSets: expanded.stored as Prisma.InputJsonValue,
@@ -510,6 +523,8 @@ export class ShopService {
       select: {
         shopEnabled: true,
         shopReturnDays: true,
+        shopGstPercent: true,
+        shopPriceIncludesGst: true,
         client: { select: { shopFeatureEnabled: true } },
       },
     });
@@ -520,7 +535,12 @@ export class ShopService {
       orderBy: { name: "asc" },
       take: MAX_PRODUCTS,
     });
-    return products.map((product) => toPublicProduct(product, website.shopReturnDays));
+    const shop = {
+      shopReturnDays: website.shopReturnDays,
+      shopGstPercent: website.shopGstPercent ?? 0,
+      shopPriceIncludesGst: website.shopPriceIncludesGst !== false,
+    };
+    return products.map((product) => toPublicProduct(product, shop));
   }
 
   private async resolveImages(clientId: string, images: ShopImageInput[]): Promise<{ mediaId: string; alt: string }[]> {

@@ -181,6 +181,8 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
             : null,
     shopReturnDays: website.shopReturnDays ?? null,
     shopReturnGuidelines: readReturnGuidelines(website.shopReturnGuidelines),
+    shopGstPercent: website.shopGstPercent ?? 0,
+    shopPriceIncludesGst: website.shopPriceIncludesGst !== false,
     publishedAt: publishedAt?.toISOString() ?? null,
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
@@ -196,6 +198,7 @@ function toInfo(website: WebsiteWithPages): WebsiteInfo {
     contactEmail: website.contactEmail ?? null,
     contactPhone: website.contactPhone ?? null,
     address: website.address ?? null,
+    gstin: website.gstin ?? null,
   };
 }
 
@@ -829,6 +832,12 @@ export class WebsiteService {
         .filter(Boolean)
         .slice(0, 12);
     }
+    if (input.shopGstPercent !== undefined) {
+      data.shopGstPercent = input.shopGstPercent;
+    }
+    if (input.shopPriceIncludesGst !== undefined) {
+      data.shopPriceIncludesGst = input.shopPriceIncludesGst;
+    }
     const infoKeys = [
       "businessName",
       "websiteType",
@@ -837,6 +846,7 @@ export class WebsiteService {
       "contactEmail",
       "contactPhone",
       "address",
+      "gstin",
     ] as const;
     for (const key of infoKeys) {
       if (input[key] !== undefined) data[key] = emptyToNull(input[key]);

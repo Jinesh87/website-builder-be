@@ -30,6 +30,7 @@ import {
   type PendingShopSignup,
 } from "../utils/shop-pending-signup.js";
 import { mediaUrl } from "../../media/services/media.service.js";
+import { effectiveGst, payableUnitPaise } from "../utils/shop-gst.js";
 import type {
   ShopAddToCartInput,
   ShopCartItemSummary,
@@ -469,7 +470,16 @@ export class ShopAuthService {
       where: { websiteId, customerId },
       orderBy: { updatedAt: "desc" },
       include: {
-        product: { select: { id: true, name: true, images: true } },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            images: true,
+            gstPercent: true,
+            priceIncludesGst: true,
+            website: { select: { shopGstPercent: true, shopPriceIncludesGst: true } },
+          },
+        },
         variant: { select: { id: true, name: true, pricePaise: true, quantity: true, images: true } },
       },
     });
@@ -483,8 +493,15 @@ export class ShopAuthService {
       orderBy: { updatedAt: "desc" },
       include: {
         product: {
-          include: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            images: true,
+            gstPercent: true,
+            priceIncludesGst: true,
             category: { select: { name: true } },
+            website: { select: { shopGstPercent: true, shopPriceIncludesGst: true } },
           },
         },
         variant: { select: { id: true, name: true, pricePaise: true, images: true } },
@@ -755,7 +772,14 @@ type CartRow = {
   id: string;
   quantity: number;
   productId: string;
-  product: { id: string; name: string; images: Prisma.JsonValue };
+  product: {
+    id: string;
+    name: string;
+    images: Prisma.JsonValue;
+    gstPercent: number | null;
+    priceIncludesGst: boolean | null;
+    website: { shopGstPercent: number; shopPriceIncludesGst: boolean };
+  };
   variant: { id: string; name: string; pricePaise: number; quantity: number; images: Prisma.JsonValue };
 };
 
@@ -769,6 +793,9 @@ type WishlistRow = {
     name: string;
     slug: string;
     images: Prisma.JsonValue;
+    gstPercent: number | null;
+    priceIncludesGst: boolean | null;
+    website: { shopGstPercent: number; shopPriceIncludesGst: boolean };
     category: { name: string } | null;
   };
   variant: { id: string; name: string; pricePaise: number; images: Prisma.JsonValue };
@@ -783,6 +810,10 @@ function firstImageUrl(images: Prisma.JsonValue): string | undefined {
 }
 
 function toCartItemSummary(row: CartRow): ShopCartItemSummary {
+  const unit = payableUnitPaise(
+    row.variant.pricePaise,
+    effectiveGst(row.product, row.product.website),
+  );
   return {
     id: row.id,
     productId: row.productId,
@@ -790,12 +821,16 @@ function toCartItemSummary(row: CartRow): ShopCartItemSummary {
     productName: row.product.name,
     variantName: row.variant.name,
     quantity: row.quantity,
-    pricePaise: row.variant.pricePaise,
+    pricePaise: unit,
     imageUrl: firstImageUrl(row.variant.images) ?? firstImageUrl(row.product.images),
   };
 }
 
 function toWishlistItemSummary(row: WishlistRow): ShopWishlistItemSummary {
+  const unit = payableUnitPaise(
+    row.variant.pricePaise,
+    effectiveGst(row.product, row.product.website),
+  );
   return {
     id: row.id,
     productId: row.productId,
@@ -804,7 +839,7 @@ function toWishlistItemSummary(row: WishlistRow): ShopWishlistItemSummary {
     variantName: row.variant.name,
     productSlug: row.product.slug,
     categoryName: row.product.category?.name ?? "",
-    pricePaise: row.variant.pricePaise,
+    pricePaise: unit,
     imageUrl:
       firstImageUrl(row.product.images) ??
       firstImageUrl(row.variant.images),
