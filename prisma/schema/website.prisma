@@ -33,6 +33,8 @@ model Website {
   contactEmail String? @db.VarChar(255)
   contactPhone String? @db.VarChar(32)
   address      String? @db.VarChar(500)
+  /// Optional GST identification number; shown on shop invoices when set.
+  gstin        String? @db.VarChar(20)
   logoMediaId  String? @db.Uuid
 
   theme  Json

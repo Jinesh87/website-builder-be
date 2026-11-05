@@ -198,6 +198,7 @@ function toInfo(website: WebsiteWithPages): WebsiteInfo {
     contactEmail: website.contactEmail ?? null,
     contactPhone: website.contactPhone ?? null,
     address: website.address ?? null,
+    gstin: website.gstin ?? null,
   };
 }
 
@@ -845,6 +846,7 @@ export class WebsiteService {
       "contactEmail",
       "contactPhone",
       "address",
+      "gstin",
     ] as const;
     for (const key of infoKeys) {
       if (input[key] !== undefined) data[key] = emptyToNull(input[key]);

@@ -46,6 +46,8 @@ export type WebsiteInfo = {
   contactEmail: string | null;
   contactPhone: string | null;
   address: string | null;
+  /** Optional GST identification number for invoices. */
+  gstin: string | null;
 };
 
 export type PageView = {

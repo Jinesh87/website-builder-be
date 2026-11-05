@@ -22,6 +22,7 @@ const websiteInfo = {
     .optional()
     .messages({ "string.pattern.base": "Enter a valid phone number" }),
   address: optionalText(500),
+  gstin: optionalText(20),
 };
 
 export const websiteIdParamsSchema = Joi.object({

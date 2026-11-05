@@ -33,10 +33,10 @@ export type ShopInvoiceDesignInput = {
 };
 
 const SHOP_INVOICE_LAYOUT_META: Record<ShopInvoiceLayout, Omit<ShopInvoiceLayoutOption, "id">> = {
-  classic: { label: "Classic", description: "Bordered table with Item, Qty, Rate and Amount columns." },
-  minimal: { label: "Minimal", description: "Open rows with Description, Qty and Price." },
-  bold: { label: "Bold", description: "Dark band header with filled table column titles." },
-  modern: { label: "Modern", description: "Accent bar, company cards, and tinted product table." },
+  classic: { label: "Classic", description: "Bordered table with taxable amount, GST % and totals." },
+  minimal: { label: "Minimal", description: "Open rows with taxable amount, GST and grand total." },
+  bold: { label: "Bold", description: "Dark band header with GST columns and filled titles." },
+  modern: { label: "Modern", description: "Accent bar, company cards, and GST breakdown card." },
 };
 
 function mediaUrl(id: string | null | undefined): string | null {

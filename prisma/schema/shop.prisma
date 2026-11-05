@@ -327,9 +327,19 @@ model ShopOrderItem {
   variantId      String? @db.Uuid
   productName    String  @db.VarChar(160)
   variantName    String  @db.VarChar(160)
+  /// Payable unit price (what the customer pays per unit), in paise.
   unitPricePaise Int
   quantity       Int
+  /// Payable line total (unitPricePaise × quantity), in paise.
   lineTotalPaise Int
+  /// GST percent applied when the order was placed.
+  gstPercent     Int     @default(0)
+  /// Whether the listed unit price already included GST at order time.
+  priceIncludesGst Boolean @default(true)
+  /// Line amount excluding GST, in paise.
+  taxablePaise   Int
+  /// GST amount for the line, in paise.
+  gstPaise       Int
 
   order   ShopOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)

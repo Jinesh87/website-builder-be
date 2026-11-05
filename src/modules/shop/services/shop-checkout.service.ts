@@ -13,7 +13,7 @@ import {
 } from "../../wallet/services/razorpay.client.js";
 import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
 import { purgeShopPages } from "./shop-cache.js";
-import { effectiveGst, payableUnitPaise } from "../utils/shop-gst.js";
+import { effectiveGst, gstUnitPaise, payableUnitPaise } from "../utils/shop-gst.js";
 import type {
   ShopCancelOrderInput,
   ShopCheckoutStartInput,
@@ -426,9 +426,20 @@ export class ShopCheckoutService {
       }
     }
 
-    const unitPrice = (line: (typeof cart)[number]) =>
-      payableUnitPaise(line.variant.pricePaise, effectiveGst(line.product, line.product.website));
-    const totalPaise = cart.reduce((sum, line) => sum + unitPrice(line) * line.quantity, 0);
+    const linePricing = (line: (typeof cart)[number]) => {
+      const gst = effectiveGst(line.product, line.product.website);
+      const unitPayable = payableUnitPaise(line.variant.pricePaise, gst);
+      const unitGst = gstUnitPaise(line.variant.pricePaise, gst);
+      const unitTaxable = Math.max(0, unitPayable - unitGst);
+      return {
+        gst,
+        unitPayable,
+        lineTotal: unitPayable * line.quantity,
+        taxablePaise: unitTaxable * line.quantity,
+        gstPaise: unitGst * line.quantity,
+      };
+    };
+    const totalPaise = cart.reduce((sum, line) => sum + linePricing(line).lineTotal, 0);
     if (totalPaise < 100) {
       throw new AppError(400, "Order total must be at least ₹1.", "AMOUNT_TOO_LOW");
     }
@@ -466,15 +477,19 @@ export class ShopCheckoutService {
           shippingAddress: shippingAddress as Prisma.InputJsonValue,
           items: {
             create: cart.map((line) => {
-              const unit = unitPrice(line);
+              const pricing = linePricing(line);
               return {
                 productId: line.productId,
                 variantId: line.variantId,
                 productName: line.product.name,
                 variantName: line.variant.name,
-                unitPricePaise: unit,
+                unitPricePaise: pricing.unitPayable,
                 quantity: line.quantity,
-                lineTotalPaise: unit * line.quantity,
+                lineTotalPaise: pricing.lineTotal,
+                gstPercent: pricing.gst.gstPercent,
+                priceIncludesGst: pricing.gst.priceIncludesGst,
+                taxablePaise: pricing.taxablePaise,
+                gstPaise: pricing.gstPaise,
               };
             }),
           },

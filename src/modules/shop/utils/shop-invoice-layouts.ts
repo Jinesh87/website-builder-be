@@ -5,8 +5,13 @@ export type ShopInvoiceItem = {
   productName: string;
   variantName: string;
   quantity: number;
+  /** Payable unit price (incl. GST when applicable). */
   unitPricePaise: number;
+  /** Payable line total. */
   lineTotalPaise: number;
+  gstPercent: number;
+  taxablePaise: number;
+  gstPaise: number;
 };
 
 export type ShopInvoiceRenderInput = {
@@ -16,6 +21,8 @@ export type ShopInvoiceRenderInput = {
   companyAddress: string;
   companyEmail: string | null;
   companyPhone: string | null;
+  /** Optional GSTIN shown under the seller details. */
+  companyGstin: string | null;
   invoiceNumber: string;
   orderDate: string;
   paidAt: string | null;
@@ -59,15 +66,23 @@ function itemLabel(item: ShopInvoiceItem): string {
   return variant ? `${name} (${variant})` : name;
 }
 
+function unitTaxablePaise(item: ShopInvoiceItem): number {
+  if (item.quantity <= 0) return 0;
+  return Math.round(item.taxablePaise / item.quantity);
+}
+
 function rowsHtml(items: ShopInvoiceItem[], style: "bordered" | "open" | "striped"): string {
   return items
     .map((item, index) => {
       const bg = style === "striped" && index % 2 === 0 ? "background:#f6f7f9;" : "";
       const border = style === "bordered" ? "border:1px solid #d7dbe3;" : style === "open" ? "border-bottom:1px solid #e8eaef;" : "";
+      const gstLabel = item.gstPercent > 0 ? `${item.gstPercent}%` : "—";
       return `<tr>
         <td style="padding:10px 12px;${border}${bg}">${escapeHtml(itemLabel(item))}</td>
         <td style="padding:10px 12px;text-align:center;${border}${bg}">${item.quantity}</td>
-        <td style="padding:10px 12px;text-align:right;${border}${bg}">${escapeHtml(formatInr(item.unitPricePaise))}</td>
+        <td style="padding:10px 12px;text-align:right;${border}${bg}">${escapeHtml(formatInr(unitTaxablePaise(item)))}</td>
+        <td style="padding:10px 12px;text-align:center;${border}${bg}">${escapeHtml(gstLabel)}</td>
+        <td style="padding:10px 12px;text-align:right;${border}${bg}">${escapeHtml(formatInr(item.gstPaise))}</td>
         <td style="padding:10px 12px;text-align:right;${border}${bg}">${escapeHtml(formatInr(item.lineTotalPaise))}</td>
       </tr>`;
     })
@@ -86,6 +101,115 @@ function partyBlock(title: string, lines: string[]): string {
   </div>`;
 }
 
+function totalsBreakdown(items: ShopInvoiceItem[], totalPaise: number): {
+  taxablePaise: number;
+  gstPaise: number;
+  gstByRate: { percent: number; gstPaise: number }[];
+} {
+  const taxablePaise = items.reduce((sum, item) => sum + item.taxablePaise, 0);
+  const gstPaise = items.reduce((sum, item) => sum + item.gstPaise, 0);
+  const byRate = new Map<number, number>();
+  for (const item of items) {
+    if (item.gstPercent <= 0 || item.gstPaise <= 0) continue;
+    byRate.set(item.gstPercent, (byRate.get(item.gstPercent) ?? 0) + item.gstPaise);
+  }
+  const gstByRate = [...byRate.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([percent, amount]) => ({ percent, gstPaise: amount }));
+  // Keep grand total as source of truth; taxable/gst should sum to it for new orders.
+  void totalPaise;
+  return { taxablePaise, gstPaise, gstByRate };
+}
+
+function totalsHtml(
+  items: ShopInvoiceItem[],
+  totalPaise: number,
+  paidLine: string,
+  variant: "plain" | "card" | "right",
+): string {
+  const { taxablePaise, gstPaise, gstByRate } = totalsBreakdown(items, totalPaise);
+  const total = formatInr(totalPaise);
+  const gstRows =
+    gstByRate.length > 0
+      ? gstByRate
+          .map(
+            (row) =>
+              `<div style="display:flex;justify-content:space-between;gap:24px;margin-top:4px;font-size:13px;color:#4b5160;">
+                <span>GST (${row.percent}%)</span>
+                <span>${escapeHtml(formatInr(row.gstPaise))}</span>
+              </div>`,
+          )
+          .join("")
+      : `<div style="display:flex;justify-content:space-between;gap:24px;margin-top:4px;font-size:13px;color:#4b5160;">
+          <span>GST</span>
+          <span>${escapeHtml(formatInr(gstPaise))}</span>
+        </div>`;
+
+  const body = `
+    <div style="display:flex;justify-content:space-between;gap:24px;font-size:13px;color:#4b5160;">
+      <span>Taxable value</span>
+      <span>${escapeHtml(formatInr(taxablePaise))}</span>
+    </div>
+    ${gstRows}
+    <div style="display:flex;justify-content:space-between;gap:24px;margin-top:8px;padding-top:8px;border-top:1px solid #e8eaef;font-size:15px;font-weight:700;color:#1a1d23;">
+      <span>Grand total</span>
+      <span>${escapeHtml(total)}</span>
+    </div>
+    <div style="margin-top:6px;font-size:12px;color:#7a8090;">${escapeHtml(paidLine)}</div>
+  `;
+
+  if (variant === "card") {
+    return `<div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <div style="background:#fff;border:1px solid #e3e5ea;border-radius:12px;padding:12px 16px;min-width:220px;">${body}</div>
+    </div>`;
+  }
+  if (variant === "right") {
+    return `<div style="margin-top:18px;margin-left:auto;max-width:260px;text-align:left;">${body}</div>`;
+  }
+  return `<div style="margin-top:22px;margin-left:auto;max-width:260px;">${body}</div>`;
+}
+
+function thead(style: "minimal" | "bold" | "modern" | "classic"): string {
+  if (style === "minimal") {
+    return `<tr style="border-bottom:1px solid #1a1d23;">
+      <th style="text-align:left;padding:0 12px 10px;font-weight:500;color:#7a8090;">Description</th>
+      <th style="text-align:center;padding:0 12px 10px;font-weight:500;color:#7a8090;">Qty</th>
+      <th style="text-align:right;padding:0 12px 10px;font-weight:500;color:#7a8090;">Taxable</th>
+      <th style="text-align:center;padding:0 12px 10px;font-weight:500;color:#7a8090;">GST %</th>
+      <th style="text-align:right;padding:0 12px 10px;font-weight:500;color:#7a8090;">GST</th>
+      <th style="text-align:right;padding:0 12px 10px;font-weight:500;color:#7a8090;">Amount</th>
+    </tr>`;
+  }
+  if (style === "bold") {
+    return `<tr style="background:#1a1d23;color:#fff;">
+      <th style="text-align:left;padding:10px 12px;">Item</th>
+      <th style="text-align:center;padding:10px 12px;">Qty</th>
+      <th style="text-align:right;padding:10px 12px;">Taxable</th>
+      <th style="text-align:center;padding:10px 12px;">GST %</th>
+      <th style="text-align:right;padding:10px 12px;">GST</th>
+      <th style="text-align:right;padding:10px 12px;">Total</th>
+    </tr>`;
+  }
+  if (style === "modern") {
+    return `<tr style="background:rgba(37,99,235,0.08);">
+      <th style="text-align:left;padding:10px 12px;">Product</th>
+      <th style="text-align:center;padding:10px 12px;">Qty</th>
+      <th style="text-align:right;padding:10px 12px;">Taxable</th>
+      <th style="text-align:center;padding:10px 12px;">GST %</th>
+      <th style="text-align:right;padding:10px 12px;">GST</th>
+      <th style="text-align:right;padding:10px 12px;">Line total</th>
+    </tr>`;
+  }
+  return `<tr style="background:#f6f7f9;">
+    <th style="border:1px solid #d7dbe3;text-align:left;padding:10px 12px;">Item</th>
+    <th style="border:1px solid #d7dbe3;text-align:center;padding:10px 12px;">Qty</th>
+    <th style="border:1px solid #d7dbe3;text-align:right;padding:10px 12px;">Taxable</th>
+    <th style="border:1px solid #d7dbe3;text-align:center;padding:10px 12px;">GST %</th>
+    <th style="border:1px solid #d7dbe3;text-align:right;padding:10px 12px;">GST</th>
+    <th style="border:1px solid #d7dbe3;text-align:right;padding:10px 12px;">Amount</th>
+  </tr>`;
+}
+
 function shell(title: string, body: string, pageBg: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -100,7 +224,7 @@ function shell(title: string, body: string, pageBg: string): string {
       /* Keep card border/background so print/PDF matches the on-screen template. */
     }
     body { margin: 0; padding: 24px; background: ${pageBg}; font-family: Arial, Helvetica, sans-serif; color: #1a1d23; }
-    .actions { max-width: 760px; margin: 0 auto 16px; display: flex; gap: 8px; justify-content: flex-end; }
+    .actions { max-width: 860px; margin: 0 auto 16px; display: flex; gap: 8px; justify-content: flex-end; }
     .actions a.button {
       appearance: none; border: 1px solid #1a1d23; background: #1a1d23; color: #fff; border-radius: 8px;
       padding: 8px 12px; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block;
@@ -123,10 +247,15 @@ export function isShopInvoiceLayout(value: string): value is ShopInvoiceLayout {
 export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
   const layout = isShopInvoiceLayout(input.layout) ? input.layout : "classic";
   const companyContact = [input.companyEmail, input.companyPhone].filter(Boolean) as string[];
-  const fromLines = [input.companyName, input.companyAddress, ...companyContact];
+  const gstin = input.companyGstin?.trim();
+  const fromLines = [
+    input.companyName,
+    input.companyAddress,
+    ...companyContact,
+    ...(gstin ? [`GSTIN ${gstin}`] : []),
+  ];
   const billLines = [input.customerName, input.customerEmail, ...input.shippingLines];
   const title = `Invoice ${input.invoiceNumber}`;
-  const total = formatInr(input.totalPaise);
   const statusBits = [
     `Status: ${input.statusLabel}`,
     input.paidAt ? `Paid ${input.paidAt}` : null,
@@ -137,7 +266,7 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
   if (layout === "minimal") {
     return shell(
       title,
-      `<div class="sheet" style="max-width:760px;margin:0 auto;background:#fff;border:1px dashed #c9ced8;border-radius:16px;padding:28px;">
+      `<div class="sheet" style="max-width:860px;margin:0 auto;background:#fff;border:1px dashed #c9ced8;border-radius:16px;padding:28px;">
         <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;">
           ${logoHtml(input.logoUrl, input.companyName)}
           <div style="text-align:right;">
@@ -150,18 +279,10 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
           ${partyBlock("Bill to", billLines)}
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="border-bottom:1px solid #1a1d23;">
-              <th style="text-align:left;padding:0 12px 10px;font-weight:500;color:#7a8090;">Description</th>
-              <th style="text-align:center;padding:0 12px 10px;font-weight:500;color:#7a8090;">Qty</th>
-              <th style="text-align:right;padding:0 12px 10px;font-weight:500;color:#7a8090;">Rate</th>
-              <th style="text-align:right;padding:0 12px 10px;font-weight:500;color:#7a8090;">Amount</th>
-            </tr>
-          </thead>
+          <thead>${thead("minimal")}</thead>
           <tbody>${rowsHtml(input.items, "open")}</tbody>
         </table>
-        <div style="margin-top:22px;text-align:right;font-size:15px;">Total <strong>${escapeHtml(total)}</strong></div>
-        <div style="margin-top:8px;text-align:right;font-size:12px;color:#7a8090;">${escapeHtml(paidLine)}</div>
+        ${totalsHtml(input.items, input.totalPaise, paidLine, "plain")}
       </div>`,
       "#ffffff",
     );
@@ -170,7 +291,7 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
   if (layout === "bold") {
     return shell(
       title,
-      `<div class="sheet" style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #1a1d23;border-radius:16px;overflow:hidden;">
+      `<div class="sheet" style="max-width:860px;margin:0 auto;background:#fff;border:1px solid #1a1d23;border-radius:16px;overflow:hidden;">
         <div style="display:flex;justify-content:space-between;gap:16px;align-items:center;background:#1a1d23;color:#fff;padding:22px 28px;">
           <div>
             <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.75;">Invoice</div>
@@ -185,18 +306,10 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
         </div>
         <div style="padding:18px 22px 26px;">
           <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead>
-              <tr style="background:#1a1d23;color:#fff;">
-                <th style="text-align:left;padding:10px 12px;">Item</th>
-                <th style="text-align:center;padding:10px 12px;">Qty</th>
-                <th style="text-align:right;padding:10px 12px;">Unit price</th>
-                <th style="text-align:right;padding:10px 12px;">Total</th>
-              </tr>
-            </thead>
+            <thead>${thead("bold")}</thead>
             <tbody>${rowsHtml(input.items, "striped")}</tbody>
           </table>
-          <div style="margin-top:18px;text-align:right;font-size:16px;font-weight:700;">Amount due ${escapeHtml(total)}</div>
-          <div style="margin-top:6px;text-align:right;font-size:12px;color:#7a8090;">${escapeHtml(paidLine)}</div>
+          ${totalsHtml(input.items, input.totalPaise, paidLine, "right")}
         </div>
       </div>`,
       "#eef1f5",
@@ -206,7 +319,7 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
   if (layout === "modern") {
     return shell(
       title,
-      `<div class="sheet" style="max-width:760px;margin:0 auto;background:#f4f6f8;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(26,29,35,0.08);">
+      `<div class="sheet" style="max-width:860px;margin:0 auto;background:#f4f6f8;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(26,29,35,0.08);">
         <div style="height:8px;background:#2563eb;"></div>
         <div style="padding:24px;">
           <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;">
@@ -223,24 +336,11 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
           </div>
           <div style="background:#fff;border:1px solid #e3e5ea;border-radius:12px;overflow:hidden;">
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
-              <thead>
-                <tr style="background:rgba(37,99,235,0.08);">
-                  <th style="text-align:left;padding:10px 12px;">Product</th>
-                  <th style="text-align:center;padding:10px 12px;">Qty</th>
-                  <th style="text-align:right;padding:10px 12px;">Price</th>
-                  <th style="text-align:right;padding:10px 12px;">Line total</th>
-                </tr>
-              </thead>
+              <thead>${thead("modern")}</thead>
               <tbody>${rowsHtml(input.items, "open")}</tbody>
             </table>
           </div>
-          <div style="display:flex;justify-content:flex-end;margin-top:16px;">
-            <div style="background:#fff;border:1px solid #e3e5ea;border-radius:12px;padding:12px 16px;text-align:right;">
-              <div style="font-size:12px;color:#7a8090;">Grand total</div>
-              <div style="font-size:18px;font-weight:700;">${escapeHtml(total)}</div>
-              <div style="font-size:12px;color:#7a8090;margin-top:4px;">${escapeHtml(paidLine)}</div>
-            </div>
-          </div>
+          ${totalsHtml(input.items, input.totalPaise, paidLine, "card")}
         </div>
       </div>`,
       "#eef1f5",
@@ -250,7 +350,7 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
   // classic
   return shell(
     title,
-    `<div class="sheet" style="max-width:760px;margin:0 auto;background:#fff;border:1px solid #d7dbe3;border-radius:16px;padding:28px;">
+    `<div class="sheet" style="max-width:860px;margin:0 auto;background:#fff;border:1px solid #d7dbe3;border-radius:16px;padding:28px;">
       <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:22px;">
         <div>
           <div style="font-size:22px;font-weight:700;letter-spacing:0.04em;">INVOICE</div>
@@ -263,18 +363,10 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
         ${partyBlock("Bill to", billLines)}
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f6f7f9;">
-            <th style="border:1px solid #d7dbe3;text-align:left;padding:10px 12px;">Item</th>
-            <th style="border:1px solid #d7dbe3;text-align:center;padding:10px 12px;">Qty</th>
-            <th style="border:1px solid #d7dbe3;text-align:right;padding:10px 12px;">Rate</th>
-            <th style="border:1px solid #d7dbe3;text-align:right;padding:10px 12px;">Amount</th>
-          </tr>
-        </thead>
+        <thead>${thead("classic")}</thead>
         <tbody>${rowsHtml(input.items, "bordered")}</tbody>
       </table>
-      <div style="margin-top:18px;text-align:right;font-size:16px;font-weight:700;">Total ${escapeHtml(total)}</div>
-      <div style="margin-top:6px;text-align:right;font-size:12px;color:#7a8090;">${escapeHtml(paidLine)}</div>
+      ${totalsHtml(input.items, input.totalPaise, paidLine, "right")}
     </div>`,
     "#eef1f5",
   );
