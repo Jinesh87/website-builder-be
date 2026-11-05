@@ -134,6 +134,11 @@ export const updateWebsiteSchema = Joi.object({
     .messages({
       "array.max": "Add at most 12 return guideline points",
     }),
+  shopGstPercent: Joi.number().integer().min(0).max(100).optional().messages({
+    "number.min": "GST percent must be 0 or more",
+    "number.max": "GST percent cannot exceed 100",
+  }),
+  shopPriceIncludesGst: Joi.boolean().optional(),
   ...websiteInfo,
 }).min(1);
 

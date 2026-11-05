@@ -181,6 +181,8 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
             : null,
     shopReturnDays: website.shopReturnDays ?? null,
     shopReturnGuidelines: readReturnGuidelines(website.shopReturnGuidelines),
+    shopGstPercent: website.shopGstPercent ?? 0,
+    shopPriceIncludesGst: website.shopPriceIncludesGst !== false,
     publishedAt: publishedAt?.toISOString() ?? null,
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
@@ -828,6 +830,12 @@ export class WebsiteService {
         .map((line) => line.trim())
         .filter(Boolean)
         .slice(0, 12);
+    }
+    if (input.shopGstPercent !== undefined) {
+      data.shopGstPercent = input.shopGstPercent;
+    }
+    if (input.shopPriceIncludesGst !== undefined) {
+      data.shopPriceIncludesGst = input.shopPriceIncludesGst;
     }
     const infoKeys = [
       "businessName",

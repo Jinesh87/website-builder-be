@@ -49,6 +49,10 @@ export type ShopProductInput = {
   categoryId?: string | null;
   /** Defaults to true when omitted. Hidden from the live shop when false. */
   listed?: boolean;
+  /** Whole percent 0–100. Null/omit = use the shop default. */
+  gstPercent?: number | null;
+  /** When true, entered prices already include GST. Null/omit = use the shop default. */
+  priceIncludesGst?: boolean | null;
   /** Defaults to true when omitted. */
   returnsEnabled?: boolean;
   /** Null/omitted = use the shop default return window. */
@@ -119,6 +123,10 @@ export type ShopProductView = {
   categoryId: string | null;
   categoryName: string;
   listed: boolean;
+  /** Null = use the shop default GST percent. */
+  gstPercent: number | null;
+  /** Null = use the shop default include/add GST mode. */
+  priceIncludesGst: boolean | null;
   returnsEnabled: boolean;
   /** Null = use the shop default return window. */
   returnDays: number | null;
@@ -146,6 +154,8 @@ export type PublicShopProduct = {
   slug: string;
   description: string | null;
   categoryName: string;
+  gstPercent: number;
+  priceIncludesGst: boolean;
   /** Effective return window for this product. Null = returns not offered. */
   returnDays: number | null;
   images: PublicShopImage[];

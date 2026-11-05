@@ -85,6 +85,11 @@ export const shopProductSchema = Joi.object({
     "string.guid": "Choose a valid category",
   }),
   listed: Joi.boolean().optional(),
+  gstPercent: Joi.number().integer().min(0).max(100).allow(null).optional().messages({
+    "number.min": "GST percent must be 0 or more",
+    "number.max": "GST percent cannot exceed 100",
+  }),
+  priceIncludesGst: Joi.boolean().allow(null).optional(),
   returnsEnabled: Joi.boolean().optional(),
   returnDays: Joi.number().integer().min(1).max(365).allow(null).optional().messages({
     "number.min": "Return window must be at least 1 day",

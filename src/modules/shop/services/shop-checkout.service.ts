@@ -13,6 +13,7 @@ import {
 } from "../../wallet/services/razorpay.client.js";
 import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
 import { purgeShopPages } from "./shop-cache.js";
+import { effectiveGst, payableUnitPaise } from "../utils/shop-gst.js";
 import type {
   ShopCancelOrderInput,
   ShopCheckoutStartInput,
@@ -388,7 +389,15 @@ export class ShopCheckoutService {
     const cart = await prisma.shopCartItem.findMany({
       where: { websiteId, customerId: customer.id },
       include: {
-        product: { select: { id: true, name: true } },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            gstPercent: true,
+            priceIncludesGst: true,
+            website: { select: { shopGstPercent: true, shopPriceIncludesGst: true } },
+          },
+        },
         variant: { select: { id: true, name: true, pricePaise: true, quantity: true } },
       },
       orderBy: { updatedAt: "desc" },
@@ -417,7 +426,9 @@ export class ShopCheckoutService {
       }
     }
 
-    const totalPaise = cart.reduce((sum, line) => sum + line.variant.pricePaise * line.quantity, 0);
+    const unitPrice = (line: (typeof cart)[number]) =>
+      payableUnitPaise(line.variant.pricePaise, effectiveGst(line.product, line.product.website));
+    const totalPaise = cart.reduce((sum, line) => sum + unitPrice(line) * line.quantity, 0);
     if (totalPaise < 100) {
       throw new AppError(400, "Order total must be at least ₹1.", "AMOUNT_TOO_LOW");
     }
@@ -454,15 +465,18 @@ export class ShopCheckoutService {
           totalPaise,
           shippingAddress: shippingAddress as Prisma.InputJsonValue,
           items: {
-            create: cart.map((line) => ({
-              productId: line.productId,
-              variantId: line.variantId,
-              productName: line.product.name,
-              variantName: line.variant.name,
-              unitPricePaise: line.variant.pricePaise,
-              quantity: line.quantity,
-              lineTotalPaise: line.variant.pricePaise * line.quantity,
-            })),
+            create: cart.map((line) => {
+              const unit = unitPrice(line);
+              return {
+                productId: line.productId,
+                variantId: line.variantId,
+                productName: line.product.name,
+                variantName: line.variant.name,
+                unitPricePaise: unit,
+                quantity: line.quantity,
+                lineTotalPaise: unit * line.quantity,
+              };
+            }),
           },
           events: {
             create: { status: ShopOrderStatus.PENDING, actorType: "SYSTEM", note: "Order placed — awaiting payment" },

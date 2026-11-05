@@ -28,6 +28,10 @@ model Product {
   description String?  @db.VarChar(2000)
   /// When false, the product is hidden from the live shop catalogue.
   listed         Boolean @default(true)
+  /// GST rate as a whole percent (0–100). Null = use the shop default (shopGstPercent).
+  gstPercent     Int?
+  /// When true, variant prices already include GST. Null = use the shop default (shopPriceIncludesGst).
+  priceIncludesGst Boolean?
   /// When false, this product cannot be returned even if the shop allows returns.
   returnsEnabled Boolean @default(true)
   /// Per-product return window in days. Null = use the shop default (shopReturnDays).
