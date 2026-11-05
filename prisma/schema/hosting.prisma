@@ -33,6 +33,8 @@ model HostingPackage {
   featured               Boolean  @default(false)
   /// Hidden from the pricing page and checkout when false; existing plans keep it.
   active                 Boolean  @default(true)
+  /// Automatic website backup cadence in days for websites on this package. Null = no scheduled backups.
+  websiteBackupDays      Int?
   sortOrder              Int      @default(0)
   createdAt              DateTime @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime @updatedAt @db.Timestamptz(6)

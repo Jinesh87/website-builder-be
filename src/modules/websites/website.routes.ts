@@ -26,6 +26,7 @@ import {
   updateTemplateSchema,
   updateWebsiteSchema,
   websiteIdParamsSchema,
+  websiteVersionParamsSchema,
 } from "./validators/website.validator.js";
 
 /** Shared by Super Admin and clients; the service limits clients to their own websites and templates. */
@@ -124,6 +125,11 @@ websitesRouter.post(
 );
 websitesRouter.post("/:id/unpublish", byId, websiteController.unpublish);
 websitesRouter.get("/:id/versions", byId, websiteController.listVersions);
+websitesRouter.post(
+  "/:id/versions/:versionId/restore",
+  validate(websiteVersionParamsSchema, "params"),
+  websiteController.restoreVersion,
+);
 websitesRouter.post(
   "/:id/templates",
   byId,

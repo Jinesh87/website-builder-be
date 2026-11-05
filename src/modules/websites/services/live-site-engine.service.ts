@@ -1020,14 +1020,29 @@ Sitemap: ${domain}/sitemap.xml
     },
     shop?: ShopRender,
   ): string {
-    const menuItems = header?.menu || [];
-    const headerCta = header?.cta;
+    const pageHeader = sections.find((section) => section.type === "header" && (section as { id?: string }).id === "page-header");
+    const pageFooter = sections.find((section) => section.type === "footer" && (section as { id?: string }).id === "page-footer");
+    const effectiveHeader =
+      pageHeader
+        ? pageHeader.hidden
+          ? null
+          : ({ ...(header || {}), ...((pageHeader as { data?: Record<string, unknown> }).data || {}), settings: pageHeader.settings } as PublishSnapshot["header"])
+        : header;
+    const effectiveFooter =
+      pageFooter
+        ? pageFooter.hidden
+          ? null
+          : ({ ...(footer || {}), ...((pageFooter as { data?: Record<string, unknown> }).data || {}), settings: pageFooter.settings } as PublishSnapshot["footer"])
+        : footer;
+
+    const menuItems = effectiveHeader?.menu || [];
+    const headerCta = effectiveHeader?.cta;
     const headerCtaHref = headerCta?.href ? resolveSafeHref(headerCta.href, availableSlugs) : "#";
 
-    const headerHtml = `
+    const headerHtml = effectiveHeader && !effectiveHeader.hidden ? `
     <header class="site-header">
       <div class="container nav-row">
-        <a href="/" class="nav-brand">${escapeHtml(header?.siteName || siteName)}</a>
+        <a href="/" class="nav-brand">${escapeHtml(effectiveHeader.siteName || siteName)}</a>
         <nav aria-label="Main Navigation">
           <ul class="nav-links">
             ${menuItems
@@ -1045,10 +1060,11 @@ Sitemap: ${domain}/sitemap.xml
         </nav>
       </div>
     </header>
-    <main>`;
+    <main>` : `<main>`;
 
     const sectionParts: string[] = [];
     let hasRenderedH1 = false;
+    const bodySections = sections.filter((section) => section.type !== "header" && section.type !== "footer");
 
     function getHeadingMarkup(effectiveHeading: string): { tag: string; cls: string } {
       if (!hasRenderedH1) {
@@ -1059,7 +1075,7 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     // Inner page header fallback if first section is not hero
-    const firstSection = sections.find((s) => !s.hidden);
+    const firstSection = bodySections.find((s) => !s.hidden);
     if (pageSlug !== "/" && (!firstSection || firstSection.type !== "hero")) {
       sectionParts.push(`
       <section class="section-page-intro" style="padding: 3rem 0 1.5rem; background: var(--color-surface); border-bottom: 1px solid rgba(0,0,0,0.06);">
@@ -1074,7 +1090,7 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     // Render Each Section
-    for (const section of sections) {
+    for (const section of bodySections) {
       if (section.hidden) continue;
       const d = (section.data as Record<string, unknown>) || {};
       const badgeText = ([d.eyebrow, d.badge].find((v) => typeof v === "string" && v.trim()) as string) || "";
@@ -1787,18 +1803,20 @@ Sitemap: ${domain}/sitemap.xml
       hasRenderedH1 = true;
     }
 
-    const footerHtml = `
+    const footerHtml =
+      effectiveFooter && !effectiveFooter.hidden
+        ? `
     <footer class="site-footer">
       <div class="container">
         <div class="footer-row">
           <div>
-            <h3 style="color: #ffffff; font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">${escapeHtml(footer?.siteName || siteName)}</h3>
-            <p style="max-width: 400px; font-size: 0.88rem; line-height: 1.6;">${escapeHtml(footer?.copyright || `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`)}</p>
+            <h3 style="color: #ffffff; font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">${escapeHtml(effectiveFooter.siteName || siteName)}</h3>
+            <p style="max-width: 400px; font-size: 0.88rem; line-height: 1.6;">${escapeHtml(effectiveFooter.copyright || `© ${new Date().getFullYear()} ${siteName}. All rights reserved.`)}</p>
           </div>
           ${
-            footer?.columns && Array.isArray(footer.columns)
+            effectiveFooter.columns && Array.isArray(effectiveFooter.columns)
               ? `<div style="display: flex; gap: 3rem; flex-wrap: wrap;">
-                  ${footer.columns
+                  ${effectiveFooter.columns
                     .map(
                       (col) => `
                     <div>
@@ -1819,7 +1837,8 @@ Sitemap: ${domain}/sitemap.xml
           Published with Bytezora Site Engine
         </div>
       </div>
-    </footer>`;
+    </footer>`
+        : "";
 
     return [headerHtml, ...sectionParts, `</main>`, footerHtml].join("\n");
   }
