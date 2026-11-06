@@ -8,6 +8,7 @@ import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import type { MediaFile, Prisma } from "../../../generated/prisma/client.js";
+import { HostingStatus } from "../../../generated/prisma/enums.js";
 import type {
   CreateFolderInput,
   FolderListQuery,
@@ -39,7 +40,9 @@ export const MAX_BYTES_BY_KIND: Record<MediaKind, number> = {
   [MediaKind.DOCUMENT]: 20 * MB,
 };
 export const MAX_UPLOAD_BYTES = Math.max(...Object.values(MAX_BYTES_BY_KIND));
-export const CLIENT_STORAGE_LIMIT_BYTES = 1024 * MB;
+/** Fallback when the client has no ACTIVE/GRACE hosting plan with a package. */
+export const DEFAULT_CLIENT_STORAGE_MB = 1024;
+export const CLIENT_STORAGE_LIMIT_BYTES = DEFAULT_CLIENT_STORAGE_MB * MB;
 const MAX_FOLDERS_PER_CLIENT = 50;
 
 const NOT_FOUND = () => new AppError(404, "File not found", "MEDIA_NOT_FOUND");
@@ -143,9 +146,42 @@ async function findUsages(mediaId: string, clientId: string, everywhere: boolean
   `;
 }
 
+/**
+ * Media is shared across a client's websites. Quota order:
+ * 1) company override, 2) highest ACTIVE/GRACE package mediaStorageMb, 3) platform default.
+ */
+async function clientStorageLimitBytes(clientId: string): Promise<number> {
+  const [client, plans] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: clientId },
+      select: { mediaStorageMbOverride: true },
+    }),
+    prisma.hostingSubscription.findMany({
+      where: {
+        clientId,
+        status: { in: [HostingStatus.ACTIVE, HostingStatus.GRACE] },
+        packageId: { not: null },
+      },
+      select: { package: { select: { mediaStorageMb: true } } },
+    }),
+  ]);
+  if (client?.mediaStorageMbOverride && client.mediaStorageMbOverride > 0) {
+    return client.mediaStorageMbOverride * MB;
+  }
+  let maxMb = 0;
+  for (const plan of plans) {
+    const mb = plan.package?.mediaStorageMb ?? 0;
+    if (mb > maxMb) maxMb = mb;
+  }
+  return (maxMb > 0 ? maxMb : DEFAULT_CLIENT_STORAGE_MB) * MB;
+}
+
 async function storageUsage(clientId: string): Promise<StorageUsage> {
-  const { _sum } = await prisma.mediaFile.aggregate({ where: { clientId }, _sum: { sizeBytes: true } });
-  return { usedBytes: _sum.sizeBytes ?? 0, limitBytes: CLIENT_STORAGE_LIMIT_BYTES };
+  const [{ _sum }, limitBytes] = await Promise.all([
+    prisma.mediaFile.aggregate({ where: { clientId }, _sum: { sizeBytes: true } }),
+    clientStorageLimitBytes(clientId),
+  ]);
+  return { usedBytes: _sum.sizeBytes ?? 0, limitBytes };
 }
 
 export class MediaService {

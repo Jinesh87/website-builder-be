@@ -17,6 +17,7 @@ import {
   planChoiceSchema,
   subscriptionsQuerySchema,
   updateClientBackupPolicySchema,
+  updateClientStoragePolicySchema,
   updatePackageSchema,
   updatePlanSchema,
   updateSettingsSchema,
@@ -127,4 +128,10 @@ adminHostingRouter.patch(
   byClient,
   validate(updateClientBackupPolicySchema),
   hostingController.updateClientBackupPolicy,
+);
+adminHostingRouter.patch(
+  "/clients/:clientId/storage-policy",
+  byClient,
+  validate(updateClientStoragePolicySchema),
+  hostingController.updateClientStoragePolicy,
 );
