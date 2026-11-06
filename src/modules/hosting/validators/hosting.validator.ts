@@ -69,12 +69,17 @@ export const updatePackageSchema = Joi.object({
   defaultQuarterlyPaise: paise.optional(),
   defaultYearlyPaise: paise.optional(),
   websiteBackupDays: Joi.number().integer().min(1).max(365).allow(null).optional(),
+  mediaStorageMb: Joi.number().integer().min(100).max(1024 * 100).optional(),
   featured: Joi.boolean().required(),
   active: Joi.boolean().required(),
 });
 
 export const updateClientBackupPolicySchema = Joi.object({
   websiteBackupDaysOverride: Joi.number().integer().min(1).max(365).allow(null).required(),
+});
+
+export const updateClientStoragePolicySchema = Joi.object({
+  mediaStorageMbOverride: Joi.number().integer().min(100).max(1024 * 100).allow(null).required(),
 });
 
 export const backfillSchema = Joi.object({

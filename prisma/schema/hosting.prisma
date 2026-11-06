@@ -35,6 +35,8 @@ model HostingPackage {
   active                 Boolean  @default(true)
   /// Automatic website backup cadence in days for websites on this package. Null = no scheduled backups.
   websiteBackupDays      Int?
+  /// Media library quota in mebibytes for clients on this package. Shared across their websites; the highest active plan wins.
+  mediaStorageMb         Int      @default(1024)
   sortOrder              Int      @default(0)
   createdAt              DateTime @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime @updatedAt @db.Timestamptz(6)

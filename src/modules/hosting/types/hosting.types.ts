@@ -23,6 +23,8 @@ export type HostingPackageView = {
   featured: boolean;
   /** Automatic backup cadence in days for websites on this package. Null = disabled. */
   websiteBackupDays: number | null;
+  /** Media library quota in MiB. Shared across the client's websites; highest ACTIVE/GRACE plan wins. */
+  mediaStorageMb: number;
   /** Priced per website: the website's own price, else `defaultPrices`. */
   isCustom: boolean;
   prices: CyclePrices;
@@ -194,6 +196,8 @@ export type UpdatePackageInput = {
   defaultYearlyPaise?: number;
   /** Automatic backup cadence in days for websites on this package. Null = disabled. */
   websiteBackupDays?: number | null;
+  /** Media library quota in MiB for clients on this package. */
+  mediaStorageMb?: number;
   featured: boolean;
   active: boolean;
 };
@@ -240,6 +244,8 @@ export type ClientHostingView = {
     owner: ClientOwnerView | null;
     /** Null means package-level settings apply for this company. */
     websiteBackupDaysOverride: number | null;
+    /** Null means use the highest ACTIVE/GRACE package media quota. */
+    mediaStorageMbOverride: number | null;
   };
   balance: number;
   websites: Array<{
@@ -292,6 +298,11 @@ export type ClientOverviewList = {
 export type UpdateClientBackupPolicyInput = {
   /** Null = use package-level automatic backup cadence. */
   websiteBackupDaysOverride: number | null;
+};
+
+export type UpdateClientStoragePolicyInput = {
+  /** Null = use highest ACTIVE/GRACE package mediaStorageMb. */
+  mediaStorageMbOverride: number | null;
 };
 
 export type SubscriptionListQuery = {
