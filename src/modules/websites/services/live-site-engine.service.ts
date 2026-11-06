@@ -16,6 +16,7 @@ type ShopRender = {
   websiteId: string;
   authHref?: string;
   accountHref?: string;
+  allowGuestCheckout?: boolean;
   cancelUntilStatus?: "paid" | "processing" | "shipped" | null;
   returnGuidelines?: string[];
   products: PublicShopProduct[];
@@ -98,11 +99,15 @@ function withShopperAuthPages(pages: PublishSnapshot["pages"], businessName: str
 /** On localhost the site lives under /live/<subdomain>. Root links like /shop would otherwise hit the API. */
 function prefixLocalHrefs(html: string, basePath: string): string {
   if (!basePath) return html;
-  return html.replace(/(\shref=")\/(?!\/)([^"]*)"/g, (_, attr: string, rest: string) => {
+  const rewrite = (_: string, attr: string, rest: string) => {
     if (rest.startsWith("_wb/")) return `${attr}/${rest}"`;
     const path = rest && !rest.startsWith("#") && !rest.startsWith("?") ? `/${rest}` : rest;
     return `${attr}${basePath}${path}"`;
-  });
+  };
+  // href= plus cart data attrs that the shop script copies into href at runtime.
+  return html
+    .replace(/(\shref=")\/(?!\/)([^"]*)"/g, rewrite)
+    .replace(/(\sdata-wb-shop-cart-(?:guest|account)=")\/(?!\/)([^"]*)"/g, rewrite);
 }
 
 /** Legacy fallback renderer: inline formatting is dropped, only the visible text is shown. */
@@ -169,6 +174,7 @@ const renderStateSelect = {
   address: true,
   logoMediaId: true,
   shopEnabled: true,
+  shopAllowGuestCheckout: true,
   shopCancelUntilStatus: true,
   shopReturnDays: true,
   shopReturnGuidelines: true,
@@ -542,6 +548,7 @@ Sitemap: ${domain}/sitemap.xml
           websiteId: website.id,
           authHref: authPage ? (authPage.slug === "/" ? "/" : authPage.slug) : "/login",
           accountHref: accountPage ? (accountPage.slug === "/" ? "/" : accountPage.slug) : "/account",
+          allowGuestCheckout: Boolean(website.shopAllowGuestCheckout),
           cancelUntilStatus,
           returnGuidelines,
           products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,

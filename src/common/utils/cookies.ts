@@ -9,6 +9,8 @@ const REFRESH_COOKIE_PATH = "/api/auth";
 const SHOP_ACCESS_COOKIE = "shop_access_token";
 const SHOP_REFRESH_COOKIE = "shop_refresh_token";
 const SHOP_REFRESH_COOKIE_PATH = "/api/shop";
+const SHOP_GUEST_SESSION_COOKIE = "shop_guest_session";
+const SHOP_GUEST_SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function baseCookieOptions(): CookieOptions {
   return {
@@ -86,4 +88,21 @@ export function getShopAccessToken(req: Request): string | undefined {
 
 export function getShopRefreshToken(req: Request): string | undefined {
   return (req.cookies as Record<string, string | undefined> | undefined)?.[SHOP_REFRESH_COOKIE];
+}
+
+export function getShopGuestSessionId(req: Request): string | undefined {
+  const value = (req.cookies as Record<string, string | undefined> | undefined)?.[SHOP_GUEST_SESSION_COOKIE];
+  return value?.trim() || undefined;
+}
+
+export function setShopGuestSessionId(res: Response, sessionId: string): void {
+  res.cookie(SHOP_GUEST_SESSION_COOKIE, sessionId, {
+    ...baseCookieOptions(),
+    path: "/",
+    maxAge: SHOP_GUEST_SESSION_MAX_AGE_MS,
+  });
+}
+
+export function clearShopGuestSessionId(res: Response): void {
+  res.clearCookie(SHOP_GUEST_SESSION_COOKIE, { ...baseCookieOptions(), path: "/" });
 }

@@ -78,6 +78,10 @@ export const shopAddressSchema = Joi.object({
   isDefault: Joi.boolean().optional(),
 });
 
+export const shopGuestAddressSchema = shopAddressSchema.keys({
+  email: email.required(),
+});
+
 export const shopAddressParamsSchema = Joi.object({
   websiteId: Joi.string().guid().required(),
   addressId: Joi.string().guid().required(),
@@ -118,6 +122,18 @@ export const shopCheckoutStartSchema = Joi.object({
     "any.required": "Choose a delivery address before paying.",
     "string.guid": "Choose a delivery address before paying.",
   }),
+});
+
+export const shopGuestCheckoutStartSchema = Joi.object({
+  email: email.required(),
+  fullName: Joi.string().trim().min(2).max(120).required(),
+  phone: addressPhone,
+  address: shopAddressSchema.required(),
+});
+
+export const shopTrackParamsSchema = Joi.object({
+  websiteId: Joi.string().guid().required(),
+  token: Joi.string().trim().min(20).max(80).required(),
 });
 
 export const shopCheckoutConfirmSchema = Joi.object({

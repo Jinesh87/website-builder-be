@@ -3,6 +3,7 @@ import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { shopAuthController } from "./controllers/shop-auth.controller.js";
 import { authenticateShopCustomer } from "./middleware/authenticate-shop-customer.js";
+import { ensureShopGuestSession } from "./middleware/ensure-shop-guest-session.js";
 import {
   shopAddToCartSchema,
   shopAddToWishlistSchema,
@@ -16,12 +17,15 @@ import {
   shopCheckoutConfirmSchema,
   shopCheckoutStartSchema,
   shopEmailOnlySchema,
+  shopGuestAddressSchema,
+  shopGuestCheckoutStartSchema,
   shopOrderParamsSchema,
   shopProductParamsSchema,
   shopLoginSchema,
   shopProfileUpdateSchema,
   shopResetPasswordSchema,
   shopSignupSchema,
+  shopTrackParamsSchema,
   shopUpdateCartItemSchema,
   shopVerifyEmailSchema,
 } from "./validators/shop-auth.validator.js";
@@ -140,6 +144,87 @@ shopAuthRouter.delete(
   validate(shopCartItemParamsSchema, "params"),
   authenticateShopCustomer,
   shopAuthController.removeCartItem,
+);
+
+shopAuthRouter.get("/guest/cart", websiteParams, ensureShopGuestSession, shopAuthController.listGuestCart);
+shopAuthRouter.post(
+  "/guest/cart",
+  websiteParams,
+  ensureShopGuestSession,
+  rateLimit({ name: "shop-guest-add-to-cart", max: 60, windowSeconds: MINUTE }),
+  validate(shopAddToCartSchema),
+  shopAuthController.addGuestCart,
+);
+shopAuthRouter.patch(
+  "/guest/cart/:itemId",
+  validate(shopCartItemParamsSchema, "params"),
+  ensureShopGuestSession,
+  validate(shopUpdateCartItemSchema),
+  shopAuthController.updateGuestCartItem,
+);
+shopAuthRouter.delete(
+  "/guest/cart/:itemId",
+  validate(shopCartItemParamsSchema, "params"),
+  ensureShopGuestSession,
+  shopAuthController.removeGuestCartItem,
+);
+shopAuthRouter.get("/guest/addresses", websiteParams, ensureShopGuestSession, shopAuthController.listGuestAddresses);
+shopAuthRouter.post(
+  "/guest/addresses",
+  websiteParams,
+  ensureShopGuestSession,
+  rateLimit({ name: "shop-guest-address-write", max: 40, windowSeconds: MINUTE }),
+  validate(shopGuestAddressSchema),
+  shopAuthController.saveGuestAddress,
+);
+shopAuthRouter.delete(
+  "/guest/addresses/:addressId",
+  validate(shopAddressParamsSchema, "params"),
+  ensureShopGuestSession,
+  shopAuthController.deleteGuestAddress,
+);
+shopAuthRouter.get("/guest/wishlist", websiteParams, ensureShopGuestSession, shopAuthController.listGuestWishlist);
+shopAuthRouter.post(
+  "/guest/wishlist",
+  websiteParams,
+  ensureShopGuestSession,
+  rateLimit({ name: "shop-guest-wishlist-write", max: 60, windowSeconds: MINUTE }),
+  validate(shopAddToWishlistSchema),
+  shopAuthController.addGuestWishlist,
+);
+shopAuthRouter.delete(
+  "/guest/wishlist/:variantId",
+  validate(shopProductParamsSchema, "params"),
+  ensureShopGuestSession,
+  shopAuthController.removeGuestWishlist,
+);
+shopAuthRouter.post(
+  "/guest/checkout",
+  websiteParams,
+  ensureShopGuestSession,
+  rateLimit({ name: "shop-guest-checkout", max: 20, windowSeconds: MINUTE }),
+  validate(shopGuestCheckoutStartSchema),
+  shopAuthController.startGuestCheckout,
+);
+shopAuthRouter.post(
+  "/guest/checkout/confirm",
+  websiteParams,
+  ensureShopGuestSession,
+  rateLimit({ name: "shop-guest-checkout-confirm", max: 30, windowSeconds: MINUTE }),
+  validate(shopCheckoutConfirmSchema),
+  shopAuthController.confirmGuestCheckout,
+);
+shopAuthRouter.get(
+  "/track/:token",
+  validate(shopTrackParamsSchema, "params"),
+  rateLimit({ name: "shop-track-order", max: 60, windowSeconds: MINUTE }),
+  shopAuthController.trackOrder,
+);
+shopAuthRouter.get(
+  "/track/:token/invoice",
+  validate(shopTrackParamsSchema, "params"),
+  rateLimit({ name: "shop-track-invoice", max: 30, windowSeconds: MINUTE }),
+  shopAuthController.trackOrderInvoice,
 );
 
 shopAuthRouter.get("/wishlist", websiteParams, authenticateShopCustomer, shopAuthController.listWishlist);

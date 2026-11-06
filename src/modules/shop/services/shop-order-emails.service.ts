@@ -4,9 +4,10 @@ import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
-import { MediaKind, ShopOrderStatus } from "../../../generated/prisma/client.js";
+import { DomainStatus, MediaKind, ShopOrderStatus } from "../../../generated/prisma/client.js";
 import { emailService } from "../../email/services/email.service.js";
 import { scopeFor } from "../../websites/services/website.service.js";
+import { newOrderAccessToken, orderTrackUrl } from "../utils/shop-order-access.js";
 import {
   DEFAULT_SHOP_ORDER_EMAILS,
   EMAIL_LABEL_FROM_STATUS,
@@ -330,7 +331,20 @@ export class ShopOrderEmailsService {
         include: {
           customer: { select: { email: true, fullName: true } },
           items: { orderBy: { productName: "asc" } },
-          website: { select: { name: true, businessName: true, client: { select: { businessName: true } } } },
+          website: {
+            select: {
+              name: true,
+              businessName: true,
+              subdomain: true,
+              client: { select: { businessName: true } },
+              domains: {
+                where: { status: DomainStatus.ACTIVE },
+                orderBy: { isPrimary: "desc" },
+                select: { hostname: true },
+                take: 1,
+              },
+            },
+          },
         },
       });
       if (!order?.customer.email) return;
@@ -343,7 +357,7 @@ export class ShopOrderEmailsService {
       const defaults = DEFAULT_SHOP_ORDER_EMAILS[label];
       const subject = stored?.subject ?? defaults.subject;
       const heading = stored?.heading ?? defaults.heading;
-      const message = stored?.message ?? defaults.message;
+      let message = stored?.message ?? defaults.message;
       const design = await this.resolveDesign(order.websiteId);
 
       const shopName =
@@ -356,6 +370,19 @@ export class ShopOrderEmailsService {
         .join("\n");
       const itemsHtml = escapeHtml(itemsText).replace(/\n/g, "<br/>");
 
+      let trackToken = order.publicAccessToken;
+      if (!trackToken) {
+        trackToken = newOrderAccessToken();
+        await prisma.shopOrder.update({ where: { id: order.id }, data: { publicAccessToken: trackToken } });
+      }
+      const liveBase = order.website.domains[0]?.hostname
+        ? `https://${order.website.domains[0].hostname}`
+        : `${env.API_PUBLIC_URL}/live/${order.website.subdomain}`;
+      const trackUrl = orderTrackUrl(liveBase, trackToken);
+      if (status === ShopOrderStatus.PAID && !message.includes("{{trackUrl}}")) {
+        message = `${message}\n\nTrack your order and download your invoice:\n{{trackUrl}}`;
+      }
+
       const vars: Record<string, string> = {
         customerName: order.customer.fullName || "there",
         customerEmail: order.customer.email,
@@ -366,6 +393,7 @@ export class ShopOrderEmailsService {
         statusLabel: STATUS_DISPLAY[label],
         shopName,
         failureReason: order.failureReason?.trim() || "",
+        trackUrl,
       };
 
       const rendered = renderShopOrderEmail({

@@ -12,6 +12,7 @@ export type ShopCustomerAdminView = {
   fullName: string;
   phone: string | null;
   status: UserStatus;
+  isGuest: boolean;
   emailVerifiedAt: string | null;
   lastSignedInAt: string | null;
   createdAt: string;
@@ -37,6 +38,7 @@ function toView(customer: ShopCustomer): ShopCustomerAdminView {
     fullName: customer.fullName,
     phone: customer.phone,
     status: customer.status,
+    isGuest: customer.isGuest,
     emailVerifiedAt: customer.emailVerifiedAt?.toISOString() ?? null,
     lastSignedInAt: customer.lastSignedInAt?.toISOString() ?? null,
     createdAt: customer.createdAt.toISOString(),
