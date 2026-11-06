@@ -171,6 +171,7 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
     isTemplateStudio: website.client?.isInternal ?? false,
     shopFeatureEnabled: website.client?.shopFeatureEnabled ?? false,
     shopEnabled: website.shopEnabled ?? false,
+    shopAllowGuestCheckout: website.shopAllowGuestCheckout ?? false,
     shopCancelUntilStatus:
       website.shopCancelUntilStatus === "PAID"
         ? "paid"
@@ -812,6 +813,9 @@ export class WebsiteService {
         }
       }
       data.shopEnabled = input.shopEnabled;
+    }
+    if (input.shopAllowGuestCheckout !== undefined) {
+      data.shopAllowGuestCheckout = input.shopAllowGuestCheckout;
     }
     if (input.shopCancelUntilStatus !== undefined) {
       data.shopCancelUntilStatus =

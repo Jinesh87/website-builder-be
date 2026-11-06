@@ -79,6 +79,7 @@ function toAddress(row: ShopCustomerAddress): ShopCustomerAddressView {
     postalCode: row.postalCode,
     country: row.country,
     isDefault: row.isDefault,
+    email: row.email,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -290,6 +291,13 @@ export class ShopAuthService {
       throw new AppError(403, "Please verify your email first.", "EMAIL_NOT_VERIFIED", { email: pending.email });
     }
     if (!customer) throw INVALID_CREDENTIALS();
+    if (customer.isGuest) {
+      throw new AppError(
+        403,
+        "This email was used for guest checkout. Use the order tracking link from your email, or create an account with a password.",
+        "GUEST_ACCOUNT",
+      );
+    }
     if (customer.status === UserStatus.SUSPENDED) {
       throw new AppError(403, "Your account is suspended. Contact the store.", "ACCOUNT_SUSPENDED");
     }

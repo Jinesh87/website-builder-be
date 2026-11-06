@@ -39,6 +39,9 @@ export type ShopOrderSummary = {
   returnUntil: string | null;
   /** True when payment was captured and an invoice can be downloaded. */
   canDownloadInvoice: boolean;
+  /** Public order-tracking token (returned after checkout when available). */
+  trackToken?: string | null;
+  trackUrl?: string | null;
 };
 
 export type ShopOrderTimelineEventView = {
@@ -157,6 +160,8 @@ export type ShopCustomerAddressView = {
   postalCode: string;
   country: string;
   isDefault: boolean;
+  /** Present on guest-session addresses (invoice email). */
+  email?: string | null;
   updatedAt: string;
 };
 
@@ -171,6 +176,8 @@ export type ShopCustomerAddressInput = {
   postalCode: string;
   country?: string;
   isDefault?: boolean;
+  /** Required when saving a guest-session address. */
+  email?: string;
 };
 
 export type ShopCustomerAccountView = {
