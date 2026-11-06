@@ -43,6 +43,7 @@ export type ShopOrderView = {
     fullName: string;
     email: string;
     phone: string | null;
+    isGuest: boolean;
   };
   items: ShopOrderItemView[];
   razorpayOrderId: string | null;
@@ -142,7 +143,7 @@ function toView(order: {
   shippingAddress?: Prisma.JsonValue | null;
   createdAt: Date;
   updatedAt: Date;
-  customer: { id: string; fullName: string; email: string; phone: string | null };
+  customer: { id: string; fullName: string; email: string; phone: string | null; isGuest: boolean };
   items: {
     id: string;
     productName: string;
@@ -166,7 +167,13 @@ function toView(order: {
     refundStatus: refundStatusLabel(order.refundStatus),
     totalPaise: order.totalPaise,
     currency: "INR",
-    customer: order.customer,
+    customer: {
+      id: order.customer.id,
+      fullName: order.customer.fullName,
+      email: order.customer.email,
+      phone: order.customer.phone,
+      isGuest: order.customer.isGuest,
+    },
     items: order.items.map((item) => ({
       id: item.id,
       productName: item.productName,
@@ -232,7 +239,7 @@ export class ShopOrdersService {
       prisma.shopOrder.findMany({
         where,
         include: {
-          customer: { select: { id: true, fullName: true, email: true, phone: true } },
+          customer: { select: { id: true, fullName: true, email: true, phone: true, isGuest: true } },
           items: { orderBy: { productName: "asc" } },
           events: { orderBy: { createdAt: "asc" } },
         },
@@ -250,7 +257,7 @@ export class ShopOrdersService {
     const order = await prisma.shopOrder.findFirst({
       where: { id: orderId, websiteId },
       include: {
-        customer: { select: { id: true, fullName: true, email: true, phone: true } },
+        customer: { select: { id: true, fullName: true, email: true, phone: true, isGuest: true } },
         items: { orderBy: { productName: "asc" } },
         events: { orderBy: { createdAt: "asc" } },
       },

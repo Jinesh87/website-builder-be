@@ -61,6 +61,7 @@ export const SHOP_ORDER_EMAIL_PLACEHOLDERS = [
   "{{orderDate}}",
   "{{shopName}}",
   "{{failureReason}}",
+  "{{trackUrl}}",
 ] as const;
 
 export type DefaultTemplate = {
@@ -81,7 +82,7 @@ export const DEFAULT_SHOP_ORDER_EMAILS: Record<ShopOrderEmailStatusLabel, Defaul
     subject: "Payment confirmed · Order #{{orderNumber}} — {{shopName}}",
     heading: "Payment confirmed",
     message:
-      "Hi {{customerName}},\n\nWe’ve confirmed your payment for order #{{orderNumber}}. We’re getting it ready.",
+      "Hi {{customerName}},\n\nWe’ve confirmed your payment for order #{{orderNumber}}. We’re getting it ready.\n\nTrack your order and download your invoice anytime:\n{{trackUrl}}",
   },
   processing: {
     subject: "Order #{{orderNumber}} is being prepared — {{shopName}}",

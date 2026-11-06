@@ -33,7 +33,14 @@ import {
 } from "../utils/shop-order-return.js";
 import { getReservedQty, releaseStockForOrder, reserveStockForOrder } from "../utils/shop-stock-hold.js";
 import { recordOrderStatusEvent, toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
+import { newOrderAccessToken, orderTrackUrl } from "../utils/shop-order-access.js";
 import { shopOrderEmailsService } from "./shop-order-emails.service.js";
+import { env } from "../../../config/env.js";
+
+function siteUrl(subdomain: string, customDomain: string | null): string {
+  if (customDomain) return `https://${customDomain}`;
+  return `${env.API_PUBLIC_URL}/live/${subdomain}`;
+}
 
 const FIRST_ORDER_NUMBER = 1001;
 
@@ -46,6 +53,8 @@ export type ShopCheckoutSession = {
   currency: string;
   businessName: string;
   prefill: { name: string; email?: string; contact?: string };
+  trackToken?: string;
+  trackUrl?: string;
 };
 
 export type ShopCheckoutConfirmation = {
@@ -351,7 +360,16 @@ export class ShopCheckoutService {
         email: true,
         fullName: true,
         phone: true,
-        website: { select: { id: true, name: true, shopEnabled: true, client: { select: { shopFeatureEnabled: true } } } },
+        website: {
+          select: {
+            id: true,
+            name: true,
+            subdomain: true,
+            shopEnabled: true,
+            domains: { take: 1, orderBy: { createdAt: "asc" }, select: { hostname: true } },
+            client: { select: { shopFeatureEnabled: true } },
+          },
+        },
       },
     });
     if (!customer) throw new AppError(401, "Authentication required", "UNAUTHORIZED");
@@ -474,6 +492,7 @@ export class ShopCheckoutService {
           status: ShopOrderStatus.PENDING,
           currency: PAYMENT_CURRENCY,
           totalPaise,
+          publicAccessToken: newOrderAccessToken(),
           shippingAddress: shippingAddress as Prisma.InputJsonValue,
           items: {
             create: cart.map((line) => {
@@ -564,6 +583,15 @@ export class ShopCheckoutService {
     // Razorpay Checkout expects digits only (no spaces / dashes); bad contact often 400s validate/account.
     const contact = customer.phone?.replace(/\D/g, "") || undefined;
 
+    const withToken = await prisma.shopOrder.findUnique({
+      where: { id: order.id },
+      select: { publicAccessToken: true },
+    });
+    const trackToken = withToken?.publicAccessToken ?? undefined;
+    const trackUrl = trackToken
+      ? orderTrackUrl(siteUrl(customer.website.subdomain, customer.website.domains[0]?.hostname ?? null), trackToken)
+      : undefined;
+
     return {
       orderId: order.id,
       orderNumber: String(order.number),
@@ -577,6 +605,7 @@ export class ShopCheckoutService {
         email: customer.email,
         ...(contact ? { contact } : {}),
       },
+      ...(trackToken ? { trackToken, trackUrl } : {}),
     };
   }
 
@@ -614,7 +643,22 @@ export class ShopCheckoutService {
     }
 
     const paid = await this.markPaid(order.id, payment.id);
-    return toOrderSummary(paid);
+    let trackToken = paid.publicAccessToken;
+    if (!trackToken) {
+      trackToken = newOrderAccessToken();
+      await prisma.shopOrder.update({ where: { id: paid.id }, data: { publicAccessToken: trackToken } });
+    }
+    const website = await prisma.website.findUnique({
+      where: { id: websiteId },
+      select: {
+        subdomain: true,
+        domains: { take: 1, orderBy: { createdAt: "asc" }, select: { hostname: true } },
+      },
+    });
+    const trackUrl = website
+      ? orderTrackUrl(siteUrl(website.subdomain, website.domains[0]?.hostname ?? null), trackToken)
+      : null;
+    return { ...toOrderSummary(paid), trackToken, trackUrl };
   }
 
   /**
