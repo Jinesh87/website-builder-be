@@ -25,6 +25,7 @@ import type {
   PaymentListQuery,
   SubscriptionListQuery,
   UpdateClientBackupPolicyInput,
+  UpdateClientStoragePolicyInput,
   UpdateHostingSettingsInput,
   UpdatePackageInput,
 } from "../types/hosting.types.js";
@@ -206,8 +207,9 @@ export class HostingAdminService {
         }
       : { quarterlyPricePaise: input.quarterlyPricePaise, yearlyPricePaise: input.yearlyPricePaise };
     const websiteBackupDays = input.websiteBackupDays === undefined ? before.websiteBackupDays : input.websiteBackupDays;
+    const mediaStorageMb = input.mediaStorageMb === undefined ? before.mediaStorageMb : input.mediaStorageMb;
     const features = [...new Set(input.features.map((feature) => feature.trim()).filter(Boolean))];
-    const after = { ...before, ...prices, active: input.active, websiteBackupDays };
+    const after = { ...before, ...prices, active: input.active, websiteBackupDays, mediaStorageMb };
 
     await prisma.$transaction(async (tx) => {
       if (input.featured) {
@@ -222,6 +224,7 @@ export class HostingAdminService {
           featured: input.featured,
           active: input.active,
           websiteBackupDays,
+          mediaStorageMb,
           ...prices,
         },
       });
@@ -254,6 +257,18 @@ export class HostingAdminService {
     logger.info(
       { actorId: actor.id, clientId, websiteBackupDaysOverride: input.websiteBackupDaysOverride },
       "Client website backup policy updated",
+    );
+    return this.clientHosting(clientId);
+  }
+
+  async updateClientStoragePolicy(clientId: string, input: UpdateClientStoragePolicyInput, actor: AuthUser): Promise<ClientHostingView> {
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { mediaStorageMbOverride: input.mediaStorageMbOverride },
+    });
+    logger.info(
+      { actorId: actor.id, clientId, mediaStorageMbOverride: input.mediaStorageMbOverride },
+      "Client media storage policy updated",
     );
     return this.clientHosting(clientId);
   }
@@ -433,6 +448,7 @@ export class HostingAdminService {
         businessName: true,
         source: true,
         websiteBackupDaysOverride: true,
+        mediaStorageMbOverride: true,
         createdAt: true,
         users: ownerSelect,
         wallet: { select: { balance: true } },
@@ -478,6 +494,7 @@ export class HostingAdminService {
         createdAt: client.createdAt.toISOString(),
         owner: client.users[0] ?? null,
         websiteBackupDaysOverride: client.websiteBackupDaysOverride ?? null,
+        mediaStorageMbOverride: client.mediaStorageMbOverride ?? null,
       },
       balance: Number(client.wallet?.balance ?? 0),
       websites: client.websites.map((website) => ({

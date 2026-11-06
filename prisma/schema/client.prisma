@@ -12,6 +12,8 @@ model Client {
   aiModel            String?      @db.VarChar(100)
   /// Overrides plan-level automatic website backup cadence in days. Null = use package setting.
   websiteBackupDaysOverride Int?
+  /// Overrides plan-level media library quota in mebibytes. Null = use highest ACTIVE/GRACE package limit.
+  mediaStorageMbOverride Int?
   /// Platform-owned workspace (the Template Studio): hidden from client lists, never billed or published.
   isInternal         Boolean      @default(false)
   createdAt          DateTime     @default(now()) @db.Timestamptz(6)

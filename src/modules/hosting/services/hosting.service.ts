@@ -159,6 +159,7 @@ export function toPackageView(pkg: HostingPackage, website: CustomPricing | null
     features: pkg.features,
     featured: pkg.featured,
     websiteBackupDays: pkg.websiteBackupDays,
+    mediaStorageMb: pkg.mediaStorageMb,
     isCustom: pkg.isCustom,
     prices: {
       QUARTERLY: priceFor(BillingCycle.QUARTERLY, pkg, website),
