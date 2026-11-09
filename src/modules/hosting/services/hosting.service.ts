@@ -107,6 +107,7 @@ export function toSubscriptionView(row: SubscriptionWithPackage): HostingSubscri
     cycle: row.cycle,
     status: row.status,
     autoRenew: row.autoRenew,
+    isComplimentary: row.isComplimentary,
     customQuarterlyPaise: row.customQuarterlyPaise,
     customYearlyPaise: row.customYearlyPaise,
     currentPeriodStart: iso(row.currentPeriodStart),
@@ -367,6 +368,7 @@ export class HostingService {
           packageId: charge.pkg?.id ?? null,
           cycle: charge.cycle,
           status: HostingStatus.ACTIVE,
+          isComplimentary: false,
           currentPeriodStart: period.start,
           currentPeriodEnd: period.end,
           graceEndsAt: null,
@@ -612,6 +614,70 @@ export class HostingService {
   }
 
   /**
+   * Super Admin: activates complimentary hosting for one website for N days and attaches the plan
+   * it should renew on after that. Restores a billing-offline site when a live version exists.
+   */
+  async grantFreePeriod(
+    websiteId: string,
+    input: PlanChoice & { freeDays: number },
+    actor: AuthUser,
+  ): Promise<WebsiteHostingView> {
+    if (actor.role !== UserRole.SUPER_ADMIN) {
+      throw new AppError(403, "Only a Super Admin can grant a free hosting period.", "FORBIDDEN");
+    }
+    await this.assertAccess(websiteId, actor);
+
+    const website = await prisma.website.findUnique({
+      where: { id: websiteId },
+      select: { id: true, clientId: true, hosting: { include: { package: true } } },
+    });
+    if (!website) throw WEBSITE_NOT_FOUND();
+
+    const pkg = await prisma.hostingPackage.findUnique({ where: { id: input.packageId } });
+    // Must be renewable once the free days end.
+    availablePrice(pkg, input.cycle, website.hosting);
+
+    const now = new Date();
+    const periodData = {
+      packageId: pkg!.id,
+      cycle: input.cycle,
+      status: HostingStatus.ACTIVE,
+      isComplimentary: true,
+      currentPeriodStart: now,
+      currentPeriodEnd: addDays(now, input.freeDays),
+      graceEndsAt: null,
+      suspendedAt: null,
+    };
+
+    if (website.hosting) {
+      await prisma.hostingSubscription.update({ where: { id: website.hosting.id }, data: periodData });
+    } else {
+      await prisma.hostingSubscription.create({
+        data: {
+          websiteId: website.id,
+          clientId: website.clientId,
+          createdById: actor.id,
+          ...periodData,
+        },
+      });
+    }
+
+    const restored = await this.restoreIfSuspended(websiteId);
+    logger.info(
+      {
+        websiteId,
+        freeDays: input.freeDays,
+        packageId: input.packageId,
+        cycle: input.cycle,
+        actorId: actor.id,
+        restored,
+      },
+      "Hosting free period granted",
+    );
+    return this.getForWebsite(websiteId, actor);
+  }
+
+  /**
    * Super Admin undoes a recorded payment: deletes the payment row, restores the prior period (or awaiting payment),
    * refunds connects when the period was paid from the wallet, and takes the site offline if hosting is no longer live.
    * Only the latest period can be un-recorded, and online Razorpay payments are left alone.
@@ -711,6 +777,7 @@ export class HostingService {
           where: { id: payment.subscriptionId, websiteId },
           data: {
             status: nextStatus,
+            isComplimentary: false,
             currentPeriodStart,
             currentPeriodEnd,
             graceEndsAt,

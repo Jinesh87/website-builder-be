@@ -64,6 +64,8 @@ model HostingSubscription {
   /// Renew from the client's connects when the period ends (only while connects payments are allowed).
   /// Never on together with a live autopay, so a period is not charged twice.
   autoRenew            Boolean       @default(false)
+  /// True while the current ACTIVE period was granted free (admin grant / bulk backfill), not paid.
+  isComplimentary      Boolean       @default(false)
   currentPeriodStart   DateTime?     @db.Timestamptz(6)
   currentPeriodEnd     DateTime?     @db.Timestamptz(6)
   /// Set while in GRACE: the site goes offline at this time unless paid.
