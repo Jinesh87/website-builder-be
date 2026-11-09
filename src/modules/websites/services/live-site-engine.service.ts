@@ -4,6 +4,7 @@ import { prisma } from "../../../config/prisma.js";
 import { siteRendererClient, type RenderedSitePage } from "./site-renderer.client.js";
 import { siteCacheService, type CachedPagePayload } from "./site-cache.service.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
+import { resolveCustomDomainAccess } from "../../hosting/services/custom-domain-access.js";
 import { shopService, pagePublicCatalog } from "../../shop/services/shop.service.js";
 import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
 import { cancelUntilLabel } from "../../shop/utils/shop-order-cancel.js";
@@ -357,6 +358,13 @@ export class LiveSiteEngineService {
   }
 
   async renderSitemap(identifier: string): Promise<{ xml: string; statusCode: number }> {
+    if (!(await this.allowsIdentifierServe(identifier))) {
+      return {
+        xml: '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+        statusCode: 404,
+      };
+    }
+
     const cached = await siteCacheService.getPage(identifier, "/sitemap.xml");
     if (cached) {
       return { xml: cached.html, statusCode: cached.statusCode };
@@ -401,6 +409,13 @@ ${urls.join("\n")}
   }
 
   async renderRobots(identifier: string): Promise<string> {
+    if (!(await this.allowsIdentifierServe(identifier))) {
+      return `# This site is not available on this domain
+User-agent: *
+Disallow: /
+`;
+    }
+
     const cached = await siteCacheService.getPage(identifier, "/robots.txt");
     if (cached) {
       return cached.html;
@@ -474,6 +489,17 @@ Sitemap: ${domain}/sitemap.xml
     }
 
     const cleanSlug = pathSlug === "" || pathSlug === "/" ? "/" : pathSlug.startsWith("/") ? pathSlug : `/${pathSlug}`;
+
+    // Block unpaid custom domains before cache so old pages can't keep serving.
+    if (!(await this.allowsIdentifierServe(identifier))) {
+      return {
+        html: this.renderNotFoundHtml(identifier),
+        statusCode: 404,
+        contentType: "text/html; charset=utf-8",
+        cachedAt: Date.now(),
+      };
+    }
+
     const picked = Object.entries(selection)
       .filter(([, value]) => value)
       .sort(([left], [right]) => left.localeCompare(right));
@@ -494,6 +520,15 @@ Sitemap: ${domain}/sitemap.xml
     });
   }
 
+  /**
+   * Custom domains need ACTIVE/GRACE hosting while billing is on. Free subdomain always serves.
+   * Checked before cache so unpaid hosts can't keep serving stale pages.
+   */
+  private async allowsIdentifierServe(identifier: string): Promise<boolean> {
+    const access = await resolveCustomDomainAccess(identifier);
+    return access?.allow !== false;
+  }
+
   private async renderPageInternal(
     identifier: string,
     cleanSlug: string,
@@ -507,17 +542,20 @@ Sitemap: ${domain}/sitemap.xml
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
 
-    // 3. 301 Canonical redirect: if accessed via subdomain but primary custom domain exists (not in preview mode)
+    // 3. 301 Canonical redirect: subdomain → primary custom domain only when that domain is allowed to serve.
     const primaryCustomDomain = website.domains?.[0]?.hostname;
     const isSubdomainRequest = identifier.toLowerCase() === website.subdomain.toLowerCase();
     if (primaryCustomDomain && isSubdomainRequest && !basePath) {
-      return {
-        html: "",
-        statusCode: 301,
-        contentType: "text/plain",
-        cachedAt: Date.now(),
-        redirectUrl: `https://${primaryCustomDomain}${cleanSlug === "/" ? "" : cleanSlug}`,
-      };
+      const customAccess = await resolveCustomDomainAccess(primaryCustomDomain);
+      if (customAccess?.allow) {
+        return {
+          html: "",
+          statusCode: 301,
+          contentType: "text/plain",
+          cachedAt: Date.now(),
+          redirectUrl: `https://${primaryCustomDomain}${cleanSlug === "/" ? "" : cleanSlug}`,
+        };
+      }
     }
 
     const snapshot = website.liveVersion.snapshot as unknown as PublishSnapshot;
