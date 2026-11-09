@@ -1063,8 +1063,13 @@ export class WebsiteService {
             completedAt: now,
           },
         });
-        // Keep an immediate system backup at first publish, so restore history starts on day one.
-        if (!previousVersion) {
+        // Ensure a system backup exists so Deployments has restore history (first publish, or sites
+        // that went live before this existed / via restore without a BACKUP row).
+        const existingBackup = await tx.websiteVersion.findFirst({
+          where: { websiteId: website.id, source: WebsiteVersionSource.BACKUP, status: PublishStatus.SUCCEEDED },
+          select: { id: true },
+        });
+        if (!existingBackup) {
           await tx.websiteVersion.create({
             data: {
               websiteId: website.id,

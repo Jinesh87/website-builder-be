@@ -43,9 +43,6 @@ export class WebsiteBackupService {
     for (const website of websites as BackupCandidate[]) {
       const liveVersion = website.liveVersion;
       if (!liveVersion || website.client.isInternal) continue;
-      const everyDays = effectiveBackupDays(website);
-      if (!everyDays || everyDays < 1) continue;
-
       const lastBackup = await prisma.websiteVersion.findFirst({
         where: {
           websiteId: website.id,
@@ -55,8 +52,13 @@ export class WebsiteBackupService {
         orderBy: { createdAt: "desc" },
         select: { createdAt: true },
       });
-      const baseline = lastBackup?.createdAt ?? website.publishedAt ?? liveVersion.createdAt;
-      if (!shouldBackup(now, baseline, everyDays)) continue;
+      // Always create a first backup for published sites that never got one (e.g. published
+      // before first-publish BACKUP existed). Recurring backups still need a package interval.
+      if (lastBackup) {
+        const everyDays = effectiveBackupDays(website);
+        if (!everyDays || everyDays < 1) continue;
+        if (!shouldBackup(now, lastBackup.createdAt, everyDays)) continue;
+      }
 
       await prisma.$transaction(async (tx) => {
         const latest = await tx.websiteVersion.aggregate({ where: { websiteId: website.id }, _max: { version: true } });
