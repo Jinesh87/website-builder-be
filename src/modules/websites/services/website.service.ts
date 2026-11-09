@@ -14,6 +14,7 @@ import {
   type WebsiteTemplate,
 } from "../../../generated/prisma/client.js";
 import { hostingAutopayService } from "../../hosting/services/hosting-autopay.service.js";
+import { loadHostingRules } from "../../hosting/services/hosting.service.js";
 import { THEME_SEEDS } from "../../../seeder/design-library/themes.js";
 import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
 import type { FooterData, HeaderData, LinkRef, Section, ThemeSettings } from "../types/site-content.types.js";
@@ -53,6 +54,14 @@ const summaryInclude = {
   client: { select: { businessName: true, isInternal: true, shopFeatureEnabled: true } },
   _count: { select: { pages: true } },
   generation: true,
+  hosting: {
+    select: {
+      status: true,
+      isComplimentary: true,
+      currentPeriodEnd: true,
+      graceEndsAt: true,
+    },
+  },
 } as const satisfies Prisma.WebsiteInclude;
 
 export const detailInclude = {
@@ -145,7 +154,7 @@ export function scopeFor(actor: AuthUser): Prisma.WebsiteWhereInput {
   return actor.role === UserRole.SUPER_ADMIN ? {} : { clientId: ownClientId(actor) };
 }
 
-function toSummary(website: WebsiteWithSummary): WebsiteSummary {
+function toSummary(website: WebsiteWithSummary, billingEnabled: boolean): WebsiteSummary {
   const publishedAt = website.publishedAt ? new Date(website.publishedAt) : null;
   const draftUpdatedAt = website.draftUpdatedAt
     ? new Date(website.draftUpdatedAt)
@@ -154,6 +163,7 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
       : new Date();
   const createdAt = website.createdAt ? new Date(website.createdAt) : new Date();
   const updatedAt = website.updatedAt ? new Date(website.updatedAt) : new Date();
+  const hosting = website.hosting;
 
   return {
     id: website.id,
@@ -183,6 +193,15 @@ function toSummary(website: WebsiteWithSummary): WebsiteSummary {
     shopReturnGuidelines: readReturnGuidelines(website.shopReturnGuidelines),
     shopGstPercent: website.shopGstPercent ?? 0,
     shopPriceIncludesGst: website.shopPriceIncludesGst !== false,
+    hostingAttention: hosting
+      ? {
+          billingEnabled,
+          status: hosting.status,
+          isComplimentary: hosting.isComplimentary,
+          currentPeriodEnd: hosting.currentPeriodEnd?.toISOString() ?? null,
+          graceEndsAt: hosting.graceEndsAt?.toISOString() ?? null,
+        }
+      : null,
     publishedAt: publishedAt?.toISOString() ?? null,
     createdAt: createdAt.toISOString(),
     updatedAt: updatedAt.toISOString(),
@@ -219,7 +238,7 @@ function toPage(page: WebsiteWithPages["pages"][number]): PageView {
   };
 }
 
-function toDetail(website: WebsiteWithPages): WebsiteDetail {
+function toDetail(website: WebsiteWithPages, billingEnabled = false): WebsiteDetail {
   let header = (website.header && typeof website.header === "object"
     ? website.header
     : BLANK_HEADER) as unknown as HeaderData;
@@ -308,7 +327,7 @@ function toDetail(website: WebsiteWithPages): WebsiteDetail {
       : new Date();
 
   return {
-    ...toSummary(website),
+    ...toSummary(website, billingEnabled),
     customDomain: website.domains?.[0]?.hostname ?? null,
     info: toInfo(website),
     generation: website.generation ? toGenerationView(website.generation) : null,
@@ -647,7 +666,7 @@ export class WebsiteService {
       ],
     };
 
-    const [total, websites] = await prisma.$transaction([
+    const [total, websites, rules] = await Promise.all([
       prisma.website.count({ where }),
       prisma.website.findMany({
         where,
@@ -656,15 +675,24 @@ export class WebsiteService {
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
+      loadHostingRules(),
     ]);
 
-    return { items: websites.map(toSummary), total, page: query.page, pageSize: query.pageSize };
+    return {
+      items: websites.map((website) => toSummary(website, rules.enabled)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
   }
 
   async get(id: string, actor: AuthUser): Promise<WebsiteDetail> {
-    const website = await prisma.website.findFirst({ where: { id, ...scopeFor(actor) }, include: detailInclude });
+    const [website, rules] = await Promise.all([
+      prisma.website.findFirst({ where: { id, ...scopeFor(actor) }, include: detailInclude }),
+      loadHostingRules(),
+    ]);
     if (!website) throw NOT_FOUND();
-    return toDetail(website);
+    return toDetail(website, rules.enabled);
   }
 
   /** `templateStudio` puts the website in the internal Template Studio; only the admin template API sets it. */
@@ -788,7 +816,8 @@ export class WebsiteService {
       { websiteId: website.id, clientId, actorId: actor.id, template: template?.key ?? "blank" },
       "Website created",
     );
-    return toDetail(website);
+    const rules = await loadHostingRules();
+    return toDetail(website, rules.enabled);
   }
 
   async update(id: string, input: UpdateWebsiteInput, actor: AuthUser): Promise<WebsiteDetail> {
@@ -858,7 +887,8 @@ export class WebsiteService {
     const website = await prisma.website.update({ where: { id }, data, include: detailInclude });
     const hostnames = (website.domains || []).map((d) => d.hostname);
     await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
-    return toDetail(website);
+    const rules = await loadHostingRules();
+    return toDetail(website, rules.enabled);
   }
 
   async delete(id: string, actor: AuthUser): Promise<void> {

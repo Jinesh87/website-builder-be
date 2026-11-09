@@ -1,7 +1,16 @@
 import type { BuilderType, PageType, WebsiteStatus } from "../../../common/constants/website.js";
-import type { GenerationStatus } from "../../../generated/prisma/enums.js";
+import type { GenerationStatus, HostingStatus } from "../../../generated/prisma/enums.js";
 import type { FooterData, HeaderData, Section, ThemeSettings } from "./site-content.types.js";
 import type { GenerationView } from "./website-generation.types.js";
+
+/** Compact hosting state for client dashboard / list alerts. */
+export type WebsiteHostingAttention = {
+  billingEnabled: boolean;
+  status: HostingStatus;
+  isComplimentary: boolean;
+  currentPeriodEnd: string | null;
+  graceEndsAt: string | null;
+};
 
 export type WebsiteSummary = {
   id: string;
@@ -34,6 +43,8 @@ export type WebsiteSummary = {
   shopGstPercent: number;
   /** Default: prices include GST unless a product overrides it. */
   shopPriceIncludesGst: boolean;
+  /** Null when the website has no hosting subscription. */
+  hostingAttention: WebsiteHostingAttention | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
