@@ -456,7 +456,10 @@ export class HostingService {
     return { pkg, packageName: pkg!.name, cycle, price };
   }
 
-  /** Puts a site the billing worker took offline back online with its existing live version. */
+  /**
+   * After hosting is paid again: restore any legacy BILLING-unpublished site, and purge caches so
+   * custom domains start serving (free subdomain was never unpublished).
+   */
   async restoreIfSuspended(websiteId: string): Promise<boolean> {
     const website = await prisma.website.findUnique({
       where: { id: websiteId },
@@ -468,41 +471,44 @@ export class HostingService {
         domains: { where: { status: DomainStatus.ACTIVE }, select: { hostname: true } },
       },
     });
+    if (!website) return false;
+
+    let restoredPublish = false;
     if (
-      !website ||
-      website.status !== WebsiteStatus.UNPUBLISHED ||
-      website.offlineReason !== WebsiteOfflineReason.BILLING ||
-      !website.liveVersionId
+      website.status === WebsiteStatus.UNPUBLISHED &&
+      website.offlineReason === WebsiteOfflineReason.BILLING &&
+      website.liveVersionId
     ) {
-      return false;
+      const { count } = await prisma.website.updateMany({
+        where: { id: websiteId, status: WebsiteStatus.UNPUBLISHED, offlineReason: WebsiteOfflineReason.BILLING },
+        data: { status: WebsiteStatus.PUBLISHED, offlineReason: null },
+      });
+      restoredPublish = count > 0;
     }
-    const { count } = await prisma.website.updateMany({
-      where: { id: websiteId, status: WebsiteStatus.UNPUBLISHED, offlineReason: WebsiteOfflineReason.BILLING },
-      data: { status: WebsiteStatus.PUBLISHED, offlineReason: null },
-    });
-    if (count > 0) {
-      await this.purge(website.subdomain, website.domains.map((domain) => domain.hostname));
-      logger.info({ websiteId }, "Website restored after hosting payment");
+
+    const hostnames = website.domains.map((domain) => domain.hostname);
+    await this.purge(website.subdomain, hostnames);
+    if (restoredPublish || hostnames.length > 0) {
+      logger.info({ websiteId, restoredPublish, customDomains: hostnames.length }, "Hosting restored; custom domains reconnected");
     }
-    return count > 0;
+    return restoredPublish || hostnames.length > 0;
   }
 
-  /** Takes a live site offline for non-payment; the draft and versions are untouched. */
+  /**
+   * Unpaid hosting: keep the free subdomain published; only disconnect custom domains.
+   * Serve-time checks already block custom hosts without ACTIVE/GRACE; this clears their caches.
+   */
   async takeOffline(websiteId: string): Promise<boolean> {
     const website = await prisma.website.findUnique({
       where: { id: websiteId },
       select: { subdomain: true, domains: { where: { status: DomainStatus.ACTIVE }, select: { hostname: true } } },
     });
     if (!website) return false;
-    const { count } = await prisma.website.updateMany({
-      where: { id: websiteId, status: WebsiteStatus.PUBLISHED },
-      data: { status: WebsiteStatus.UNPUBLISHED, offlineReason: WebsiteOfflineReason.BILLING },
-    });
-    if (count > 0) {
-      await this.purge(website.subdomain, website.domains.map((domain) => domain.hostname));
-      logger.info({ websiteId }, "Website taken offline for unpaid hosting");
-    }
-    return count > 0;
+    const hostnames = website.domains.map((domain) => domain.hostname);
+    // Purge subdomain too so a cached 301 → custom domain does not keep sending visitors there.
+    await this.purge(website.subdomain, hostnames);
+    logger.info({ websiteId, customDomains: hostnames.length }, "Custom domains disconnected for unpaid hosting");
+    return true;
   }
 
   async publicPricing(): Promise<PublicHostingPricingView> {
