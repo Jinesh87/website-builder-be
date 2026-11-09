@@ -6,6 +6,7 @@ import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { Prisma, type Domain } from "../../../generated/prisma/client.js";
+import { hostingService } from "../../hosting/services/hosting.service.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { liveSiteEngineService } from "../../websites/services/live-site-engine.service.js";
 import { checkDomainDns } from "./dns-check.js";
@@ -64,6 +65,8 @@ export class DomainService {
     const hostname = normalizeHostname(rawHostname);
     const problem = hostname ? hostnameProblem(hostname) : "Enter a domain name like www.yourbusiness.com.";
     if (!hostname || problem) throw new AppError(400, problem!, "INVALID_DOMAIN");
+
+    await hostingService.assertCanConnectDomain(website.id);
 
     const count = await prisma.domain.count({ where: { websiteId: website.id } });
     if (count >= MAX_DOMAINS_PER_WEBSITE) {

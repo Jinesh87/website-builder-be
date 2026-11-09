@@ -22,6 +22,7 @@ import {
   updatePlanSchema,
   updateSettingsSchema,
   websiteParamsSchema,
+  websitePaymentParamsSchema,
 } from "./validators/hosting.validator.js";
 
 /** Mounted at /api/websites/:id/hosting. Clients reach only their own websites (checked in the service). */
@@ -84,6 +85,13 @@ websiteHostingRouter.post(
   rateLimit({ name: "hosting-collect", max: 60, windowSeconds: 60 * 60 }),
   validate(collectHostingSchema),
   hostingController.collect,
+);
+websiteHostingRouter.delete(
+  "/payments/:paymentId",
+  authorize(UserRole.SUPER_ADMIN),
+  validate(websitePaymentParamsSchema, "params"),
+  rateLimit({ name: "hosting-unrecord", max: 60, windowSeconds: 60 * 60 }),
+  hostingController.unrecordPayment,
 );
 
 /** Public: the packages and list prices for the marketing pricing page. */
