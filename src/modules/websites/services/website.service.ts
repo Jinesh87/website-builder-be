@@ -1124,8 +1124,10 @@ export class WebsiteService {
       select: { id: true, liveVersionId: true },
     });
     if (!website) throw NOT_FOUND();
+    // Deployments UI only shows system backups. Fetch BACKUP rows directly — otherwise a site
+    // with many MANUAL publishes buries its BACKUP outside the latest-N window and looks empty.
     const versions = await prisma.websiteVersion.findMany({
-      where: { websiteId: website.id },
+      where: { websiteId: website.id, source: WebsiteVersionSource.BACKUP },
       orderBy: { version: "desc" },
       take: 20,
       select: {
