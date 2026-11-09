@@ -66,6 +66,8 @@ model HostingSubscription {
   autoRenew            Boolean       @default(false)
   /// True while the current ACTIVE period was granted free (admin grant / bulk backfill), not paid.
   isComplimentary      Boolean       @default(false)
+  /// Per-website grace after expiry. Null = platform HostingConfig.graceDays.
+  graceDaysOverride    Int?
   currentPeriodStart   DateTime?     @db.Timestamptz(6)
   currentPeriodEnd     DateTime?     @db.Timestamptz(6)
   /// Set while in GRACE: the site goes offline at this time unless paid.

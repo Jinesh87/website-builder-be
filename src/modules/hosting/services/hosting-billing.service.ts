@@ -13,7 +13,13 @@ import { LIVE_AUTOPAY } from "../../wallet/services/autopay.js";
 import { connectsForPaise } from "../../wallet/services/wallet.service.js";
 import { notifyHostingInBackground, type AutoRenewal, type HostingNoticeTarget } from "./hosting-notifier.js";
 import { addDays, DAY_MS } from "./hosting-period.js";
-import { hostingService, loadHostingRules, planPrice, type HostingRules } from "./hosting.service.js";
+import {
+  effectiveGraceDays,
+  hostingService,
+  loadHostingRules,
+  planPrice,
+  type HostingRules,
+} from "./hosting.service.js";
 
 const BATCH_SIZE = 100;
 
@@ -153,7 +159,7 @@ export class HostingBillingService {
 
   private async startGrace(subscription: DueSubscription, rules: HostingRules, now: Date): Promise<void> {
     const periodEnd = subscription.currentPeriodEnd!;
-    const graceEndsAt = addDays(periodEnd, rules.graceDays);
+    const graceEndsAt = addDays(periodEnd, effectiveGraceDays(subscription, rules));
     const claimed = await prisma.hostingSubscription.updateMany({
       where: { id: subscription.id, status: HostingStatus.ACTIVE, currentPeriodEnd: periodEnd },
       data: { status: HostingStatus.GRACE, graceEndsAt },

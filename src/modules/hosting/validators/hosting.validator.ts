@@ -48,6 +48,8 @@ export const updatePlanSchema = Joi.object({
   autoRenew: Joi.boolean().optional(),
   customQuarterlyPaise: paise.allow(null).optional(),
   customYearlyPaise: paise.allow(null).optional(),
+  /** Null clears the override and uses the platform grace days. */
+  graceDaysOverride: Joi.number().integer().min(0).max(60).allow(null).optional(),
 }).min(1);
 
 export const collectHostingSchema = Joi.object({

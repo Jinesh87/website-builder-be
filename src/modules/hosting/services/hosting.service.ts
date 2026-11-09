@@ -108,6 +108,7 @@ export function toSubscriptionView(row: SubscriptionWithPackage): HostingSubscri
     status: row.status,
     autoRenew: row.autoRenew,
     isComplimentary: row.isComplimentary,
+    graceDaysOverride: row.graceDaysOverride,
     customQuarterlyPaise: row.customQuarterlyPaise,
     customYearlyPaise: row.customYearlyPaise,
     currentPeriodStart: iso(row.currentPeriodStart),
@@ -115,6 +116,14 @@ export function toSubscriptionView(row: SubscriptionWithPackage): HostingSubscri
     graceEndsAt: iso(row.graceEndsAt),
     suspendedAt: iso(row.suspendedAt),
   };
+}
+
+/** Website override when set; otherwise the platform HostingConfig value. */
+export function effectiveGraceDays(
+  subscription: Pick<HostingSubscription, "graceDaysOverride"> | null | undefined,
+  rules: Pick<HostingRules, "graceDays">,
+): number {
+  return subscription?.graceDaysOverride ?? rules.graceDays;
 }
 
 export function toAutopayView(row: HostingAutopay | null | undefined): HostingAutopayView | null {
@@ -561,6 +570,7 @@ export class HostingService {
 
     return {
       enabled: rules.enabled,
+      graceDays: rules.graceDays,
       website: {
         id: website.id,
         name: website.name,
@@ -734,8 +744,17 @@ export class HostingService {
       orderBy: [{ periodStart: "desc" }, { createdAt: "desc" }],
       select: { periodStart: true, periodEnd: true },
     });
-    const rules = await loadHostingRules();
+    const [rules, subscriptionGrace] = await Promise.all([
+      loadHostingRules(),
+      payment.subscriptionId
+        ? prisma.hostingSubscription.findUnique({
+            where: { id: payment.subscriptionId },
+            select: { graceDaysOverride: true },
+          })
+        : Promise.resolve(null),
+    ]);
     const now = new Date();
+    const graceDays = effectiveGraceDays(subscriptionGrace, rules);
 
     let nextStatus: HostingStatus = HostingStatus.AWAITING_PAYMENT;
     let currentPeriodStart: Date | null = null;
@@ -748,7 +767,7 @@ export class HostingService {
       if (previous.periodEnd.getTime() > now.getTime()) {
         nextStatus = HostingStatus.ACTIVE;
       } else {
-        const graceEnd = addDays(previous.periodEnd, rules.graceDays);
+        const graceEnd = addDays(previous.periodEnd, graceDays);
         if (graceEnd.getTime() > now.getTime()) {
           nextStatus = HostingStatus.GRACE;
           graceEndsAt = graceEnd;
@@ -806,14 +825,25 @@ export class HostingService {
   async updatePlan(websiteId: string, input: UpdatePlanInput, actor: AuthUser): Promise<WebsiteHostingView> {
     const website = await prisma.website.findFirst({
       where: { id: websiteId, ...this.scopeFor(actor) },
-      select: { id: true, name: true, clientId: true, hosting: { include: { package: true, autopay: { select: { status: true } } } } },
+      select: {
+        id: true,
+        name: true,
+        clientId: true,
+        hosting: {
+          include: {
+            package: true,
+            autopay: { select: { status: true } },
+          },
+        },
+      },
     });
     if (!website) throw WEBSITE_NOT_FOUND();
 
     const isAdmin = actor.role === UserRole.SUPER_ADMIN;
     const changesPrice = input.customQuarterlyPaise !== undefined || input.customYearlyPaise !== undefined;
-    if (changesPrice && !isAdmin) {
-      throw new AppError(403, "Only an admin can change hosting prices.", "FORBIDDEN");
+    const changesGrace = input.graceDaysOverride !== undefined;
+    if ((changesPrice || changesGrace) && !isAdmin) {
+      throw new AppError(403, "Only an admin can change hosting prices or grace period.", "FORBIDDEN");
     }
     const autopay = website.hosting?.autopay;
     if (input.autoRenew && autopay && STOPPABLE_AUTOPAY.has(autopay.status)) {
@@ -821,6 +851,48 @@ export class HostingService {
     }
 
     const current = website.hosting;
+
+    // Admin can set grace alone without re-choosing a package.
+    if (
+      changesGrace &&
+      input.packageId === undefined &&
+      input.cycle === undefined &&
+      input.autoRenew === undefined &&
+      !changesPrice
+    ) {
+      if (!current) {
+        throw new AppError(400, "Set up a hosting plan for this website before changing its grace period.", "PLAN_REQUIRED");
+      }
+      const rules = await loadHostingRules();
+      const graceDays = effectiveGraceDays({ graceDaysOverride: input.graceDaysOverride ?? null }, rules);
+      const now = new Date();
+      const gracePatch: {
+        graceDaysOverride: number | null;
+        graceEndsAt?: Date | null;
+        status?: HostingStatus;
+        suspendedAt?: Date | null;
+      } = { graceDaysOverride: input.graceDaysOverride ?? null };
+
+      if (current.status === HostingStatus.GRACE && current.currentPeriodEnd) {
+        const graceEndsAt = addDays(current.currentPeriodEnd, graceDays);
+        gracePatch.graceEndsAt = graceEndsAt;
+        if (graceEndsAt.getTime() <= now.getTime()) {
+          gracePatch.status = HostingStatus.SUSPENDED;
+          gracePatch.suspendedAt = now;
+        }
+      }
+
+      await prisma.hostingSubscription.update({ where: { id: current.id }, data: gracePatch });
+      if (gracePatch.status === HostingStatus.SUSPENDED) {
+        await this.takeOffline(websiteId);
+      }
+      logger.info(
+        { websiteId, actorId: actor.id, graceDaysOverride: gracePatch.graceDaysOverride, graceDays },
+        "Hosting grace override updated",
+      );
+      return this.getForWebsite(websiteId, actor);
+    }
+
     const before = { quarterly: current?.customQuarterlyPaise ?? null, yearly: current?.customYearlyPaise ?? null };
     const after = {
       quarterly: input.customQuarterlyPaise !== undefined ? input.customQuarterlyPaise : before.quarterly,
@@ -850,6 +922,7 @@ export class HostingService {
       ...(input.cycle ? { cycle: input.cycle } : {}),
       ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
       ...(changesPrice ? { customQuarterlyPaise: after.quarterly, customYearlyPaise: after.yearly } : {}),
+      ...(changesGrace ? { graceDaysOverride: input.graceDaysOverride ?? null } : {}),
     };
 
     try {

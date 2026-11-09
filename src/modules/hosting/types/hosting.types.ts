@@ -50,6 +50,8 @@ export type HostingSubscriptionView = {
   autoRenew: boolean;
   /** Current ACTIVE period was granted free (not paid). Cleared on payment. */
   isComplimentary: boolean;
+  /** Per-website grace days after expiry; null = platform default. */
+  graceDaysOverride: number | null;
   /** This website's custom package price, in paise; null = the package's default. */
   customQuarterlyPaise: number | null;
   customYearlyPaise: number | null;
@@ -107,6 +109,8 @@ export type HostingPaymentOptions = {
 export type WebsiteHostingView = {
   /** Off: hosting billing isn't enforced on the platform yet. */
   enabled: boolean;
+  /** Platform default grace days after unpaid expiry (used when subscription has no override). */
+  graceDays: number;
   website: {
     id: string;
     name: string;
@@ -137,6 +141,8 @@ export type UpdatePlanInput = {
   /** Super Admin only; null = the custom package's default price. */
   customQuarterlyPaise?: number | null;
   customYearlyPaise?: number | null;
+  /** Super Admin only; null = use platform grace days. */
+  graceDaysOverride?: number | null;
 };
 
 export type CollectInput = PlanChoice & {
