@@ -107,7 +107,7 @@ export class HostingBillingService {
     }
   }
 
-  /** Ended ACTIVE plans: auto-renew from connects when possible, otherwise start the grace days. */
+  /** Ended ACTIVE plans: auto-renew from connects when possible, otherwise start grace (paid) or suspend (free). */
   private async renewDue(rules: HostingRules, now: Date): Promise<void> {
     const due = await prisma.hostingSubscription.findMany({
       where: {
@@ -122,6 +122,11 @@ export class HostingBillingService {
     });
     for (const subscription of due) {
       if (renewsFromConnects(subscription, rules) && (await this.autoRenew(subscription, now))) continue;
+      // Complimentary free days get no grace buffer — only paid periods do.
+      if (subscription.isComplimentary) {
+        await this.suspendComplimentary(subscription, now);
+        continue;
+      }
       await this.startGrace(subscription, rules, now);
     }
   }
@@ -157,11 +162,41 @@ export class HostingBillingService {
     }
   }
 
+  /** Free period ended unpaid: take the site offline immediately (no grace). */
+  private async suspendComplimentary(subscription: DueSubscription, now: Date): Promise<void> {
+    const periodEnd = subscription.currentPeriodEnd!;
+    const claimed = await prisma.hostingSubscription.updateMany({
+      where: {
+        id: subscription.id,
+        status: HostingStatus.ACTIVE,
+        currentPeriodEnd: periodEnd,
+        isComplimentary: true,
+      },
+      data: {
+        status: HostingStatus.SUSPENDED,
+        suspendedAt: now,
+        graceEndsAt: null,
+        isComplimentary: false,
+      },
+    });
+    if (claimed.count === 0) return;
+    await hostingService.takeOffline(subscription.websiteId);
+    logger.info({ websiteId: subscription.websiteId }, "Complimentary hosting ended; suspended without grace");
+    if (await claimNotice(subscription, HostingNoticeKind.SUSPENDED, periodEnd)) {
+      notifyHostingInBackground(target(subscription), { kind: "SUSPENDED" });
+    }
+  }
+
   private async startGrace(subscription: DueSubscription, rules: HostingRules, now: Date): Promise<void> {
     const periodEnd = subscription.currentPeriodEnd!;
     const graceEndsAt = addDays(periodEnd, effectiveGraceDays(subscription, rules));
     const claimed = await prisma.hostingSubscription.updateMany({
-      where: { id: subscription.id, status: HostingStatus.ACTIVE, currentPeriodEnd: periodEnd },
+      where: {
+        id: subscription.id,
+        status: HostingStatus.ACTIVE,
+        currentPeriodEnd: periodEnd,
+        isComplimentary: false,
+      },
       data: { status: HostingStatus.GRACE, graceEndsAt },
     });
     if (claimed.count === 0) return;
