@@ -14,7 +14,6 @@ import {
   type WebsiteTemplate,
 } from "../../../generated/prisma/client.js";
 import { hostingAutopayService } from "../../hosting/services/hosting-autopay.service.js";
-import { hostingService } from "../../hosting/services/hosting.service.js";
 import { THEME_SEEDS } from "../../../seeder/design-library/themes.js";
 import { WEBSITE_TEMPLATE_SEEDS } from "../../../seeder/design-library/templates.js";
 import type { FooterData, HeaderData, LinkRef, Section, ThemeSettings } from "../types/site-content.types.js";
@@ -1002,7 +1001,6 @@ export class WebsiteService {
     if (new Date(input.expectedDraftUpdatedAt).getTime() !== website.draftUpdatedAt.getTime()) {
       throw DRAFT_CONFLICT();
     }
-    await hostingService.assertCanPublish(website.id);
 
     const now = new Date();
     const previousVersion = website.liveVersionId

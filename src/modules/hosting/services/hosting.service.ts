@@ -39,6 +39,7 @@ import type {
 } from "../types/hosting.types.js";
 import { notifyHostingInBackground } from "./hosting-notifier.js";
 import {
+  addDays,
   CYCLE_LABELS,
   formatBillingDate,
   formatPeriod,
@@ -503,13 +504,20 @@ export class HostingService {
     };
   }
 
-  /** Publishing needs a paid (or grace) plan while hosting billing is on. */
-  async assertCanPublish(websiteId: string): Promise<void> {
+  /**
+   * Connecting a custom domain needs a paid (or grace) plan while hosting billing is on.
+   * Publishing to the free subdomain does not require this.
+   */
+  async assertCanConnectDomain(websiteId: string): Promise<void> {
     const rules = await loadHostingRules();
     if (!rules.enabled) return;
     const subscription = await prisma.hostingSubscription.findUnique({ where: { websiteId }, select: { status: true } });
     if (!isHostingLive(subscription?.status)) {
-      throw new AppError(402, "Choose a hosting plan and pay for it to publish this website.", "HOSTING_REQUIRED");
+      throw new AppError(
+        402,
+        "Choose a hosting plan and pay for it before connecting a custom domain.",
+        "HOSTING_REQUIRED",
+      );
     }
   }
 
@@ -600,6 +608,127 @@ export class HostingService {
       reference: input.reference,
       note: input.note,
     });
+    return this.getForWebsite(websiteId, actor);
+  }
+
+  /**
+   * Super Admin undoes a recorded payment: deletes the payment row, restores the prior period (or awaiting payment),
+   * refunds connects when the period was paid from the wallet, and takes the site offline if hosting is no longer live.
+   * Only the latest period can be un-recorded, and online Razorpay payments are left alone.
+   */
+  async unrecordPayment(websiteId: string, paymentId: string, actor: AuthUser): Promise<WebsiteHostingView> {
+    if (actor.role !== UserRole.SUPER_ADMIN) {
+      throw new AppError(403, "Only a Super Admin can un-record a hosting payment.", "FORBIDDEN");
+    }
+    await this.assertAccess(websiteId, actor);
+
+    const payment = await prisma.hostingPayment.findFirst({
+      where: { id: paymentId, websiteId },
+      select: {
+        id: true,
+        clientId: true,
+        subscriptionId: true,
+        websiteName: true,
+        packageName: true,
+        cycle: true,
+        amountPaise: true,
+        connects: true,
+        periodStart: true,
+        periodEnd: true,
+        method: true,
+        paidBy: true,
+        walletTransactionId: true,
+        hostingOrderId: true,
+      },
+    });
+    if (!payment) throw new AppError(404, "That hosting payment was not found.", "PAYMENT_NOT_FOUND");
+    if (payment.method === HostingPaymentMethod.RAZORPAY || payment.hostingOrderId) {
+      throw new AppError(
+        400,
+        "Online Razorpay payments can't be un-recorded here. Reverse the charge in Razorpay if needed.",
+        "PAYMENT_NOT_UNRECORDABLE",
+      );
+    }
+
+    const latest = await prisma.hostingPayment.findFirst({
+      where: { websiteId },
+      orderBy: [{ periodStart: "desc" }, { createdAt: "desc" }],
+      select: { id: true },
+    });
+    if (!latest || latest.id !== payment.id) {
+      throw new AppError(
+        409,
+        "Only the latest hosting payment can be un-recorded. Undo newer periods first.",
+        "NOT_LATEST_PAYMENT",
+      );
+    }
+
+    const previous = await prisma.hostingPayment.findFirst({
+      where: { websiteId, id: { not: payment.id } },
+      orderBy: [{ periodStart: "desc" }, { createdAt: "desc" }],
+      select: { periodStart: true, periodEnd: true },
+    });
+    const rules = await loadHostingRules();
+    const now = new Date();
+
+    let nextStatus: HostingStatus = HostingStatus.AWAITING_PAYMENT;
+    let currentPeriodStart: Date | null = null;
+    let currentPeriodEnd: Date | null = null;
+    let graceEndsAt: Date | null = null;
+    let suspendedAt: Date | null = null;
+    if (previous) {
+      currentPeriodStart = previous.periodStart;
+      currentPeriodEnd = previous.periodEnd;
+      if (previous.periodEnd.getTime() > now.getTime()) {
+        nextStatus = HostingStatus.ACTIVE;
+      } else {
+        const graceEnd = addDays(previous.periodEnd, rules.graceDays);
+        if (graceEnd.getTime() > now.getTime()) {
+          nextStatus = HostingStatus.GRACE;
+          graceEndsAt = graceEnd;
+        } else {
+          nextStatus = HostingStatus.SUSPENDED;
+          suspendedAt = now;
+        }
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (payment.walletTransactionId && (payment.connects ?? 0) > 0) {
+        await applyLedgerEntry(tx, payment.clientId, {
+          type: WalletTransactionType.CREDIT,
+          source: WalletTransactionSource.HOSTING,
+          amount: payment.connects!,
+          description: `Hosting refund · ${payment.websiteName} · ${payment.packageName ?? "Plan"} ${CYCLE_LABELS[payment.cycle]} · ${formatPeriod(payment.periodStart, payment.periodEnd)}`,
+          userId: actor.id,
+        });
+      }
+
+      await tx.hostingPayment.delete({ where: { id: payment.id } });
+
+      if (payment.subscriptionId) {
+        const claimed = await tx.hostingSubscription.updateMany({
+          where: { id: payment.subscriptionId, websiteId },
+          data: {
+            status: nextStatus,
+            currentPeriodStart,
+            currentPeriodEnd,
+            graceEndsAt,
+            suspendedAt,
+          },
+        });
+        if (claimed.count === 0) throw HOSTING_CHANGED();
+      }
+    });
+
+    if (!isHostingLive(nextStatus)) {
+      await this.takeOffline(websiteId);
+    }
+
+    logger.info(
+      { websiteId, paymentId: payment.id, nextStatus, paidBy: payment.paidBy, method: payment.method, actorId: actor.id },
+      "Hosting payment un-recorded",
+    );
     return this.getForWebsite(websiteId, actor);
   }
 
