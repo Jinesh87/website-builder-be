@@ -93,6 +93,14 @@ export class HostingController {
     }
   };
 
+  grantFreePeriod = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ hosting: await hostingService.grantFreePeriod(req.params.id, req.body, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   unrecordPayment = async (req: Request<WebsiteParams & { paymentId: string }>, res: Response, next: NextFunction) => {
     try {
       res.json({ hosting: await hostingService.unrecordPayment(req.params.id, req.params.paymentId, req.user!) });

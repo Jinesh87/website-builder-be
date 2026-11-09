@@ -93,6 +93,9 @@ export const backfillSchema = Joi.object({
   cycle: cycle.required(),
 });
 
+/** Same shape as bulk backfill, applied to one website. */
+export const grantFreePeriodSchema = backfillSchema;
+
 export const subscriptionsQuerySchema = Joi.object({
   search: Joi.string().trim().max(100).allow("").optional(),
   status: Joi.string().valid("AWAITING_PAYMENT", "ACTIVE", "GRACE", "SUSPENDED").allow("").optional(),

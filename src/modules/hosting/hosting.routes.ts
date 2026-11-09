@@ -21,6 +21,7 @@ import {
   updatePackageSchema,
   updatePlanSchema,
   updateSettingsSchema,
+  grantFreePeriodSchema,
   websiteParamsSchema,
   websitePaymentParamsSchema,
 } from "./validators/hosting.validator.js";
@@ -85,6 +86,14 @@ websiteHostingRouter.post(
   rateLimit({ name: "hosting-collect", max: 60, windowSeconds: 60 * 60 }),
   validate(collectHostingSchema),
   hostingController.collect,
+);
+websiteHostingRouter.post(
+  "/grant-free",
+  authorize(UserRole.SUPER_ADMIN),
+  byWebsite,
+  rateLimit({ name: "hosting-grant-free", max: 60, windowSeconds: 60 * 60 }),
+  validate(grantFreePeriodSchema),
+  hostingController.grantFreePeriod,
 );
 websiteHostingRouter.delete(
   "/payments/:paymentId",
