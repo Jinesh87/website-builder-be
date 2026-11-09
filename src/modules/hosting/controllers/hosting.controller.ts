@@ -93,6 +93,14 @@ export class HostingController {
     }
   };
 
+  unrecordPayment = async (req: Request<WebsiteParams & { paymentId: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ hosting: await hostingService.unrecordPayment(req.params.id, req.params.paymentId, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   publicPricing = async (_req: Request, res: Response, next: NextFunction) => {
     try {
       res.json({ pricing: await hostingService.publicPricing() });

@@ -12,6 +12,11 @@ export const websiteParamsSchema = Joi.object({
   id: Joi.string().uuid().required(),
 });
 
+export const websitePaymentParamsSchema = Joi.object({
+  id: Joi.string().uuid().required(),
+  paymentId: Joi.string().uuid().required(),
+});
+
 export const clientParamsSchema = Joi.object({
   clientId: Joi.string().uuid().required(),
 });
