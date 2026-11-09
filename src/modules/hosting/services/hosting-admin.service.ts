@@ -290,6 +290,7 @@ export class HostingAdminService {
         packageId: pkg!.id,
         cycle: input.cycle,
         status: HostingStatus.ACTIVE,
+        isComplimentary: true,
         currentPeriodStart: now,
         currentPeriodEnd: addDays(now, input.freeDays),
         createdById: actor.id,

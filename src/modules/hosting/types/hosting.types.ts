@@ -48,6 +48,8 @@ export type HostingSubscriptionView = {
   cycle: BillingCycle;
   status: HostingStatus;
   autoRenew: boolean;
+  /** Current ACTIVE period was granted free (not paid). Cleared on payment. */
+  isComplimentary: boolean;
   /** This website's custom package price, in paise; null = the package's default. */
   customQuarterlyPaise: number | null;
   customYearlyPaise: number | null;
