@@ -98,6 +98,16 @@ function iso(date: Date | null): string | null {
   return date?.toISOString() ?? null;
 }
 
+function readCustomFeatures(value: unknown): string[] | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function featuresJson(value: string[] | null): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return value === null ? Prisma.DbNull : value;
+}
+
 export function toSubscriptionView(row: SubscriptionWithPackage): HostingSubscriptionView {
   return {
     id: row.id,
@@ -111,6 +121,7 @@ export function toSubscriptionView(row: SubscriptionWithPackage): HostingSubscri
     graceDaysOverride: row.graceDaysOverride,
     customQuarterlyPaise: row.customQuarterlyPaise,
     customYearlyPaise: row.customYearlyPaise,
+    customFeatures: readCustomFeatures(row.customFeatures),
     currentPeriodStart: iso(row.currentPeriodStart),
     currentPeriodEnd: iso(row.currentPeriodEnd),
     graceEndsAt: iso(row.graceEndsAt),
@@ -160,14 +171,18 @@ export function toPaymentView(row: PaymentRow): HostingPaymentView {
   };
 }
 
+type PackageWebsiteContext = CustomPricing & { customFeatures?: string[] | null };
+
 /** A package as a client or visitor sees it, priced for one website (null = list prices only). */
-export function toPackageView(pkg: HostingPackage, website: CustomPricing | null): HostingPackageView {
+export function toPackageView(pkg: HostingPackage, website: PackageWebsiteContext | null): HostingPackageView {
+  const override = pkg.isCustom ? (website?.customFeatures ?? null) : null;
   return {
     id: pkg.id,
     slug: pkg.slug,
     name: pkg.name,
     description: pkg.description,
-    features: pkg.features,
+    features: override ?? pkg.features,
+    defaultFeatures: pkg.isCustom ? pkg.features : null,
     featured: pkg.featured,
     websiteBackupDays: pkg.websiteBackupDays,
     mediaStorageMb: pkg.mediaStorageMb,
@@ -588,7 +603,18 @@ export class HostingService {
       },
       subscription: subscription && toSubscriptionView(subscription),
       autopay: toAutopayView(subscription?.autopay),
-      packages: choices.map((pkg) => toPackageView(pkg, subscription)),
+      packages: choices.map((pkg) =>
+        toPackageView(
+          pkg,
+          subscription
+            ? {
+                customQuarterlyPaise: subscription.customQuarterlyPaise,
+                customYearlyPaise: subscription.customYearlyPaise,
+                customFeatures: readCustomFeatures(subscription.customFeatures),
+              }
+            : null,
+        ),
+      ),
       nextPeriods: { QUARTERLY: periodFor(BillingCycle.QUARTERLY), YEARLY: periodFor(BillingCycle.YEARLY) },
       renewalOpensAt: iso(renewalOpensAt(subscription, now)),
       payment: {
@@ -848,8 +874,9 @@ export class HostingService {
     const isAdmin = actor.role === UserRole.SUPER_ADMIN;
     const changesPrice = input.customQuarterlyPaise !== undefined || input.customYearlyPaise !== undefined;
     const changesGrace = input.graceDaysOverride !== undefined;
-    if ((changesPrice || changesGrace) && !isAdmin) {
-      throw new AppError(403, "Only an admin can change hosting prices or grace period.", "FORBIDDEN");
+    const changesFeatures = input.customFeatures !== undefined;
+    if ((changesPrice || changesGrace || changesFeatures) && !isAdmin) {
+      throw new AppError(403, "Only an admin can change hosting prices, features, or grace period.", "FORBIDDEN");
     }
     const autopay = website.hosting?.autopay;
     if (input.autoRenew && autopay && STOPPABLE_AUTOPAY.has(autopay.status)) {
@@ -857,45 +884,64 @@ export class HostingService {
     }
 
     const current = website.hosting;
+    const normalizedFeatures =
+      input.customFeatures === undefined
+        ? undefined
+        : input.customFeatures === null
+          ? null
+          : input.customFeatures.map((feature) => feature.trim()).filter(Boolean).slice(0, 20);
 
-    // Admin can set grace alone without re-choosing a package.
+    // Admin can set grace or custom features alone without re-choosing a package.
     if (
-      changesGrace &&
+      (changesGrace || changesFeatures) &&
       input.packageId === undefined &&
       input.cycle === undefined &&
       input.autoRenew === undefined &&
       !changesPrice
     ) {
       if (!current) {
-        throw new AppError(400, "Set up a hosting plan for this website before changing its grace period.", "PLAN_REQUIRED");
+        throw new AppError(400, "Set up a hosting plan for this website before changing grace or features.", "PLAN_REQUIRED");
       }
-      const rules = await loadHostingRules();
-      const graceDays = effectiveGraceDays({ graceDaysOverride: input.graceDaysOverride ?? null }, rules);
-      const now = new Date();
-      const gracePatch: {
-        graceDaysOverride: number | null;
-        graceEndsAt?: Date | null;
-        status?: HostingStatus;
-        suspendedAt?: Date | null;
-      } = { graceDaysOverride: input.graceDaysOverride ?? null };
+      if (changesGrace) {
+        const rules = await loadHostingRules();
+        const graceDays = effectiveGraceDays({ graceDaysOverride: input.graceDaysOverride ?? null }, rules);
+        const now = new Date();
+        const gracePatch: {
+          graceDaysOverride: number | null;
+          customFeatures?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+          graceEndsAt?: Date | null;
+          status?: HostingStatus;
+          suspendedAt?: Date | null;
+        } = {
+          graceDaysOverride: input.graceDaysOverride ?? null,
+          ...(changesFeatures ? { customFeatures: featuresJson(normalizedFeatures ?? null) } : {}),
+        };
 
-      if (current.status === HostingStatus.GRACE && current.currentPeriodEnd) {
-        const graceEndsAt = addDays(current.currentPeriodEnd, graceDays);
-        gracePatch.graceEndsAt = graceEndsAt;
-        if (graceEndsAt.getTime() <= now.getTime()) {
-          gracePatch.status = HostingStatus.SUSPENDED;
-          gracePatch.suspendedAt = now;
+        if (current.status === HostingStatus.GRACE && current.currentPeriodEnd) {
+          const graceEndsAt = addDays(current.currentPeriodEnd, graceDays);
+          gracePatch.graceEndsAt = graceEndsAt;
+          if (graceEndsAt.getTime() <= now.getTime()) {
+            gracePatch.status = HostingStatus.SUSPENDED;
+            gracePatch.suspendedAt = now;
+          }
         }
+
+        await prisma.hostingSubscription.update({ where: { id: current.id }, data: gracePatch });
+        if (gracePatch.status === HostingStatus.SUSPENDED) {
+          await this.takeOffline(websiteId);
+        }
+        logger.info(
+          { websiteId, actorId: actor.id, graceDaysOverride: gracePatch.graceDaysOverride, graceDays },
+          "Hosting grace override updated",
+        );
+        return this.getForWebsite(websiteId, actor);
       }
 
-      await prisma.hostingSubscription.update({ where: { id: current.id }, data: gracePatch });
-      if (gracePatch.status === HostingStatus.SUSPENDED) {
-        await this.takeOffline(websiteId);
-      }
-      logger.info(
-        { websiteId, actorId: actor.id, graceDaysOverride: gracePatch.graceDaysOverride, graceDays },
-        "Hosting grace override updated",
-      );
+      await prisma.hostingSubscription.update({
+        where: { id: current.id },
+        data: { customFeatures: featuresJson(normalizedFeatures ?? null) },
+      });
+      logger.info({ websiteId, actorId: actor.id, customFeatures: normalizedFeatures }, "Hosting custom features updated");
       return this.getForWebsite(websiteId, actor);
     }
 
@@ -929,6 +975,7 @@ export class HostingService {
       ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
       ...(changesPrice ? { customQuarterlyPaise: after.quarterly, customYearlyPaise: after.yearly } : {}),
       ...(changesGrace ? { graceDaysOverride: input.graceDaysOverride ?? null } : {}),
+      ...(changesFeatures ? { customFeatures: featuresJson(normalizedFeatures ?? null) } : {}),
     };
 
     try {

@@ -60,6 +60,8 @@ model HostingSubscription {
   /// Filled in when a custom plan is paid, so a later change to the default doesn't reprice it.
   customQuarterlyPaise Int?
   customYearlyPaise    Int?
+  /// This website's feature list on the custom package (JSON string[]). Null = package default features.
+  customFeatures       Json?
   status               HostingStatus @default(AWAITING_PAYMENT)
   /// Renew from the client's connects when the period ends (only while connects payments are allowed).
   /// Never on together with a live autopay, so a period is not charged twice.
