@@ -111,31 +111,133 @@ export class AdminWalletService {
 
   async listPayments(query: AdminPaymentQuery) {
     const client = searchClient(query.search);
-    const where: Prisma.PaymentOrderWhereInput = {
-      ...(period(query) ? { createdAt: period(query) } : {}),
+    const createdAt = period(query);
+    const paymentWhere: Prisma.PaymentOrderWhereInput = {
+      ...(createdAt ? { createdAt } : {}),
       ...(client ? { client } : {}),
     };
-    const filtered: Prisma.PaymentOrderWhereInput = { ...where, ...(query.status ? { status: query.status } : {}) };
+    const hostingWhere: Prisma.HostingOrderWhereInput = {
+      ...(createdAt ? { createdAt } : {}),
+      ...(client ? { client } : {}),
+    };
+    const paymentFiltered: Prisma.PaymentOrderWhereInput = {
+      ...paymentWhere,
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const hostingFiltered: Prisma.HostingOrderWhereInput = {
+      ...hostingWhere,
+      ...(query.status ? { status: query.status } : {}),
+    };
 
-    const [rows, total, groups] = await Promise.all([
+    const [paymentRefs, hostingRefs, paymentGroups, hostingGroups, paidConnects, paidHosting] = await Promise.all([
       prisma.paymentOrder.findMany({
-        where: filtered,
+        where: paymentFiltered,
+        select: { id: true, createdAt: true },
         orderBy: { createdAt: "desc" },
-        skip: (query.page - 1) * query.pageSize,
-        take: query.pageSize,
-        include: { client: clientSelect, user: userSelect },
       }),
-      prisma.paymentOrder.count({ where: filtered }),
-      prisma.paymentOrder.groupBy({ by: ["status"], where, _sum: { amountPaise: true }, _count: { _all: true } }),
+      prisma.hostingOrder.findMany({
+        where: hostingFiltered,
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.paymentOrder.groupBy({ by: ["status"], where: paymentWhere, _sum: { amountPaise: true }, _count: { _all: true } }),
+      prisma.hostingOrder.groupBy({ by: ["status"], where: hostingWhere, _sum: { amountPaise: true }, _count: { _all: true } }),
+      prisma.paymentOrder.aggregate({
+        where: { ...paymentWhere, status: "PAID" },
+        _sum: { amountPaise: true },
+        _count: { _all: true },
+      }),
+      prisma.hostingOrder.aggregate({
+        where: { ...hostingWhere, status: "PAID" },
+        _sum: { amountPaise: true },
+        _count: { _all: true },
+      }),
     ]);
-    const byStatus = (status: PaymentOrderStatus) => groups.find((group) => group.status === status);
 
-    return {
-      items: rows.map((row) => ({
+    const merged = [
+      ...paymentRefs.map((row) => ({ id: row.id, createdAt: row.createdAt, kind: "CONNECTS" as const })),
+      ...hostingRefs.map((row) => ({ id: row.id, createdAt: row.createdAt, kind: "HOSTING" as const })),
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const total = merged.length;
+    const pageSlice = merged.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
+    const connectIds = pageSlice.filter((row) => row.kind === "CONNECTS").map((row) => row.id);
+    const hostingIds = pageSlice.filter((row) => row.kind === "HOSTING").map((row) => row.id);
+
+    const [paymentRows, hostingRows] = await Promise.all([
+      connectIds.length
+        ? prisma.paymentOrder.findMany({
+            where: { id: { in: connectIds } },
+            include: { client: clientSelect, user: userSelect },
+          })
+        : Promise.resolve([]),
+      hostingIds.length
+        ? prisma.hostingOrder.findMany({
+            where: { id: { in: hostingIds } },
+            include: {
+              client: clientSelect,
+              user: userSelect,
+              website: { select: { name: true, subdomain: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const paymentById = new Map(paymentRows.map((row) => [row.id, row]));
+    const hostingById = new Map(hostingRows.map((row) => [row.id, row]));
+    const cycleLabel = { QUARTERLY: "Quarterly", YEARLY: "Yearly" } as const;
+
+    type PaymentItem = {
+      id: string;
+      kind: "CONNECTS" | "HOSTING";
+      label: string;
+      razorpayOrderId: string;
+      razorpayPaymentId: string | null;
+      connects: number | null;
+      amountPaise: number;
+      currency: string;
+      status: PaymentOrderStatus;
+      failureReason: string | null;
+      createdAt: string;
+      paidAt: string | null;
+      client: ClientRef;
+      user: UserRef;
+    };
+
+    const items: PaymentItem[] = [];
+    for (const ref of pageSlice) {
+      if (ref.kind === "CONNECTS") {
+        const row = paymentById.get(ref.id);
+        if (!row) continue;
+        items.push({
+          id: row.id,
+          kind: "CONNECTS",
+          label: row.razorpaySubscriptionId ? "Connects auto top-up" : "Connects purchase",
+          razorpayOrderId: row.razorpayOrderId,
+          razorpayPaymentId: row.razorpayPaymentId,
+          connects: row.connects,
+          amountPaise: row.amountPaise,
+          currency: row.currency,
+          status: row.status,
+          failureReason: row.failureReason,
+          createdAt: row.createdAt.toISOString(),
+          paidAt: row.paidAt?.toISOString() ?? null,
+          client: row.client as ClientRef,
+          user: row.user as UserRef,
+        });
+        continue;
+      }
+      const row = hostingById.get(ref.id);
+      if (!row) continue;
+      const site = row.website ? row.website.name : null;
+      const plan = `${row.packageName} · ${cycleLabel[row.cycle]}`;
+      items.push({
         id: row.id,
+        kind: "HOSTING",
+        label: site ? `${plan} · ${site}` : plan,
         razorpayOrderId: row.razorpayOrderId,
         razorpayPaymentId: row.razorpayPaymentId,
-        connects: row.connects,
+        connects: null,
         amountPaise: row.amountPaise,
         currency: row.currency,
         status: row.status,
@@ -144,13 +246,26 @@ export class AdminWalletService {
         paidAt: row.paidAt?.toISOString() ?? null,
         client: row.client as ClientRef,
         user: row.user as UserRef,
-      })),
+      });
+    }
+
+    const statusCount = (status: PaymentOrderStatus) =>
+      (paymentGroups.find((group) => group.status === status)?._count._all ?? 0) +
+      (hostingGroups.find((group) => group.status === status)?._count._all ?? 0);
+
+    const connectsPaise = paidConnects._sum.amountPaise ?? 0;
+    const hostingPaise = paidHosting._sum.amountPaise ?? 0;
+
+    return {
+      items,
       summary: {
-        paidPaise: byStatus("PAID")?._sum.amountPaise ?? 0,
-        paidCount: byStatus("PAID")?._count._all ?? 0,
-        failedCount: byStatus("FAILED")?._count._all ?? 0,
+        paidPaise: connectsPaise + hostingPaise,
+        paidCount: (paidConnects._count._all ?? 0) + (paidHosting._count._all ?? 0),
+        paidConnectsPaise: connectsPaise,
+        paidHostingPaise: hostingPaise,
+        failedCount: statusCount("FAILED"),
         /** Checkout opened but never completed (abandoned or still in progress). */
-        pendingCount: byStatus("CREATED")?._count._all ?? 0,
+        pendingCount: statusCount("CREATED"),
       },
       total,
       page: query.page,
