@@ -12,6 +12,7 @@ import {
   createRazorpayOrder,
   fetchRazorpayPayment,
   isValidPaymentSignature,
+  toRazorpayContact,
 } from "../../wallet/services/razorpay.client.js";
 import { formatInr, PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
 import type {
@@ -132,6 +133,7 @@ export class HostingCheckoutService {
       "Hosting checkout started",
     );
 
+    const contact = toRazorpayContact(user.phone);
     return {
       status: "CHECKOUT",
       checkout: {
@@ -144,7 +146,7 @@ export class HostingCheckoutService {
         prefill: {
           name: user.fullName,
           ...(user.email ? { email: user.email } : {}),
-          ...(user.phone ? { contact: user.phone } : {}),
+          ...(contact ? { contact } : {}),
         },
       },
     };

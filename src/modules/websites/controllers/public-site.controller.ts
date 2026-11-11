@@ -30,8 +30,10 @@ const LIVE_SITE_CSP = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com",
-  "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://checkout.razorpay.com",
-  "form-action 'self'",
+  // Checkout talks to Razorpay hosts and (for some methods) bank endpoints over fetch/XHR.
+  "connect-src 'self' https:",
+  // Netbanking/UPI Autopay POST out to Razorpay and bank hosts; 'self' alone leaves an about:blank popup.
+  "form-action 'self' https:",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'self'",
@@ -104,6 +106,9 @@ export class PublicSiteController {
       res.setHeader("Content-Type", result.contentType);
       res.setHeader("X-Robots-Tag", "all");
       res.setHeader("Content-Security-Policy", LIVE_SITE_CSP);
+      // Razorpay netbanking/UPI open a cross-origin checkout window; COOP same-origin
+      // severs window.opener and leaves an empty about:blank tab (Connects has no COOP).
+      res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
       // Browsers revalidate every visit (cheap 304s via ETag), so a new publish shows up immediately.
       res.setHeader("Cache-Control", result.transient ? "no-store" : "public, no-cache");
       res.send(result.html);

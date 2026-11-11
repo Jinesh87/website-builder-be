@@ -7,6 +7,7 @@ import { Prisma, ShopOrderStatus, ShopRefundStatus, type ShopOrder } from "../..
 import {
   captureRazorpayPayment,
   createRazorpayOrder,
+  toRazorpayContact,
   createRazorpayRefund,
   fetchRazorpayPayment,
   isValidPaymentSignature,
@@ -580,8 +581,7 @@ export class ShopCheckoutService {
       data: { razorpayOrderId: razorpay.id },
     });
 
-    // Razorpay Checkout expects digits only (no spaces / dashes); bad contact often 400s validate/account.
-    const contact = customer.phone?.replace(/\D/g, "") || undefined;
+    const contact = toRazorpayContact(customer.phone);
 
     const withToken = await prisma.shopOrder.findUnique({
       where: { id: order.id },

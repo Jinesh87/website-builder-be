@@ -21,6 +21,7 @@ import {
   fetchRazorpayPayment,
   isValidPaymentSignature,
   isValidWebhookSignature,
+  toRazorpayContact,
   type RazorpaySubscription,
 } from "./razorpay.client.js";
 
@@ -284,6 +285,7 @@ export class WalletService {
     await prisma.paymentOrder.create({
       data: { clientId, userId, razorpayOrderId: order.id, connects, amountPaise, currency: PAYMENT_CURRENCY },
     });
+    const contact = toRazorpayContact(user.phone);
     return {
       orderId: order.id,
       keyId: keys.keyId,
@@ -294,7 +296,7 @@ export class WalletService {
       prefill: {
         name: user.fullName,
         ...(user.email ? { email: user.email } : {}),
-        ...(user.phone ? { contact: user.phone } : {}),
+        ...(contact ? { contact } : {}),
       },
     };
   }

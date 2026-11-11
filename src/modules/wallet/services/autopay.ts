@@ -4,6 +4,7 @@ import {
   cancelRazorpaySubscription,
   createRazorpayPlan,
   fetchRazorpaySubscription,
+  toRazorpayContact,
   type RazorpayKeys,
   type RazorpayPlanPeriod,
   type RazorpaySubscription,
@@ -51,12 +52,13 @@ export async function checkoutContact(
     prisma.client.findUniqueOrThrow({ where: { id: clientId }, select: { businessName: true } }),
     prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { fullName: true, email: true, phone: true } }),
   ]);
+  const contact = toRazorpayContact(user.phone);
   return {
     businessName: client.businessName,
     prefill: {
       name: user.fullName,
       ...(user.email ? { email: user.email } : {}),
-      ...(user.phone ? { contact: user.phone } : {}),
+      ...(contact ? { contact } : {}),
     },
   };
 }

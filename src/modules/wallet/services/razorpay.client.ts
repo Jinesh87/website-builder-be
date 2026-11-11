@@ -5,6 +5,19 @@ const API_BASE = "https://api.razorpay.com/v1";
 
 export type RazorpayKeys = { keyId: string; keySecret: string };
 
+/**
+ * Prefill contact for Checkout. Digits only; strip a leading India country code / trunk 0
+ * so "+919526040251" becomes "9526040251". A 12-digit "91…" value breaks some methods.
+ */
+export function toRazorpayContact(phone: string | null | undefined): string | undefined {
+  if (!phone?.trim()) return undefined;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length < 7 || digits.length > 15) return undefined;
+  return digits;
+}
+
 export type RazorpayOrder = { id: string; amount: number; currency: string; receipt: string | null; status: string };
 
 export type RazorpayPayment = {
