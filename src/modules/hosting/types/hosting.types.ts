@@ -114,6 +114,8 @@ export type HostingPaymentOptions = {
 export type WebsiteHostingView = {
   /** Off: hosting billing isn't enforced on the platform yet. */
   enabled: boolean;
+  /** Days before period end when renew emails and client renew banners start. */
+  reminderDays: number;
   /** Platform default grace days after unpaid expiry (used when subscription has no override). */
   graceDays: number;
   website: {
@@ -137,7 +139,56 @@ export type WebsiteHostingView = {
   payments: HostingPaymentView[];
 };
 
-export type PlanChoice = { packageId: string; cycle: BillingCycle };
+export type PlanChoice = { packageId: string; cycle: BillingCycle; couponCode?: string };
+
+export type HostingCouponDiscountType = "PERCENT" | "FIXED_PAISE";
+
+export type HostingCouponView = {
+  id: string;
+  code: string;
+  discountType: HostingCouponDiscountType;
+  discountValue: number;
+  expiresAt: string | null;
+  maxUses: number | null;
+  usedCount: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateHostingCouponInput = {
+  code: string;
+  discountType: HostingCouponDiscountType;
+  discountValue: number;
+  expiresAt?: string | null;
+  maxUses?: number | null;
+};
+
+export type UpdateHostingCouponInput = {
+  discountType?: HostingCouponDiscountType;
+  discountValue?: number;
+  expiresAt?: string | null;
+  maxUses?: number | null;
+  active?: boolean;
+};
+
+export type HostingCouponPreview = {
+  code: string;
+  listAmountPaise: number;
+  discountPaise: number;
+  finalAmountPaise: number;
+};
+
+export type HostingCouponRedemptionView = {
+  id: string;
+  listAmountPaise: number;
+  discountPaise: number;
+  finalAmountPaise: number;
+  createdAt: string;
+  client: { id: string; businessName: string };
+  user: { id: string; fullName: string; email: string | null } | null;
+  website: { id: string; name: string; subdomain: string } | null;
+};
 
 export type UpdatePlanInput = {
   packageId?: string;

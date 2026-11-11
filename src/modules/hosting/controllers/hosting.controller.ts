@@ -3,18 +3,22 @@ import type { SubscriptionConfirmation } from "../../wallet/services/autopay.js"
 import { hostingAdminService } from "../services/hosting-admin.service.js";
 import { hostingAutopayService } from "../services/hosting-autopay.service.js";
 import { hostingCheckoutService } from "../services/hosting-checkout.service.js";
+import { hostingCouponService } from "../services/hosting-coupon.service.js";
 import { hostingService } from "../services/hosting.service.js";
 import type {
   ClientOverviewQuery,
+  CreateHostingCouponInput,
   PaymentListQuery,
   PlanChoice,
   RazorpayConfirmation,
   SubscriptionListQuery,
+  UpdateHostingCouponInput,
 } from "../types/hosting.types.js";
 
 type WebsiteParams = { id: string };
 type ClientParams = { clientId: string };
 type PackageParams = { packageId: string };
+type CouponParams = { couponId: string };
 
 export class HostingController {
   get = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
@@ -80,6 +84,48 @@ export class HostingController {
   payWithConnects = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.json({ hosting: await hostingService.payWithConnects(req.params.id, req.body as PlanChoice, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  previewCoupon = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        preview: await hostingCouponService.previewForWebsite(req.params.id, req.body, req.user!),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listCoupons = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ coupons: await hostingCouponService.listCoupons() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createCoupon = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(201).json({ coupon: await hostingCouponService.createCoupon(req.body as CreateHostingCouponInput, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateCoupon = async (req: Request<CouponParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ coupon: await hostingCouponService.updateCoupon(req.params.couponId, req.body as UpdateHostingCouponInput) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listCouponRedemptions = async (req: Request<CouponParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ redemptions: await hostingCouponService.listRedemptions(req.params.couponId) });
     } catch (error) {
       next(error);
     }

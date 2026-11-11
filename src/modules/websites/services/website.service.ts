@@ -154,7 +154,7 @@ export function scopeFor(actor: AuthUser): Prisma.WebsiteWhereInput {
   return actor.role === UserRole.SUPER_ADMIN ? {} : { clientId: ownClientId(actor) };
 }
 
-function toSummary(website: WebsiteWithSummary, billingEnabled: boolean): WebsiteSummary {
+function toSummary(website: WebsiteWithSummary, billingEnabled: boolean, reminderDays: number): WebsiteSummary {
   const publishedAt = website.publishedAt ? new Date(website.publishedAt) : null;
   const draftUpdatedAt = website.draftUpdatedAt
     ? new Date(website.draftUpdatedAt)
@@ -196,6 +196,7 @@ function toSummary(website: WebsiteWithSummary, billingEnabled: boolean): Websit
     hostingAttention: hosting
       ? {
           billingEnabled,
+          reminderDays,
           status: hosting.status,
           isComplimentary: hosting.isComplimentary,
           currentPeriodEnd: hosting.currentPeriodEnd?.toISOString() ?? null,
@@ -238,7 +239,7 @@ function toPage(page: WebsiteWithPages["pages"][number]): PageView {
   };
 }
 
-function toDetail(website: WebsiteWithPages, billingEnabled = false): WebsiteDetail {
+function toDetail(website: WebsiteWithPages, billingEnabled = false, reminderDays = 0): WebsiteDetail {
   let header = (website.header && typeof website.header === "object"
     ? website.header
     : BLANK_HEADER) as unknown as HeaderData;
@@ -327,7 +328,7 @@ function toDetail(website: WebsiteWithPages, billingEnabled = false): WebsiteDet
       : new Date();
 
   return {
-    ...toSummary(website, billingEnabled),
+    ...toSummary(website, billingEnabled, reminderDays),
     customDomain: website.domains?.[0]?.hostname ?? null,
     info: toInfo(website),
     generation: website.generation ? toGenerationView(website.generation) : null,
@@ -679,7 +680,7 @@ export class WebsiteService {
     ]);
 
     return {
-      items: websites.map((website) => toSummary(website, rules.enabled)),
+      items: websites.map((website) => toSummary(website, rules.enabled, rules.reminderDays)),
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -692,7 +693,7 @@ export class WebsiteService {
       loadHostingRules(),
     ]);
     if (!website) throw NOT_FOUND();
-    return toDetail(website, rules.enabled);
+    return toDetail(website, rules.enabled, rules.reminderDays);
   }
 
   /** `templateStudio` puts the website in the internal Template Studio; only the admin template API sets it. */
@@ -817,7 +818,7 @@ export class WebsiteService {
       "Website created",
     );
     const rules = await loadHostingRules();
-    return toDetail(website, rules.enabled);
+    return toDetail(website, rules.enabled, rules.reminderDays);
   }
 
   async update(id: string, input: UpdateWebsiteInput, actor: AuthUser): Promise<WebsiteDetail> {
@@ -888,7 +889,7 @@ export class WebsiteService {
     const hostnames = (website.domains || []).map((d) => d.hostname);
     await liveSiteEngineService.purgeWebsiteCache(website.subdomain, hostnames);
     const rules = await loadHostingRules();
-    return toDetail(website, rules.enabled);
+    return toDetail(website, rules.enabled, rules.reminderDays);
   }
 
   async delete(id: string, actor: AuthUser): Promise<void> {

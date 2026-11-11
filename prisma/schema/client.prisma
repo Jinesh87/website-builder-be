@@ -32,9 +32,10 @@ model Client {
   emailConfig          ClientEmailConfig?
   hostingSubscriptions HostingSubscription[]
   hostingPayments      HostingPayment[]
-  hostingOrders        HostingOrder[]
-  hostingAutopays      HostingAutopay[]
-  autoTopup            WalletAutoTopup?
+  hostingOrders             HostingOrder[]
+  hostingAutopays           HostingAutopay[]
+  hostingCouponRedemptions  HostingCouponRedemption[]
+  autoTopup                 WalletAutoTopup?
   notifications        Notification[]
   questionnaires       Questionnaire[]
   partnerReferrals     PartnerReferral[]    @relation("PartnerReferralClient")

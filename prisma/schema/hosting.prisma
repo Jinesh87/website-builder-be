@@ -107,6 +107,11 @@ model HostingOrder {
   cycle                  BillingCycle
   amountPaise            Int
   currency               String             @default("INR") @db.VarChar(3)
+  /// Coupon applied at checkout; amountPaise is the discounted total charged to Razorpay.
+  couponId               String?            @db.Uuid
+  /// List price before discount; null when no coupon was used.
+  listAmountPaise        Int?
+  discountPaise          Int?
   razorpayOrderId        String             @unique @db.VarChar(64)
   razorpayPaymentId      String?            @unique @db.VarChar(64)
   /// PAID only once the period is recorded; a captured payment that couldn't be applied stays CREATED with a reason.
@@ -118,15 +123,70 @@ model HostingOrder {
   createdAt              DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt              DateTime           @updatedAt @db.Timestamptz(6)
 
-  client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  website Website?        @relation(fields: [websiteId], references: [id], onDelete: SetNull)
-  user    User?           @relation("HostingOrderUser", fields: [userId], references: [id], onDelete: SetNull)
-  package HostingPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  payment HostingPayment?
+  client      Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  website     Website?                  @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  user        User?                     @relation("HostingOrderUser", fields: [userId], references: [id], onDelete: SetNull)
+  package     HostingPackage?           @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  coupon      HostingCoupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  payment     HostingPayment?
+  redemption  HostingCouponRedemption?
 
   @@index([clientId, createdAt])
   @@index([websiteId, createdAt])
+  @@index([couponId])
   @@map("hosting_orders")
+}
+
+/// Super Admin coupon for hosting subscription purchases (Razorpay / connects).
+model HostingCoupon {
+  id            String                   @id @default(uuid()) @db.Uuid
+  /// Stored uppercase; clients enter case-insensitively.
+  code          String                   @unique @db.VarChar(40)
+  discountType  HostingCouponDiscountType
+  /// PERCENT: 1–100. FIXED_PAISE: discount in paise.
+  discountValue Int
+  expiresAt     DateTime?                @db.Timestamptz(6)
+  /// Null = unlimited redemptions.
+  maxUses       Int?
+  usedCount     Int                      @default(0)
+  active        Boolean                  @default(true)
+  createdById   String?                  @db.Uuid
+  createdAt     DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime                 @updatedAt @db.Timestamptz(6)
+
+  createdBy   User?                     @relation("HostingCouponCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  orders      HostingOrder[]
+  redemptions HostingCouponRedemption[]
+
+  @@index([active, expiresAt])
+  @@map("hosting_coupons")
+}
+
+/// One successful use of a coupon by a client (once per client per coupon).
+model HostingCouponRedemption {
+  id               String   @id @default(uuid()) @db.Uuid
+  couponId         String   @db.Uuid
+  clientId         String   @db.Uuid
+  userId           String?  @db.Uuid
+  websiteId        String?  @db.Uuid
+  hostingOrderId   String?  @unique @db.Uuid
+  hostingPaymentId String?  @unique @db.Uuid
+  listAmountPaise  Int
+  discountPaise    Int
+  finalAmountPaise Int
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+
+  coupon         HostingCoupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user           User?           @relation("HostingCouponRedeemedBy", fields: [userId], references: [id], onDelete: SetNull)
+  website        Website?        @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  hostingOrder   HostingOrder?   @relation(fields: [hostingOrderId], references: [id], onDelete: SetNull)
+  hostingPayment HostingPayment? @relation(fields: [hostingPaymentId], references: [id], onDelete: SetNull)
+
+  @@unique([couponId, clientId])
+  @@index([couponId, createdAt])
+  @@index([clientId, createdAt])
+  @@map("hosting_coupon_redemptions")
 }
 
 /// Razorpay autopay for one website's hosting: a subscription that charges the plan's price every period on the
@@ -189,9 +249,10 @@ model HostingPayment {
 
   subscription      HostingSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  walletTransaction WalletTransaction?   @relation(fields: [walletTransactionId], references: [id], onDelete: SetNull)
-  hostingOrder      HostingOrder?        @relation(fields: [hostingOrderId], references: [id], onDelete: SetNull)
-  recordedBy        User?                @relation("HostingPaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  walletTransaction WalletTransaction?       @relation(fields: [walletTransactionId], references: [id], onDelete: SetNull)
+  hostingOrder      HostingOrder?            @relation(fields: [hostingOrderId], references: [id], onDelete: SetNull)
+  recordedBy        User?                    @relation("HostingPaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  couponRedemption  HostingCouponRedemption?
 
   /// A period can be paid once, however many people (or the worker) try at the same time.
   @@unique([subscriptionId, periodStart])
@@ -285,4 +346,9 @@ enum HostingPriceScope {
 enum HostingPriceUnit {
   CONNECTS
   PAISE
+}
+
+enum HostingCouponDiscountType {
+  PERCENT
+  FIXED_PAISE
 }

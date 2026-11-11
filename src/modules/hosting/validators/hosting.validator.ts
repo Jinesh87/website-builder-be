@@ -28,7 +28,34 @@ export const packageParamsSchema = Joi.object({
 export const planChoiceSchema = Joi.object({
   packageId: packageId.required(),
   cycle: cycle.required(),
+  couponCode: Joi.string().trim().max(40).allow("").optional(),
 });
+
+export const couponPreviewSchema = Joi.object({
+  packageId: packageId.required(),
+  cycle: cycle.required(),
+  couponCode: Joi.string().trim().min(1).max(40).required(),
+});
+
+export const couponParamsSchema = Joi.object({
+  couponId: Joi.string().uuid().required(),
+});
+
+export const createCouponSchema = Joi.object({
+  code: Joi.string().trim().min(3).max(40).required(),
+  discountType: Joi.string().valid("PERCENT", "FIXED_PAISE").required(),
+  discountValue: Joi.number().integer().min(1).max(1_000_000_000).required(),
+  expiresAt: Joi.string().isoDate().allow(null).optional(),
+  maxUses: Joi.number().integer().min(1).max(1_000_000).allow(null).optional(),
+});
+
+export const updateCouponSchema = Joi.object({
+  discountType: Joi.string().valid("PERCENT", "FIXED_PAISE").optional(),
+  discountValue: Joi.number().integer().min(1).max(1_000_000_000).optional(),
+  expiresAt: Joi.string().isoDate().allow(null).optional(),
+  maxUses: Joi.number().integer().min(1).max(1_000_000).allow(null).optional(),
+  active: Joi.boolean().optional(),
+}).min(1);
 
 export const confirmCheckoutSchema = Joi.object({
   razorpayOrderId: razorpayId,

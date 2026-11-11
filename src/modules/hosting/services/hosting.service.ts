@@ -300,6 +300,16 @@ export type PaidOrder = {
   packageId: string | null;
   packageName: string;
   cycle: BillingCycle;
+  couponId?: string | null;
+  listAmountPaise?: number | null;
+  discountPaise?: number | null;
+};
+
+type SettleCoupon = {
+  couponId: string;
+  listAmountPaise: number;
+  discountPaise: number;
+  finalAmountPaise: number;
 };
 
 type SettleRequest = {
@@ -311,6 +321,8 @@ type SettleRequest = {
   actorId: string | null;
   /** Razorpay only. The money is already taken, so the renewal window doesn't apply. */
   order?: PaidOrder;
+  /** Connects / non-order checkout: discounted total already quoted for this client. */
+  coupon?: SettleCoupon;
   reference?: string | null;
   note?: string | null;
   now?: Date;
@@ -349,7 +361,7 @@ export class HostingService {
           assertRenewalOpen(subscription, now);
         }
 
-        const charge: Charge = order
+        let charge: Charge = order
           ? {
               pkg: order.packageId ? await tx.hostingPackage.findUnique({ where: { id: order.packageId } }) : null,
               packageName: order.packageName,
@@ -357,6 +369,12 @@ export class HostingService {
               price: order.amountPaise,
             }
           : await this.chargeFor(tx, subscription, request.plan);
+        if (!order && request.coupon) {
+          if (request.coupon.listAmountPaise !== charge.price) {
+            throw new AppError(409, "The plan price changed. Refresh and try again.", "HOSTING_CHANGED");
+          }
+          charge = { ...charge, price: request.coupon.finalAmountPaise };
+        }
         const period = nextPeriod(subscription, charge.cycle, now);
 
         let connects: number | null = null;
@@ -414,7 +432,7 @@ export class HostingService {
           subscriptionId = created.id;
         }
 
-        return tx.hostingPayment.create({
+        const paymentRow = await tx.hostingPayment.create({
           data: {
             subscriptionId,
             clientId: website.clientId,
@@ -436,9 +454,43 @@ export class HostingService {
             recordedById: request.actorId,
           },
         });
+
+        const couponRedeem =
+          request.coupon ??
+          (order?.couponId && order.listAmountPaise != null && order.discountPaise != null
+            ? {
+                couponId: order.couponId,
+                listAmountPaise: order.listAmountPaise,
+                discountPaise: order.discountPaise,
+                finalAmountPaise: order.amountPaise,
+              }
+            : null);
+        if (couponRedeem) {
+          const { hostingCouponService } = await import("./hosting-coupon.service.js");
+          await hostingCouponService.redeemInTransaction(tx, {
+            couponId: couponRedeem.couponId,
+            clientId: website.clientId,
+            userId: request.actorId,
+            websiteId: website.id,
+            hostingOrderId: order?.id ?? null,
+            hostingPaymentId: paymentRow.id,
+            listAmountPaise: couponRedeem.listAmountPaise,
+            discountPaise: couponRedeem.discountPaise,
+            finalAmountPaise: couponRedeem.finalAmountPaise,
+            now,
+          });
+        }
+
+        return paymentRow;
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw HOSTING_CHANGED();
+      if (isUniqueViolation(error)) {
+        const target = error instanceof Prisma.PrismaClientKnownRequestError ? String(error.meta?.target ?? "") : "";
+        if (target.includes("couponId_clientId") || target.includes("couponId")) {
+          throw new AppError(400, "Your account has already used this coupon.", "COUPON_ALREADY_USED");
+        }
+        throw HOSTING_CHANGED();
+      }
       throw error;
     }
     if (!payment) return null;
@@ -591,6 +643,7 @@ export class HostingService {
 
     return {
       enabled: rules.enabled,
+      reminderDays: rules.reminderDays,
       graceDays: rules.graceDays,
       website: {
         id: website.id,
@@ -630,13 +683,43 @@ export class HostingService {
   /** The client pays the next period from their own connects (when the platform allows it). */
   async payWithConnects(websiteId: string, plan: PlanChoice, actor: AuthUser): Promise<WebsiteHostingView> {
     await this.assertAccess(websiteId, actor);
-    assertNotOnAutopay(
-      await prisma.hostingSubscription.findUnique({
-        where: { websiteId },
-        select: { status: true, currentPeriodEnd: true, autopay: { select: { status: true } } },
-      }),
-    );
-    await this.settle({ websiteId, plan, payer: HostingPayer.CLIENT, method: HostingPaymentMethod.WALLET, actorId: actor.id });
+    const website = await prisma.website.findFirst({
+      where: { id: websiteId, ...this.scopeFor(actor) },
+      select: {
+        clientId: true,
+        hosting: { include: { package: true, autopay: { select: { status: true } } } },
+      },
+    });
+    if (!website) throw WEBSITE_NOT_FOUND();
+    assertNotOnAutopay(website.hosting);
+
+    let coupon: SettleCoupon | undefined;
+    if (plan.couponCode?.trim()) {
+      if (!actor.clientId || actor.clientId !== website.clientId) {
+        throw new AppError(403, "Only the website owner can apply a coupon.", "FORBIDDEN");
+      }
+      const pkg = await prisma.hostingPackage.findUnique({ where: { id: plan.packageId } });
+      const listAmountPaise = availablePrice(pkg, plan.cycle, website.hosting);
+      const { hostingCouponService } = await import("./hosting-coupon.service.js");
+      const applied = await hostingCouponService.quote(listAmountPaise, plan.couponCode, website.clientId);
+      if (applied) {
+        coupon = {
+          couponId: applied.couponId,
+          listAmountPaise: applied.listAmountPaise,
+          discountPaise: applied.discountPaise,
+          finalAmountPaise: applied.finalAmountPaise,
+        };
+      }
+    }
+
+    await this.settle({
+      websiteId,
+      plan,
+      payer: HostingPayer.CLIENT,
+      method: HostingPaymentMethod.WALLET,
+      actorId: actor.id,
+      coupon,
+    });
     return this.getForWebsite(websiteId, actor);
   }
 

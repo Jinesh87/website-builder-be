@@ -21,6 +21,7 @@ import type {
   WebsiteHostingView,
 } from "../types/hosting.types.js";
 import { CYCLE_LABELS } from "./hosting-period.js";
+import { hostingCouponService } from "./hosting-coupon.service.js";
 import { assertNotOnAutopay, assertRenewalOpen, availablePrice, hostingService } from "./hosting.service.js";
 
 /** A plan that changed while the payment was in flight is re-read and the period applied again. */
@@ -58,10 +59,33 @@ export class HostingCheckoutService {
     assertNotOnAutopay(website.hosting);
     assertRenewalOpen(website.hosting, new Date());
     const pkg = await prisma.hostingPackage.findUnique({ where: { id: plan.packageId } });
-    const price = availablePrice(pkg, plan.cycle, website.hosting);
+    const listPrice = availablePrice(pkg, plan.cycle, website.hosting);
+
+    let applied = null as Awaited<ReturnType<typeof hostingCouponService.quote>>;
+    if (plan.couponCode?.trim()) {
+      if (!actor.clientId || actor.clientId !== website.clientId) {
+        throw new AppError(403, "Only the website owner can apply a coupon.", "FORBIDDEN");
+      }
+      applied = await hostingCouponService.quote(listPrice, plan.couponCode, website.clientId);
+    }
+    const price = applied?.finalAmountPaise ?? listPrice;
 
     if (price === 0) {
-      await hostingService.settle({ websiteId, plan, payer: HostingPayer.CLIENT, method: HostingPaymentMethod.WALLET, actorId: actor.id });
+      await hostingService.settle({
+        websiteId,
+        plan,
+        payer: HostingPayer.CLIENT,
+        method: HostingPaymentMethod.WALLET,
+        actorId: actor.id,
+        coupon: applied
+          ? {
+              couponId: applied.couponId,
+              listAmountPaise: applied.listAmountPaise,
+              discountPaise: applied.discountPaise,
+              finalAmountPaise: applied.finalAmountPaise,
+            }
+          : undefined,
+      });
       return { status: "PAID", hosting: await hostingService.getForWebsite(websiteId, actor) };
     }
 
@@ -74,7 +98,14 @@ export class HostingCheckoutService {
       amountPaise: price,
       currency: PAYMENT_CURRENCY,
       receipt: `hosting_${randomBytes(8).toString("hex")}`,
-      notes: { purpose: "hosting", websiteId, clientId: website.clientId, packageId: pkg!.id, cycle: plan.cycle },
+      notes: {
+        purpose: "hosting",
+        websiteId,
+        clientId: website.clientId,
+        packageId: pkg!.id,
+        cycle: plan.cycle,
+        ...(applied ? { couponCode: applied.code } : {}),
+      },
     });
     await prisma.hostingOrder.create({
       data: {
@@ -87,9 +118,19 @@ export class HostingCheckoutService {
         amountPaise: price,
         currency: PAYMENT_CURRENCY,
         razorpayOrderId: order.id,
+        ...(applied
+          ? {
+              couponId: applied.couponId,
+              listAmountPaise: applied.listAmountPaise,
+              discountPaise: applied.discountPaise,
+            }
+          : {}),
       },
     });
-    logger.info({ websiteId, razorpayOrderId: order.id, amountPaise: price }, "Hosting checkout started");
+    logger.info(
+      { websiteId, razorpayOrderId: order.id, amountPaise: price, couponId: applied?.couponId ?? null },
+      "Hosting checkout started",
+    );
 
     return {
       status: "CHECKOUT",
@@ -175,6 +216,9 @@ export class HostingCheckoutService {
             packageId: order.packageId,
             packageName: order.packageName,
             cycle: order.cycle,
+            couponId: order.couponId,
+            listAmountPaise: order.listAmountPaise,
+            discountPaise: order.discountPaise,
           },
         });
         if (payment !== null) {

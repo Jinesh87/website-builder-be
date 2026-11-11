@@ -32,9 +32,11 @@ model User {
   hostingSubscriptions HostingSubscription[]    @relation("HostingSubscriptionCreatedBy")
   hostingPayments      HostingPayment[]         @relation("HostingPaymentRecordedBy")
   hostingPriceChanges  HostingPriceChange[]     @relation("HostingPriceChangedBy")
-  hostingOrders        HostingOrder[]           @relation("HostingOrderUser")
-  hostingAutopays      HostingAutopay[]         @relation("HostingAutopayUser")
-  walletAutoTopups     WalletAutoTopup[]        @relation("WalletAutoTopupUser")
+  hostingOrders            HostingOrder[]            @relation("HostingOrderUser")
+  hostingAutopays          HostingAutopay[]          @relation("HostingAutopayUser")
+  hostingCouponsCreated    HostingCoupon[]           @relation("HostingCouponCreatedBy")
+  hostingCouponRedemptions HostingCouponRedemption[] @relation("HostingCouponRedeemedBy")
+  walletAutoTopups         WalletAutoTopup[]         @relation("WalletAutoTopupUser")
   inventoryMovements   InventoryMovement[]
   shopOrderStatusEvents ShopOrderStatusEvent[]
   enquiryActivity      ContactInquiryActivity[] @relation("ContactInquiryActivityActor")

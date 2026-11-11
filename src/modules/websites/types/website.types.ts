@@ -6,6 +6,8 @@ import type { GenerationView } from "./website-generation.types.js";
 /** Compact hosting state for client dashboard / list alerts. */
 export type WebsiteHostingAttention = {
   billingEnabled: boolean;
+  /** Days before period end when the renew banner appears (same as email reminders). */
+  reminderDays: number;
   status: HostingStatus;
   isComplimentary: boolean;
   currentPeriodEnd: string | null;

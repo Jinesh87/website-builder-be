@@ -11,6 +11,9 @@ import {
   collectHostingSchema,
   confirmAutopaySchema,
   confirmCheckoutSchema,
+  couponParamsSchema,
+  couponPreviewSchema,
+  createCouponSchema,
   packageParamsSchema,
   paymentsCsvQuerySchema,
   paymentsQuerySchema,
@@ -18,6 +21,7 @@ import {
   subscriptionsQuerySchema,
   updateClientBackupPolicySchema,
   updateClientStoragePolicySchema,
+  updateCouponSchema,
   updatePackageSchema,
   updatePlanSchema,
   updateSettingsSchema,
@@ -80,6 +84,14 @@ websiteHostingRouter.post(
   hostingController.payWithConnects,
 );
 websiteHostingRouter.post(
+  "/coupon/preview",
+  authorize(UserRole.CLIENT, UserRole.PARTNER),
+  byWebsite,
+  rateLimit({ name: "hosting-coupon-preview", max: 60, windowSeconds: 60 * 60 }),
+  validate(couponPreviewSchema),
+  hostingController.previewCoupon,
+);
+websiteHostingRouter.post(
   "/collect",
   authorize(UserRole.SUPER_ADMIN),
   byWebsite,
@@ -124,6 +136,24 @@ hostingSettingsRouter.post(
   rateLimit({ name: "hosting-backfill", max: 10, windowSeconds: 60 * 60 }),
   validate(backfillSchema),
   hostingController.backfill,
+);
+hostingSettingsRouter.get("/coupons", hostingController.listCoupons);
+hostingSettingsRouter.post(
+  "/coupons",
+  rateLimit({ name: "hosting-coupon-create", max: 60, windowSeconds: 60 * 60 }),
+  validate(createCouponSchema),
+  hostingController.createCoupon,
+);
+hostingSettingsRouter.patch(
+  "/coupons/:couponId",
+  validate(couponParamsSchema, "params"),
+  validate(updateCouponSchema),
+  hostingController.updateCoupon,
+);
+hostingSettingsRouter.get(
+  "/coupons/:couponId/redemptions",
+  validate(couponParamsSchema, "params"),
+  hostingController.listCouponRedemptions,
 );
 
 /** Super admin: plans and payments across clients, and per-client hosting. */

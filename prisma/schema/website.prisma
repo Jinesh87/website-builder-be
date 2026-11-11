@@ -64,9 +64,10 @@ model Website {
   aiChatSessions     AiChatSession[]
   generation         WebsiteGeneration?
   questionnaires     Questionnaire[]
-  hosting            HostingSubscription?
-  hostingOrders      HostingOrder[]
-  sourceOfTemplate   WebsiteTemplate?     @relation("WebsiteTemplateSource")
+  hosting                   HostingSubscription?
+  hostingOrders             HostingOrder[]
+  hostingCouponRedemptions  HostingCouponRedemption[]
+  sourceOfTemplate          WebsiteTemplate?     @relation("WebsiteTemplateSource")
   shopCategories     ShopCategory[]
   products           Product[]
   shopPayment        ShopPaymentConfig?
