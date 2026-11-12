@@ -4,6 +4,7 @@ import { hostingAdminService } from "../services/hosting-admin.service.js";
 import { hostingAutopayService } from "../services/hosting-autopay.service.js";
 import { hostingCheckoutService } from "../services/hosting-checkout.service.js";
 import { hostingCouponService } from "../services/hosting-coupon.service.js";
+import { hostingEmailTemplatesService } from "../services/hosting-email-templates.service.js";
 import { hostingService } from "../services/hosting.service.js";
 import type {
   ClientOverviewQuery,
@@ -19,6 +20,7 @@ type WebsiteParams = { id: string };
 type ClientParams = { clientId: string };
 type PackageParams = { packageId: string };
 type CouponParams = { couponId: string };
+type EmailKindParams = { kind: string };
 
 export class HostingController {
   get = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
@@ -253,6 +255,33 @@ export class HostingController {
         .type("text/csv; charset=utf-8")
         .setHeader("Content-Disposition", `attachment; filename="hosting-payments-${day}.csv"`)
         .send(`\uFEFF${csv}`);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listEmailTemplates = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        templates: await hostingEmailTemplatesService.list(),
+        placeholders: hostingEmailTemplatesService.placeholders(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  upsertEmailTemplate = async (req: Request<EmailKindParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ template: await hostingEmailTemplatesService.upsert(req.params.kind, req.body) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetEmailTemplate = async (req: Request<EmailKindParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ template: await hostingEmailTemplatesService.reset(req.params.kind) });
     } catch (error) {
       next(error);
     }

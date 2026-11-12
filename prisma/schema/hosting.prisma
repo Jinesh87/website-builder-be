@@ -335,6 +335,29 @@ enum HostingNoticeKind {
   SUSPENDED
 }
 
+/// Client-facing hosting email the Super Admin can customize (subject / heading / message).
+enum HostingEmailKind {
+  RENEWAL_REMINDER
+  PAID
+  EXPIRED
+  SUSPENDED
+  AUTOPAY_STOPPED
+}
+
+/// Platform-wide hosting notice email copy. Missing rows fall back to code defaults.
+model HostingEmailTemplate {
+  id        String          @id @default(uuid()) @db.Uuid
+  kind      HostingEmailKind @unique
+  enabled   Boolean         @default(true)
+  subject   String          @db.VarChar(200)
+  heading   String          @db.VarChar(160)
+  message   String          @db.Text
+  createdAt DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @db.Timestamptz(6)
+
+  @@map("hosting_email_templates")
+}
+
 enum HostingPriceScope {
   GLOBAL
   /// Legacy: client-level prices were folded into website prices.

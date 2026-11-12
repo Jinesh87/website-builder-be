@@ -14,6 +14,8 @@ import {
   couponParamsSchema,
   couponPreviewSchema,
   createCouponSchema,
+  hostingEmailKindParamsSchema,
+  hostingEmailTemplateSchema,
   packageParamsSchema,
   paymentsCsvQuerySchema,
   paymentsQuerySchema,
@@ -154,6 +156,18 @@ hostingSettingsRouter.get(
   "/coupons/:couponId/redemptions",
   validate(couponParamsSchema, "params"),
   hostingController.listCouponRedemptions,
+);
+hostingSettingsRouter.get("/email-templates", hostingController.listEmailTemplates);
+hostingSettingsRouter.put(
+  "/email-templates/:kind",
+  validate(hostingEmailKindParamsSchema, "params"),
+  validate(hostingEmailTemplateSchema),
+  hostingController.upsertEmailTemplate,
+);
+hostingSettingsRouter.post(
+  "/email-templates/:kind/reset",
+  validate(hostingEmailKindParamsSchema, "params"),
+  hostingController.resetEmailTemplate,
 );
 
 /** Super admin: plans and payments across clients, and per-client hosting. */

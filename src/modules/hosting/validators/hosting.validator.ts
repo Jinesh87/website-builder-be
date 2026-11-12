@@ -158,3 +158,24 @@ export const paymentsQuerySchema = Joi.object({
 });
 
 export const paymentsCsvQuerySchema = Joi.object(paymentFilters);
+
+const hostingEmailKind = Joi.string()
+  .valid("renewal_reminder", "paid", "expired", "suspended", "autopay_stopped")
+  .required();
+
+export const hostingEmailKindParamsSchema = Joi.object({
+  kind: hostingEmailKind,
+});
+
+export const hostingEmailTemplateSchema = Joi.object({
+  enabled: Joi.boolean().required(),
+  subject: Joi.string().trim().min(1).max(200).required().messages({
+    "string.empty": "Enter an email subject",
+  }),
+  heading: Joi.string().trim().min(1).max(160).required().messages({
+    "string.empty": "Enter a title",
+  }),
+  message: Joi.string().trim().min(1).max(5000).required().messages({
+    "string.empty": "Enter a message",
+  }),
+});
