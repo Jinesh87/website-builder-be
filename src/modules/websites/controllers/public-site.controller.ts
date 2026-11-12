@@ -20,6 +20,12 @@ const THANK_YOU = "Thank you! Your message has been received.";
 /** Hidden input on contact forms; people never fill it, form-filling bots usually do. */
 const HONEYPOT_FIELD = "_wb_hp";
 
+/**
+ * Client-only query flags must not enter the live-page cache key.
+ * Otherwise `?checkout=1` (Buy → cart) freezes a stale HTML snapshot and never picks up script fixes.
+ */
+const CLIENT_ONLY_QUERY = new Set(["checkout", "panel", "_dbg", "wbguestcheckout"]);
+
 /** Client sites embed videos, maps and images from anywhere, so they get a wider policy than the app. */
 const LIVE_SITE_CSP = [
   "default-src 'self'",
@@ -82,7 +88,7 @@ export class PublicSiteController {
         else if (key === "sort" && text.length <= 20) listQuery.sort = text;
         else if (key === "page" && text.length <= 6) listQuery.page = Number(text);
         else if (key === "per" && text.length <= 3) listQuery.pageSize = Number(text);
-        else if (text.length <= 40) selection[key] = text;
+        else if (text.length <= 40 && !CLIENT_ONLY_QUERY.has(key.toLowerCase())) selection[key] = text;
       }
       const result = await liveSiteEngineService.renderPage(identifier, slug, req.baseUrl || "", selection, listQuery);
 
