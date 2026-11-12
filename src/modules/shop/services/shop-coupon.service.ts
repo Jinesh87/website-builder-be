@@ -78,6 +78,25 @@ export type PublicShopCoupon = {
   expiresAt: string | null;
 };
 
+export type ShopCouponRedemptionView = {
+  id: string;
+  listAmountPaise: number;
+  discountPaise: number;
+  finalAmountPaise: number;
+  createdAt: string;
+  order: {
+    id: string;
+    number: string;
+    status: string;
+  };
+  customer: {
+    id: string;
+    fullName: string;
+    email: string;
+    isGuest: boolean;
+  };
+};
+
 type CartLine = { productId: string; variantId: string; lineTotalPaise: number };
 type Tx = Prisma.TransactionClient;
 
@@ -329,6 +348,48 @@ export class ShopCouponService {
     });
     purgeShopPages(websiteId);
     return toView(row);
+  }
+
+  /** Orders that successfully redeemed this coupon (paid checkouts). */
+  async listRedemptions(
+    websiteId: string,
+    couponId: string,
+    actor: AuthUser,
+  ): Promise<ShopCouponRedemptionView[]> {
+    await this.openShop(websiteId, actor);
+    const coupon = await prisma.shopCoupon.findFirst({
+      where: { id: couponId, websiteId },
+      select: { id: true },
+    });
+    if (!coupon) throw new AppError(404, "Coupon not found.", "COUPON_NOT_FOUND");
+
+    const rows = await prisma.shopCouponRedemption.findMany({
+      where: { couponId, websiteId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: { select: { id: true, number: true, status: true } },
+        customer: { select: { id: true, fullName: true, email: true, isGuest: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      listAmountPaise: row.listAmountPaise,
+      discountPaise: row.discountPaise,
+      finalAmountPaise: row.finalAmountPaise,
+      createdAt: row.createdAt.toISOString(),
+      order: {
+        id: row.order.id,
+        number: String(row.order.number),
+        status: String(row.order.status).toLowerCase(),
+      },
+      customer: {
+        id: row.customer.id,
+        fullName: row.customer.fullName,
+        email: row.customer.email,
+        isGuest: row.customer.isGuest,
+      },
+    }));
   }
 
   /**

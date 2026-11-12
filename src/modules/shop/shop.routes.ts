@@ -189,6 +189,11 @@ shopRouter.post(
   validate(shopCreateCouponSchema),
   shopController.createCoupon,
 );
+shopRouter.get(
+  "/coupons/:couponId/redemptions",
+  validate(shopCouponParamsSchema, "params"),
+  shopController.listCouponRedemptions,
+);
 shopRouter.patch(
   "/coupons/:couponId",
   validate(shopCouponParamsSchema, "params"),

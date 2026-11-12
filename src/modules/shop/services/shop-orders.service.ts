@@ -38,6 +38,10 @@ export type ShopOrderView = {
   refundStatus: ShopRefundStatusLabel;
   totalPaise: number;
   currency: "INR";
+  couponId: string | null;
+  couponCode: string | null;
+  listAmountPaise: number | null;
+  discountPaise: number | null;
   customer: {
     id: string;
     fullName: string;
@@ -132,6 +136,10 @@ function toView(order: {
   status: ShopOrderStatus;
   refundStatus: ShopRefundStatus;
   totalPaise: number;
+  couponId?: string | null;
+  couponCode?: string | null;
+  listAmountPaise?: number | null;
+  discountPaise?: number | null;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   razorpayRefundId: string | null;
@@ -167,6 +175,10 @@ function toView(order: {
     refundStatus: refundStatusLabel(order.refundStatus),
     totalPaise: order.totalPaise,
     currency: "INR",
+    couponId: order.couponId ?? null,
+    couponCode: order.couponCode ?? null,
+    listAmountPaise: order.listAmountPaise ?? null,
+    discountPaise: order.discountPaise ?? null,
     customer: {
       id: order.customer.id,
       fullName: order.customer.fullName,

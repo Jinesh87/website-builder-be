@@ -349,6 +349,20 @@ export class ShopController {
       next(error);
     }
   };
+
+  listCouponRedemptions = async (req: Request<CouponParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        redemptions: await shopCouponService.listRedemptions(
+          req.params.id,
+          req.params.couponId,
+          req.user!,
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export const shopController = new ShopController();
