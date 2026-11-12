@@ -80,6 +80,8 @@ model Website {
   shopOrderEmailDesign    ShopOrderEmailDesign?
   shopOrderEmailTemplates ShopOrderEmailTemplate[]
   shopInvoiceDesign       ShopInvoiceDesign?
+  shopCoupons             ShopCoupon[]
+  shopCouponRedemptions   ShopCouponRedemption[]
 
   /// Target for (websiteId, clientId) foreign keys, which guarantee child rows
   /// can never point at a website owned by a different client.

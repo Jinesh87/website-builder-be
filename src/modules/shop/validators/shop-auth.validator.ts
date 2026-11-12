@@ -122,6 +122,7 @@ export const shopCheckoutStartSchema = Joi.object({
     "any.required": "Choose a delivery address before paying.",
     "string.guid": "Choose a delivery address before paying.",
   }),
+  couponCode: Joi.string().trim().max(40).allow("").optional(),
 });
 
 export const shopGuestCheckoutStartSchema = Joi.object({
@@ -129,6 +130,14 @@ export const shopGuestCheckoutStartSchema = Joi.object({
   fullName: Joi.string().trim().min(2).max(120).required(),
   phone: addressPhone,
   address: shopAddressSchema.required(),
+  couponCode: Joi.string().trim().max(40).allow("").optional(),
+});
+
+export const shopCouponPreviewSchema = Joi.object({
+  couponCode: Joi.string().trim().min(3).max(40).required().messages({
+    "any.required": "Enter a coupon code.",
+    "string.min": "Enter a coupon code.",
+  }),
 });
 
 export const shopTrackParamsSchema = Joi.object({

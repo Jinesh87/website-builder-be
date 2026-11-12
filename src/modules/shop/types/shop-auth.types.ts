@@ -88,6 +88,7 @@ export type ShopOrderDetailView = ShopOrderSummary & {
 
 export type ShopCheckoutStartInput = {
   addressId?: string;
+  couponCode?: string;
 };
 
 export type ShopCancelOrderInput = {
@@ -107,6 +108,9 @@ export type ShopCheckoutSession = {
   currency: string;
   businessName: string;
   prefill: { name: string; email?: string; contact?: string };
+  listAmountPaise?: number;
+  discountPaise?: number;
+  couponCode?: string;
 };
 
 export type ShopCheckoutConfirmation = {

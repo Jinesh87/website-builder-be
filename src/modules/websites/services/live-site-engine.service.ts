@@ -13,6 +13,16 @@ import type { Section } from "../types/site-content.types.js";
 import { shopPage } from "../ai/shop-pages.js";
 import { toPlainText } from "../../../common/utils/rich-text.js";
 
+type PublicShopCouponRender = {
+  code: string;
+  discountType: "PERCENT" | "FIXED_PAISE";
+  discountValue: number;
+  scope: "cart" | "product";
+  variantId: string | null;
+  variantName: string | null;
+  expiresAt: string | null;
+};
+
 type ShopRender = {
   websiteId: string;
   authHref?: string;
@@ -20,6 +30,8 @@ type ShopRender = {
   allowGuestCheckout?: boolean;
   cancelUntilStatus?: "paid" | "processing" | "shipped" | null;
   returnGuidelines?: string[];
+  /** Coupons that apply on the active product detail page (cart-wide + this product). */
+  coupons?: PublicShopCouponRender[];
   products: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
@@ -304,7 +316,21 @@ function legacyShopHtml(
       returnDays && returnDays > 0
         ? `<aside class="wb-product-policy" style="margin:1rem 0 0;padding:.75rem .9rem;border:1px solid rgba(0,0,0,.1);border-radius:.65rem;font-size:.88rem;line-height:1.5;color:var(--color-muted);"><strong style="display:block;margin:0 0 .25rem;color:inherit;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;">Returns</strong><p style="margin:0;">Return within ${returnDays} day${returnDays === 1 ? "" : "s"} of delivery.</p>${returnPoints ? `<ul style="margin:.45rem 0 0;padding-left:1.1rem;">${returnPoints}</ul>` : ""}</aside>`
         : "";
-    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}${policyHtml}${returnHtml}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
+    const couponHtml =
+      data.showCoupons === false || !shop?.coupons?.length
+        ? ""
+        : `<details class="wb-product-coupons" style="margin:1rem 0 0;border:1px dashed rgba(0,0,0,.18);border-radius:.65rem;overflow:hidden;"><summary style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.75rem .9rem;cursor:pointer;list-style:none;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${shop.coupons.length === 1 ? "1 coupon available" : `${shop.coupons.length} coupons available`}<span aria-hidden="true">▾</span></summary><div style="padding:0 .9rem .75rem;border-top:1px solid rgba(0,0,0,.08);"><ul style="margin:.65rem 0 0;padding:0;list-style:none;display:grid;gap:.55rem;max-height:220px;overflow:auto;">${shop.coupons
+            .map((coupon) => {
+              const offer =
+                coupon.discountType === "PERCENT"
+                  ? `${coupon.discountValue}% off`
+                  : `${formatInr(coupon.discountValue)} off`;
+              const scope =
+                coupon.scope === "cart" ? "Whole cart" : coupon.variantName || "This product";
+              return `<li style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:center;"><div style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;min-width:0;"><code style="padding:.15rem .45rem;border:1px solid rgba(0,0,0,.12);border-radius:.35rem;font-weight:700;">${escapeHtml(coupon.code)}</code><span style="font-weight:600;">${escapeHtml(offer)}</span><span style="color:var(--color-muted);font-size:.8rem;">${escapeHtml(scope)}</span></div><button type="button" data-wb-copy-coupon="${escapeHtml(coupon.code)}" data-wb-copy-default="Copy" style="border:1px solid rgba(0,0,0,.14);border-radius:999px;background:transparent;padding:.3rem .7rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer;"><span data-wb-copy-label="">Copy</span></button></li>`;
+            })
+            .join("")}</ul><p style="margin:.45rem 0 0;font-size:.75rem;color:var(--color-muted);">Copy a code and apply it at checkout</p></div></details>`;
+    return `<article data-wb-detail="" style="padding:4.5rem 0;"><div class="container" style="max-width:960px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2rem;align-items:start;"><div>${image ? `<img data-wb-hero="" src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" style="width:100%;aspect-ratio:1;object-fit:contain;background:rgba(0,0,0,.04);border-radius:0.85rem;" />` : ""}${thumbHtml}</div><div><p><a href="${escapeHtml(backHref)}">${escapeHtml(backLabel)}</a></p><h1 class="section-title">${escapeHtml(product.name)}</h1>${data.showDescription === false || !product.description ? "" : `<p class="subtitle">${escapeHtml(product.description)}</p>`}${policyHtml}${returnHtml}<p data-wb-price="" style="font-size:1.45rem;font-weight:700;margin:.5rem 0;">${escapeHtml(first ? formatInr(first.pricePaise) : "")}</p>${data.showStock === false ? "" : `<p data-wb-stock="" style="color:var(--color-muted);">${escapeHtml(stock)}</p>`}${couponHtml}${optionHtml}<script type="application/json" data-wb-variants="">${payload}</script><script>${SHOP_DETAIL_PICK}</script></div></div></article>`;
   }
 
   const list = shop?.products ?? [];
@@ -581,6 +607,13 @@ Sitemap: ${domain}/sitemap.xml
     const returnGuidelines = Array.isArray(website.shopReturnGuidelines)
       ? website.shopReturnGuidelines.flatMap((entry) => (typeof entry === "string" && entry.trim() ? [entry.trim()] : []))
       : [];
+    const productCoupons =
+      shopOpen && activeProduct
+        ? await (async () => {
+            const { shopCouponService } = await import("../../shop/services/shop-coupon.service.js");
+            return shopCouponService.listPublicForProduct(website.id, activeProduct.id);
+          })()
+        : [];
     const shop: ShopRender | undefined = shopOpen
       ? {
           websiteId: website.id,
@@ -590,7 +623,7 @@ Sitemap: ${domain}/sitemap.xml
           cancelUntilStatus,
           returnGuidelines,
           products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
-          ...(resolved.productSlug ? { productSlug: resolved.productSlug } : {}),
+          ...(resolved.productSlug ? { productSlug: resolved.productSlug, coupons: productCoupons } : {}),
           ...(paged ? { list: paged.list } : {}),
           ...(Object.keys(selection).length > 0 ? { selection } : {}),
           live: true,

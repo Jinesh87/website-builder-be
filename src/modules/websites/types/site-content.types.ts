@@ -1265,6 +1265,10 @@ export type ProductDetailData = {
   showStock?: boolean;
   /** Shows the shop's order cancellation policy under the description. */
   showCancellationPolicy?: boolean;
+  /** Shows the product return policy under the description. */
+  showReturnPolicy?: boolean;
+  /** Shows active cart-wide and product coupons on the detail page. */
+  showCoupons?: boolean;
 };
 
 export type BlogData = {

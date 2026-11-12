@@ -237,3 +237,37 @@ export const shopInvoiceDesignSchema = Joi.object({
   showLogo: Joi.boolean().required(),
   logoMediaId: Joi.string().guid().allow(null).optional(),
 });
+
+const shopCouponCode = Joi.string()
+  .trim()
+  .uppercase()
+  .pattern(/^[A-Z0-9_-]{3,40}$/)
+  .required()
+  .messages({
+    "string.pattern.base": "Use 3–40 letters, numbers, hyphens or underscores.",
+  });
+
+export const shopCouponParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  couponId: Joi.string().guid().required(),
+});
+
+export const shopCreateCouponSchema = Joi.object({
+  code: shopCouponCode,
+  discountType: Joi.string().valid("PERCENT", "FIXED_PAISE").required(),
+  discountValue: Joi.number().integer().min(1).required(),
+  productId: Joi.string().guid().allow(null).optional(),
+  variantId: Joi.string().guid().allow(null).optional(),
+  expiresAt: Joi.string().isoDate().allow(null, "").optional(),
+  maxUses: Joi.number().integer().min(1).allow(null).optional(),
+});
+
+export const shopUpdateCouponSchema = Joi.object({
+  discountType: Joi.string().valid("PERCENT", "FIXED_PAISE").optional(),
+  discountValue: Joi.number().integer().min(1).optional(),
+  productId: Joi.string().guid().allow(null).optional(),
+  variantId: Joi.string().guid().allow(null).optional(),
+  expiresAt: Joi.string().isoDate().allow(null, "").optional(),
+  maxUses: Joi.number().integer().min(1).allow(null).optional(),
+  active: Joi.boolean().optional(),
+}).min(1);

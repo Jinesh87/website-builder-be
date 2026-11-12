@@ -27,6 +27,7 @@ type GuestCheckoutInput = {
   fullName: string;
   phone?: string;
   address: ShopCustomerAddressInput;
+  couponCode?: string;
 };
 
 type OpenGuestShop = {
@@ -512,7 +513,10 @@ export class ShopGuestService {
       select: { id: true },
     });
 
-    const checkout = await shopCheckoutService.startCheckout(websiteId, customer.id, { addressId: orderAddress.id });
+    const checkout = await shopCheckoutService.startCheckout(websiteId, customer.id, {
+      addressId: orderAddress.id,
+      couponCode: input.couponCode,
+    });
     let trackToken = checkout.trackToken ?? null;
     if (!trackToken) {
       trackToken = newOrderAccessToken();

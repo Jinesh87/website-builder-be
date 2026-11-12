@@ -16,6 +16,7 @@ import {
   shopReturnOrderSchema,
   shopCheckoutConfirmSchema,
   shopCheckoutStartSchema,
+  shopCouponPreviewSchema,
   shopEmailOnlySchema,
   shopGuestAddressSchema,
   shopGuestCheckoutStartSchema,
@@ -243,6 +244,14 @@ shopAuthRouter.delete(
   shopAuthController.removeFromWishlist,
 );
 
+shopAuthRouter.post(
+  "/checkout/coupon-preview",
+  websiteParams,
+  authenticateShopCustomer,
+  rateLimit({ name: "shop-coupon-preview", max: 40, windowSeconds: MINUTE }),
+  validate(shopCouponPreviewSchema),
+  shopAuthController.previewCoupon,
+);
 shopAuthRouter.post(
   "/checkout",
   websiteParams,

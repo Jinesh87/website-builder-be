@@ -11,6 +11,11 @@ import {
   type ShopOrderEmailTemplateInput,
 } from "../services/shop-order-emails.service.js";
 import { shopOrdersService, type ShopOrderQuery, type ShopOrderStatusLabel } from "../services/shop-orders.service.js";
+import {
+  shopCouponService,
+  type CreateShopCouponInput,
+  type UpdateShopCouponInput,
+} from "../services/shop-coupon.service.js";
 import { shopPaymentService, type UpdateShopPaymentInput } from "../services/shop-payment.service.js";
 import { shopService } from "../services/shop.service.js";
 import type { ShopCategoryInput, ShopProductInput, ShopProductQuery } from "../types/shop.types.js";
@@ -21,6 +26,7 @@ type CategoryParams = WebsiteParams & { categoryId: string };
 type ProductParams = WebsiteParams & { productId: string };
 type CustomerParams = WebsiteParams & { customerId: string };
 type OrderParams = WebsiteParams & { orderId: string };
+type CouponParams = WebsiteParams & { couponId: string };
 
 export class ShopController {
   listCategories = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
@@ -306,6 +312,39 @@ export class ShopController {
     try {
       await shopService.deleteProduct(req.params.id, req.params.productId, req.user!);
       res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listCoupons = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ coupons: await shopCouponService.list(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createCoupon = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(201).json({
+        coupon: await shopCouponService.create(req.params.id, req.body as CreateShopCouponInput, req.user!),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateCoupon = async (req: Request<CouponParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        coupon: await shopCouponService.update(
+          req.params.id,
+          req.params.couponId,
+          req.body as UpdateShopCouponInput,
+          req.user!,
+        ),
+      });
     } catch (error) {
       next(error);
     }

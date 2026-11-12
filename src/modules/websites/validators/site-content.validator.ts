@@ -1577,6 +1577,8 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     showDescription: Joi.boolean().optional(),
     showStock: Joi.boolean().optional(),
     showCancellationPolicy: Joi.boolean().optional(),
+    showReturnPolicy: Joi.boolean().optional(),
+    showCoupons: Joi.boolean().optional(),
   }),
   account: Joi.object({
     variant: flexibleVariant(ACCOUNT_VARIANTS, "sidebar-tabs"),

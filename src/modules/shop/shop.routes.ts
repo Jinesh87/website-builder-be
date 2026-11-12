@@ -10,6 +10,8 @@ import { shopController } from "./controllers/shop.controller.js";
 import {
   shopCategoryParamsSchema,
   shopCategorySchema,
+  shopCouponParamsSchema,
+  shopCreateCouponSchema,
   shopCustomerParamsSchema,
   shopCustomerQuerySchema,
   shopInventoryAdjustSchema,
@@ -28,6 +30,7 @@ import {
   shopProductParamsSchema,
   shopProductQuerySchema,
   shopProductSchema,
+  shopUpdateCouponSchema,
   shopWebhookParamsSchema,
   shopWebsiteParamsSchema,
 } from "./validators/shop.validator.js";
@@ -177,6 +180,20 @@ shopRouter.put(
   websiteParams,
   validate(shopInvoiceDesignSchema),
   shopController.updateInvoiceTemplateDesign,
+);
+
+shopRouter.get("/coupons", websiteParams, shopController.listCoupons);
+shopRouter.post(
+  "/coupons",
+  websiteParams,
+  validate(shopCreateCouponSchema),
+  shopController.createCoupon,
+);
+shopRouter.patch(
+  "/coupons/:couponId",
+  validate(shopCouponParamsSchema, "params"),
+  validate(shopUpdateCouponSchema),
+  shopController.updateCoupon,
 );
 
 shopRouter.get("/payments", websiteParams, shopController.getPaymentConfig);

@@ -106,6 +106,8 @@ function detailSections(): SectionEnvelope[] {
       showDescription: true,
       showStock: true,
       showCancellationPolicy: true,
+      showReturnPolicy: true,
+      showCoupons: true,
     }),
   ];
 }

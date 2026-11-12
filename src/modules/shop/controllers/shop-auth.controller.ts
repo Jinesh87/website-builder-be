@@ -259,7 +259,22 @@ export class ShopAuthController {
         checkout: await shopCheckoutService.startCheckout(
           req.params.websiteId,
           req.shopCustomer!.id,
-          (req.body ?? {}) as { addressId?: string },
+          (req.body ?? {}) as { addressId?: string; couponCode?: string },
+        ),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  previewCoupon = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const { shopCouponService } = await import("../services/shop-coupon.service.js");
+      res.json({
+        preview: await shopCouponService.previewForCustomer(
+          req.params.websiteId,
+          req.shopCustomer!.id,
+          String(req.body?.couponCode ?? ""),
         ),
       });
     } catch (error) {

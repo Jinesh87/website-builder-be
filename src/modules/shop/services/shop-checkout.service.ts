@@ -458,9 +458,25 @@ export class ShopCheckoutService {
         gstPaise: unitGst * line.quantity,
       };
     };
-    const totalPaise = cart.reduce((sum, line) => sum + linePricing(line).lineTotal, 0);
-    if (totalPaise < 100) {
+    const listAmountPaise = cart.reduce((sum, line) => sum + linePricing(line).lineTotal, 0);
+    if (listAmountPaise < 100) {
       throw new AppError(400, "Order total must be at least ₹1.", "AMOUNT_TOO_LOW");
+    }
+
+    const { shopCouponService } = await import("./shop-coupon.service.js");
+    const applied = await shopCouponService.quote({
+      websiteId,
+      customerId: customer.id,
+      code: input?.couponCode,
+      lines: cart.map((line) => ({
+        productId: line.productId,
+        variantId: line.variantId,
+        lineTotalPaise: linePricing(line).lineTotal,
+      })),
+    });
+    const totalPaise = applied?.finalAmountPaise ?? listAmountPaise;
+    if (totalPaise < 100) {
+      throw new AppError(400, "Order total after discount must be at least ₹1.", "AMOUNT_TOO_LOW");
     }
 
     const previousPending = await prisma.shopOrder.findMany({
@@ -493,6 +509,14 @@ export class ShopCheckoutService {
           status: ShopOrderStatus.PENDING,
           currency: PAYMENT_CURRENCY,
           totalPaise,
+          ...(applied
+            ? {
+                couponId: applied.couponId,
+                couponCode: applied.code,
+                listAmountPaise: applied.listAmountPaise,
+                discountPaise: applied.discountPaise,
+              }
+            : {}),
           publicAccessToken: newOrderAccessToken(),
           shippingAddress: shippingAddress as Prisma.InputJsonValue,
           items: {
@@ -605,6 +629,13 @@ export class ShopCheckoutService {
         email: customer.email,
         ...(contact ? { contact } : {}),
       },
+      ...(applied
+        ? {
+            listAmountPaise: applied.listAmountPaise,
+            discountPaise: applied.discountPaise,
+            couponCode: applied.code,
+          }
+        : {}),
       ...(trackToken ? { trackToken, trackUrl } : {}),
     };
   }
@@ -792,6 +823,19 @@ export class ShopCheckoutService {
           actorType: "SYSTEM",
           note: "Payment received",
         });
+
+        if (order.couponId && order.listAmountPaise != null && order.discountPaise != null) {
+          const { shopCouponService } = await import("./shop-coupon.service.js");
+          await shopCouponService.redeemInTransaction(tx, {
+            couponId: order.couponId,
+            websiteId: order.websiteId,
+            customerId: order.customerId,
+            shopOrderId: order.id,
+            listAmountPaise: order.listAmountPaise,
+            discountPaise: order.discountPaise,
+            finalAmountPaise: order.totalPaise,
+          });
+        }
 
         const variantIds = order.items.map((item) => item.variantId).filter((id): id is string => Boolean(id));
         if (variantIds.length > 0) {
