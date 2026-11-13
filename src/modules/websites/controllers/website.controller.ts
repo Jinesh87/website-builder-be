@@ -10,9 +10,10 @@ import { aiSeoService } from "../services/ai-seo.service.js";
 import { aiSiteCopilotService } from "../services/ai-site-copilot.service.js";
 import { isEditableSectionType } from "../services/site-generator.js";
 import { liveSiteEngineService } from "../services/live-site-engine.service.js";
+import { htmlImportService } from "../services/html-import.service.js";
 import { websiteGenerationService } from "../services/website-generation.service.js";
 import { websiteService } from "../services/website.service.js";
-import type { TemplateListQuery, WebsiteListQuery } from "../types/website.types.js";
+import type { CreateWebsiteInput, TemplateListQuery, WebsiteListQuery } from "../types/website.types.js";
 
 
 type IdParams = { id: string };
@@ -139,6 +140,23 @@ export class WebsiteController {
   createWithAi = async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.status(201).json({ website: await websiteGenerationService.createWithAi(req.body, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  importHtml = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const uploaded = req.file;
+      if (!uploaded?.buffer?.length) {
+        throw new AppError(400, "Upload a .html file or a .zip folder in the “file” field.", "IMPORT_FILE_REQUIRED");
+      }
+      const website = await htmlImportService.importWebsite(
+        { buffer: uploaded.buffer, originalName: uploaded.originalname || "import.zip" },
+        req.body as CreateWebsiteInput,
+        req.user!,
+      );
+      res.status(201).json({ website });
     } catch (error) {
       next(error);
     }

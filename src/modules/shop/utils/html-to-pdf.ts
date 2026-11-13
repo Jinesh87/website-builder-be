@@ -24,7 +24,7 @@ function exists(path: string): boolean {
 }
 
 /** Prefer an explicit/system binary; otherwise Puppeteer's downloaded Chrome. */
-function resolveChromeExecutable(): string | undefined {
+export function resolveChromeExecutable(): string | undefined {
   for (const candidate of SYSTEM_CHROME_CANDIDATES) {
     if (exists(candidate)) return candidate;
   }

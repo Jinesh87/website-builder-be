@@ -119,6 +119,20 @@ export const createAiWebsiteSchema = Joi.object({
   logoMediaId: Joi.string().guid().optional(),
 });
 
+/** Multipart body fields for HTML/ZIP website import (file is validated separately). */
+export const importHtmlWebsiteSchema = Joi.object({
+  clientId: Joi.string().guid().optional(),
+  name: Joi.string().trim().min(2).max(120).required(),
+  themeId: Joi.string().guid().optional(),
+  subdomain: Joi.string()
+    .trim()
+    .lowercase()
+    .pattern(SUBDOMAIN_PATTERN)
+    .optional()
+    .messages({ "string.pattern.base": "Use 3-40 lowercase letters, numbers or hyphens" }),
+  ...websiteInfo,
+});
+
 export const updateWebsiteSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).optional(),
   seoToolsEnabled: Joi.boolean().optional(),

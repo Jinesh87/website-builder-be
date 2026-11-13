@@ -1,5 +1,8 @@
+import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
+import multer from "multer";
 import { UserRole } from "../../common/constants/roles.js";
+import { AppError } from "../../common/errors/AppError.js";
 import {
   authenticate,
   authorize,
@@ -12,6 +15,7 @@ import {
   createWebsiteSchema,
   generateAiSuggestionSchema,
   generatePageSeoSchema,
+  importHtmlWebsiteSchema,
   reviewPageSeoContentSchema,
   listTemplatesQuerySchema,
   listWebsitesQuerySchema,
@@ -28,6 +32,32 @@ import {
   websiteIdParamsSchema,
   websiteVersionParamsSchema,
 } from "./validators/website.validator.js";
+
+const IMPORT_MAX_BYTES = 50 * 1024 * 1024;
+
+const importFile = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: IMPORT_MAX_BYTES, files: 1, fields: 20, fieldSize: 8 * 1024 },
+  defParamCharset: "utf8",
+}).single("file");
+
+function receiveImportFile(req: Request, res: Response, next: NextFunction) {
+  importFile(req, res, (error: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+    if (error instanceof multer.MulterError) {
+      next(
+        error.code === "LIMIT_FILE_SIZE"
+          ? new AppError(413, `Import file must be under ${IMPORT_MAX_BYTES / (1024 * 1024)} MB.`, "IMPORT_TOO_LARGE")
+          : new AppError(400, "Upload one file in the “file” field", "INVALID_UPLOAD"),
+      );
+      return;
+    }
+    next(error);
+  });
+}
 
 /** Shared by Super Admin and clients; the service limits clients to their own websites and templates. */
 const websitesRouter = Router();
@@ -82,6 +112,13 @@ websitesRouter.post(
   rateLimit({ name: "website-ai-create", max: 10, windowSeconds: 60 * 60 }),
   validate(createAiWebsiteSchema),
   websiteController.createWithAi,
+);
+websitesRouter.post(
+  "/import-html",
+  rateLimit({ name: "website-import-html", max: 10, windowSeconds: 60 * 60 }),
+  receiveImportFile,
+  validate(importHtmlWebsiteSchema),
+  websiteController.importHtml,
 );
 websitesRouter.get("/:id", byId, websiteController.get);
 websitesRouter.get("/:id/generation", byId, websiteController.generationStatus);

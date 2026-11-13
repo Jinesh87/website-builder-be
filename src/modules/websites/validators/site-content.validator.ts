@@ -1,3 +1,5 @@
+import { enforceScopedCss, IMPORT_SCOPE_PATTERN } from "../services/html-import-css.js";
+import { sanitizeImportedHtml } from "../services/html-import-sanitize.js";
 import Joi from "joi";
 import { hasRichText, sanitizeRichText, toPlainText } from "../../../common/utils/rich-text.js";
 import {
@@ -1525,6 +1527,41 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   auth: authDataSchema,
   custom: customDataSchema,
+  imported_html: Joi.object({
+    title: optionalText(200),
+    html: Joi.string().max(2_000_000).allow("").required(),
+    css: Joi.string().max(1_000_000).allow("").optional(),
+    scope: Joi.string().pattern(IMPORT_SCOPE_PATTERN).optional(),
+    chrome: Joi.string().valid("header", "footer").optional(),
+    texts: Joi.array()
+      .items(
+        Joi.object({
+          id: text(64).required(),
+          label: text(120).required(),
+          value: Joi.string().max(20_000).allow("").required(),
+        }),
+      )
+      .max(500)
+      .optional(),
+    mediaSlots: Joi.array()
+      .items(
+        Joi.object({
+          key: text(64).required(),
+          kind: Joi.string().valid("image", "video").required(),
+          url: Joi.string().max(2000).allow("").required(),
+          alt: optionalText(300),
+        }),
+      )
+      .max(200)
+      .optional(),
+  })
+    // Raw HTML/CSS is rendered verbatim (editor + server-rendered live site), so it is
+    // re-sanitized on every save, not just at import time.
+    .custom((value: { html: string; css?: string; scope?: string }) => ({
+      ...value,
+      html: sanitizeImportedHtml(value.html),
+      css: value.scope && value.css ? enforceScopedCss(value.css, value.scope) : "",
+    })),
   blog: Joi.object({
     variant: Joi.string().valid("default", "vintage-journal").optional(),
     eyebrow: optionalText(120),

@@ -307,6 +307,35 @@ export class MediaService {
     });
   }
 
+  /** Stores an image/video from an HTML/ZIP import into the website media library. */
+  async storeImportAsset(input: {
+    clientId: string;
+    websiteId: string;
+    userId: string | null;
+    buffer: Buffer;
+    fileName: string;
+    altText?: string;
+  }): Promise<MediaFileView> {
+    const detected = detectFile(input.buffer);
+    if (!detected || (detected.kind !== MediaKind.IMAGE && detected.kind !== MediaKind.VIDEO)) {
+      throw new AppError(400, `Unsupported media file in the import: ${input.fileName}`, "IMPORT_MEDIA_UNSUPPORTED");
+    }
+    if (input.buffer.length > MAX_BYTES_BY_KIND[detected.kind]) {
+      throw new AppError(413, `File too large in the import: ${input.fileName}`, "IMPORT_MEDIA_TOO_LARGE");
+    }
+    return this.store(
+      { buffer: input.buffer, size: input.buffer.length, originalName: input.fileName },
+      detected,
+      {
+        clientId: input.clientId,
+        websiteId: input.websiteId,
+        folderId: null,
+        altText: input.altText ?? null,
+        uploadedById: input.userId,
+      },
+    );
+  }
+
   private async store(
     file: Pick<UploadedFile, "buffer" | "size" | "originalName">,
     detected: DetectedFile,

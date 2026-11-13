@@ -198,6 +198,7 @@ export const SECTION_TYPES = [
   "products",
   "product_detail",
   "account",
+  "imported_html",
 ] as const;
 
 /** Mirrors frontend/src/site-kit/types.ts. Stored in site data, so values are only ever appended. */
@@ -1179,6 +1180,37 @@ export type SectionDataMap = {
   products: ProductsData;
   product_detail: ProductDetailData;
   account: AccountData;
+  imported_html: ImportedHtmlData;
+};
+
+/** One editable text node extracted from an imported HTML page. */
+export type ImportedHtmlText = {
+  id: string;
+  label: string;
+  value: string;
+};
+
+/** Replaceable image/video reference from an imported HTML page. */
+export type ImportedHtmlMediaSlot = {
+  key: string;
+  kind: "image" | "video";
+  url: string;
+  alt?: string;
+};
+
+/** Full-fidelity HTML import: sanitized markup + scoped CSS + editable fields. */
+export type ImportedHtmlData = {
+  title?: string;
+  /** Sanitized markup; editable nodes carry data-wb-text-id / data-wb-media-key. */
+  html: string;
+  /** Stylesheet already scoped under `.wb-site .{scope}` and reduced to this block's rules. */
+  css?: string;
+  /** Scope class shared by every block from the same import (`wbi-…`). */
+  scope?: string;
+  /** Set on the imported site header/footer blocks. */
+  chrome?: "header" | "footer";
+  texts?: ImportedHtmlText[];
+  mediaSlots?: ImportedHtmlMediaSlot[];
 };
 
 export const BLOG_DETAIL_DESIGNS = [
