@@ -58,3 +58,33 @@ test("draft saves re-sanitize imported_html sections", () => {
   assert.equal(value.data.html, "<p>Hi</p>");
   assert.equal(value.data.css, ".wb-site .wbi-abcd h1{color:red}");
 });
+
+test("a converted section keeps its imported original (sanitized) for switching back", () => {
+  const base = {
+    id: "11111111-1111-4111-8111-111111111111",
+    type: "cta",
+    hidden: false,
+    settings: { background: "default", hideOnMobile: false },
+  };
+  const { value, error } = sectionSchema.validate({
+    ...base,
+    data: {
+      heading: "Ready?",
+      button: { label: "Call", href: "/contact" },
+      importAlternate: { type: "imported_html", data: { html: `<p onclick="x()">Hi</p><script>1</script>`, scope: "wbi-abcd", css: "p{color:red}" } },
+    },
+  });
+  assert.equal(error, undefined);
+  assert.deepEqual(value.data.importAlternate, {
+    type: "imported_html",
+    data: { html: "<p>Hi</p>", scope: "wbi-abcd", css: ".wb-site .wbi-abcd p{color:red}" },
+  });
+
+  // An invalid alternate is dropped instead of failing the whole save.
+  const bad = sectionSchema.validate({
+    ...base,
+    data: { heading: "Ready?", button: { label: "Call", href: "/contact" }, importAlternate: { type: "faq", data: { nope: true } } },
+  });
+  assert.equal(bad.error, undefined);
+  assert.equal(bad.value.data.importAlternate, undefined);
+});

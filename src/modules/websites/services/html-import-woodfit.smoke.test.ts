@@ -27,9 +27,13 @@ test("Woodfit SPA (untagged, JS-built grids) imports with full fidelity", { time
   );
   type Data = { html: string; css?: string; chrome?: string };
   const home = plan.pages[0]!.sections.map((s) => s.data as Data);
-  assert.equal(home[0]!.chrome, "header");
-  assert.equal(home.at(-1)!.chrome, "footer");
-  assert.match(home[0]!.html, /href="\/products"/, "SPA hash links become page paths");
+  assert.match((plan.header.imported as Data).html, /href="\/products"/, "SPA hash links become page paths");
+  assert.ok(plan.footer.imported);
+  assert.deepEqual(plan.theme, {
+    colors: { primary: "#2a3a98", secondary: "#f4d21f", background: "#ffffff", surface: "#f4f6fb", text: "#1a1f36", muted: "#5b6275" },
+    fonts: { heading: "poppins", body: "nunito" },
+    radius: "lg",
+  });
 
   const homeHtml = home.map((d) => d.html).join("");
   if (process.env.HTML_IMPORT_PRERENDER !== "false") {

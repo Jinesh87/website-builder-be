@@ -85,6 +85,7 @@ model Website {
 
   /// Target for (websiteId, clientId) foreign keys, which guarantee child rows
   /// can never point at a website owned by a different client.
+  importedSavedSections SavedSection[] @relation("SavedSectionSourceWebsite")
   @@unique([id, clientId])
   @@index([clientId, updatedAt])
   @@index([status])

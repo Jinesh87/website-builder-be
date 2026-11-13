@@ -6,6 +6,7 @@ import {
   type ContactFormField,
 } from "../types/site-content.types.js";
 import type { PublishSnapshot } from "../types/website.types.js";
+import { importedFormFields } from "./html-import-forms.js";
 
 /** One answered field of a submitted contact form, in form order. */
 export type ContactEntry = { id: string; label: string; type: ContactFieldType; value: string };
@@ -37,10 +38,27 @@ function isContactField(value: unknown): value is ContactFormField {
  * Custom fields of a published contact section. Null when the live site has no such section
  * or the section still uses the default name/email/message form.
  */
-export function findContactFormFields(snapshot: PublishSnapshot | null | undefined, sectionId: string): ContactFormField[] | null {
+export function findContactFormFields(
+  snapshot: PublishSnapshot | null | undefined,
+  sectionId: string,
+  formIndex = 0,
+): ContactFormField[] | null {
+  // Forms inside imported HTML: the imported site header/footer, or an imported block on a page.
+  const importedHtml = (data: unknown) => {
+    const imported = (data as { imported?: { html?: unknown } } | undefined)?.imported;
+    return typeof imported?.html === "string" ? importedFormFields(imported.html, formIndex) : null;
+  };
+  if (sectionId === "site-header") return importedHtml(snapshot?.header);
+  if (sectionId === "site-footer") return importedHtml(snapshot?.footer);
   for (const page of snapshot?.pages ?? []) {
     for (const section of page.sections ?? []) {
-      if (section.id !== sectionId || section.type !== "contact") continue;
+      if (section.id !== sectionId) continue;
+      if (section.type === "imported_html") {
+        const html = (section.data as { html?: unknown }).html;
+        return typeof html === "string" ? importedFormFields(html, formIndex) : null;
+      }
+      if (section.type === "header" || section.type === "footer") return importedHtml(section.data);
+      if (section.type !== "contact") continue;
       const fields = (section.data as { formFields?: unknown }).formFields;
       if (!Array.isArray(fields)) return null;
       const valid = fields.filter(isContactField);

@@ -110,12 +110,17 @@ model SavedSection {
   sectionType String   @db.VarChar(40)
   section     Json
   createdById String?  @db.Uuid
+  /// Set for blocks an HTML import added to the library: they are removed with that website.
+  /// Sections saved by hand stay null and outlive any website.
+  sourceWebsiteId String? @db.Uuid
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
-  client    Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy User?   @relation("SavedSectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy     User?    @relation("SavedSectionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  sourceWebsite Website? @relation("SavedSectionSourceWebsite", fields: [sourceWebsiteId], references: [id], onDelete: Cascade)
 
   @@index([clientId, sectionType])
+  @@index([sourceWebsiteId])
   @@map("saved_sections")
 }

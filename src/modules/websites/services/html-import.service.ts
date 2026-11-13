@@ -10,7 +10,7 @@ import { prisma } from "../../../config/prisma.js";
 import { PageType } from "../../../generated/prisma/client.js";
 import { mediaService } from "../../media/services/media.service.js";
 import type { CreateWebsiteInput, SaveDraftInput } from "../types/website.types.js";
-import type { FooterData, HeaderData, Section } from "../types/site-content.types.js";
+import type { FooterData, HeaderData, ImportedHtmlData, Section } from "../types/site-content.types.js";
 import { SAFE_IMAGE_URL } from "../validators/site-content.validator.js";
 import {
   buildHtmlComponent,
@@ -24,6 +24,7 @@ import {
 } from "./html-import-components.js";
 import { forEachCssUrl, prepareStylesheet, rewriteCssUrls } from "./html-import-css.js";
 import { prerenderPages } from "./html-import-prerender.js";
+import { applyThemePatch, extractThemeFromCss, type ThemePatch } from "./html-import-theme.js";
 import { extractHeaderFromChrome } from "./html-import-section-mappers.js";
 import { websiteService } from "./website.service.js";
 
@@ -424,9 +425,6 @@ function buildDocumentPages(
   return { pages, header, footer };
 }
 
-function withFreshIds(section: Section): Section {
-  return { ...section, id: randomUUID() };
-}
 
 export type HtmlImportPlan = {
   pages: SaveDraftInput["pages"];
@@ -434,6 +432,8 @@ export type HtmlImportPlan = {
   footer: FooterData;
   /** Content blocks to add to the component library (deduped by name). */
   components: BuiltHtmlComponent[];
+  /** Brand colours/fonts/radius read from the imported CSS. */
+  theme: ThemePatch;
 };
 
 /**
@@ -482,9 +482,12 @@ export async function planHtmlImport(params: {
   let headerComponent: BuiltHtmlComponent | null = null;
   let footerComponent: BuiltHtmlComponent | null = null;
   let headerData: HeaderData | null = null;
+  let theme: ThemePatch = {};
 
   for (const [index, doc] of docs.entries()) {
-    const stylesheet = prepareStylesheet(buildStylesheetText(doc.styles, doc.fontImports, uploaded), `wbi-${importId}`);
+    const stylesheetText = buildStylesheetText(doc.styles, doc.fontImports, uploaded);
+    if (index === 0) theme = extractThemeFromCss(stylesheetText);
+    const stylesheet = prepareStylesheet(stylesheetText, `wbi-${importId}`);
     const built = buildDocumentPages(doc, { newScope, stylesheet }, uploaded, links, index === 0);
     if (index === 0) {
       headerComponent = built.header;
@@ -494,6 +497,15 @@ export async function planHtmlImport(params: {
         uploaded,
         resolveUrl: (from: string, href: string) => resolveRelative(from, href),
       }) as HeaderData | null;
+      // The extracted builder menu holds the raw hrefs (index.html, #about): map them to page paths.
+      if (headerData?.menu) {
+        const rewrite = makeLinkRewriter(links, doc.htmlPath);
+        headerData.menu = headerData.menu.map((item) => {
+          if (!item.href.startsWith("/") || item.href.startsWith("//")) return { ...item, href: rewrite(item.href) };
+          // "/about" may be an SPA view id the extractor turned into a path.
+          return { ...item, href: links.views.get(item.href.slice(1).toLowerCase()) ?? item.href };
+        });
+      }
     }
 
     for (const page of built.pages) {
@@ -534,21 +546,17 @@ export async function planHtmlImport(params: {
     pages[0]!.pageType = PageType.HOME;
   }
 
-  // 5. The original header/footer markup is kept on every page (exact look); the builder's
-  // own header/footer are prefilled but hidden so they can be switched on later.
-  for (const page of pages) {
-    page.sections = [
-      ...(headerComponent ? [withFreshIds(headerComponent.section)] : []),
-      ...page.sections,
-      ...(footerComponent ? [withFreshIds(footerComponent.section)] : []),
-    ];
-  }
+  // 5. The original header/footer markup becomes the site-wide header/footer (stored once, shared by
+  // every page). The builder design underneath is prefilled (logo, menu) for when the user switches.
+  const importedChrome = (component: BuiltHtmlComponent | null) =>
+    component ? { ...(component.section.data as ImportedHtmlData), chrome: undefined } : undefined;
   const menu = pages.map((p) => ({ label: p.name, href: p.slug }));
   const header: HeaderData = {
     ...(headerData ?? { design: "logo-left", siteName, sticky: true }),
     siteName,
     menu: headerData?.menu?.length && !headerData.menu.every((item) => item.href.startsWith("#")) ? headerData.menu : menu,
-    hidden: Boolean(headerComponent),
+    hidden: false,
+    ...(headerComponent ? { imported: importedChrome(headerComponent) } : {}),
   } as HeaderData;
   const footer: FooterData = {
     design: "simple",
@@ -556,10 +564,11 @@ export async function planHtmlImport(params: {
     columns: [],
     social: [],
     copyright: `© ${new Date().getFullYear()} ${siteName}`,
-    hidden: Boolean(footerComponent),
+    hidden: false,
+    ...(footerComponent ? { imported: importedChrome(footerComponent) } : {}),
   };
 
-  return { pages, header, footer, components };
+  return { pages, header, footer, components, theme };
 }
 
 /** Reads an uploaded .html/.zip into the in-memory package used by {@link planHtmlImport}. */
@@ -607,7 +616,7 @@ export class HtmlImportService {
         website.id,
         {
           expectedDraftUpdatedAt: website.draft.draftUpdatedAt,
-          theme: website.draft.theme,
+          theme: applyThemePatch(website.draft.theme, plan.theme),
           header: plan.header,
           footer: plan.footer,
           pages: plan.pages,
@@ -615,10 +624,15 @@ export class HtmlImportService {
         actor,
       );
 
-      // Each content block is also saved to the component library for reuse.
+      // Each content block is also saved to the component library for reuse. The entries belong to
+      // this website (sourceWebsiteId), so deleting the website cleans them up.
       for (const component of plan.components.slice(0, MAX_SAVED_COMPONENTS)) {
         try {
-          await websiteService.saveSection(website.id, { name: component.name.slice(0, 120), section: component.section }, actor);
+          await websiteService.saveSection(
+            website.id,
+            { name: component.name.slice(0, 120), section: component.section, fromWebsite: true },
+            actor,
+          );
         } catch (error) {
           logger.warn({ err: error, component: component.name }, "HTML import: component not saved to library");
         }

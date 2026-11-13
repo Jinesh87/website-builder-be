@@ -193,7 +193,8 @@ export class PublicSiteController {
       let content: ContactLeadContent;
       if (typeof body.sectionId === "string" && body.fields !== undefined) {
         const snapshot = website.liveVersion?.snapshot as unknown as PublishSnapshot | null;
-        const formFields = findContactFormFields(snapshot, body.sectionId);
+        const formIndex = typeof body.formIndex === "number" && Number.isInteger(body.formIndex) ? body.formIndex : 0;
+        const formFields = findContactFormFields(snapshot, body.sectionId, formIndex);
         if (!formFields) {
           return res.status(409).json({ error: "This form was just updated. Refresh the page and try again." });
         }

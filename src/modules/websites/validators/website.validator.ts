@@ -62,6 +62,8 @@ export const updateTemplateSchema = Joi.object({
 export const saveSectionSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
   section: sectionSchema.required(),
+  /** Ties the entry to this website so it is deleted with it (used for imported blocks). */
+  fromWebsite: Joi.boolean().optional(),
 });
 
 export const listWebsitesQuerySchema = Joi.object({

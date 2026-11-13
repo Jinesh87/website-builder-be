@@ -1,4 +1,5 @@
 import { enforceScopedCss, IMPORT_SCOPE_PATTERN } from "../services/html-import-css.js";
+import { prepareImportedForms } from "../services/html-import-forms.js";
 import { sanitizeImportedHtml } from "../services/html-import-sanitize.js";
 import Joi from "joi";
 import { hasRichText, sanitizeRichText, toPlainText } from "../../../common/utils/rich-text.js";
@@ -642,7 +643,48 @@ export const sectionSettingsSchema = Joi.object({
 /** Style of the site-wide header/footer; the editor writes it from the shared header/footer section. */
 const chromeSettings = sectionSettingsSchema.optional().meta(locked);
 
+/** Imported HTML block: also used for an imported site header/footer (`header.imported`). */
+const importedHtmlDataSchema = Joi.object({
+  title: optionalText(200),
+  html: Joi.string().max(2_000_000).allow("").required(),
+  css: Joi.string().max(1_000_000).allow("").optional(),
+  scope: Joi.string().pattern(IMPORT_SCOPE_PATTERN).optional(),
+  chrome: Joi.string().valid("header", "footer").optional(),
+  texts: Joi.array()
+    .items(
+      Joi.object({
+        id: text(64).required(),
+        label: text(120).required(),
+        value: Joi.string().max(20_000).allow("").required(),
+      }),
+    )
+    .max(500)
+    .optional(),
+  mediaSlots: Joi.array()
+    .items(
+      Joi.object({
+        key: text(64).required(),
+        kind: Joi.string().valid("image", "video").required(),
+        url: Joi.string().max(2000).allow("").required(),
+        alt: optionalText(300),
+      }),
+    )
+    .max(200)
+    .optional(),
+})
+  // Raw HTML/CSS is rendered verbatim (editor + server-rendered live site), so it is
+  // re-sanitized on every save, not just at import time.
+  .custom((value: { html: string; css?: string; scope?: string }) => ({
+    ...value,
+    // Forms are marked + their fields named so the live site can post them as contact leads.
+    html: prepareImportedForms(sanitizeImportedHtml(value.html)),
+    css: value.scope && value.css ? enforceScopedCss(value.css, value.scope) : "",
+  }));
+
 export const headerSchema = Joi.object({
+  /** Imported markup kept while the builder design is shown, so the user can switch back. */
+  importedHidden: importedHtmlDataSchema.optional(),
+  imported: importedHtmlDataSchema.optional(),
   settings: chromeSettings,
   design: flexibleVariant(HEADER_DESIGNS, "logo-left", {
     "logo_left": "logo-left",
@@ -694,6 +736,9 @@ export const headerSchema = Joi.object({
 });
 
 export const footerSchema = Joi.object({
+  /** Imported markup kept while the builder design is shown, so the user can switch back. */
+  importedHidden: importedHtmlDataSchema.optional(),
+  imported: importedHtmlDataSchema.optional(),
   settings: chromeSettings,
   design: flexibleVariant(FOOTER_DESIGNS, "columns", {
     "col": "columns",
@@ -1527,41 +1572,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   auth: authDataSchema,
   custom: customDataSchema,
-  imported_html: Joi.object({
-    title: optionalText(200),
-    html: Joi.string().max(2_000_000).allow("").required(),
-    css: Joi.string().max(1_000_000).allow("").optional(),
-    scope: Joi.string().pattern(IMPORT_SCOPE_PATTERN).optional(),
-    chrome: Joi.string().valid("header", "footer").optional(),
-    texts: Joi.array()
-      .items(
-        Joi.object({
-          id: text(64).required(),
-          label: text(120).required(),
-          value: Joi.string().max(20_000).allow("").required(),
-        }),
-      )
-      .max(500)
-      .optional(),
-    mediaSlots: Joi.array()
-      .items(
-        Joi.object({
-          key: text(64).required(),
-          kind: Joi.string().valid("image", "video").required(),
-          url: Joi.string().max(2000).allow("").required(),
-          alt: optionalText(300),
-        }),
-      )
-      .max(200)
-      .optional(),
-  })
-    // Raw HTML/CSS is rendered verbatim (editor + server-rendered live site), so it is
-    // re-sanitized on every save, not just at import time.
-    .custom((value: { html: string; css?: string; scope?: string }) => ({
-      ...value,
-      html: sanitizeImportedHtml(value.html),
-      css: value.scope && value.css ? enforceScopedCss(value.css, value.scope) : "",
-    })),
+  imported_html: importedHtmlDataSchema,
   blog: Joi.object({
     variant: Joi.string().valid("default", "vintage-journal").optional(),
     eyebrow: optionalText(120),
@@ -1691,6 +1702,21 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
 /** Content schema of each section type; the single source for validation and the AI field catalog. */
 export const SECTION_DATA_SCHEMAS: Readonly<Record<SectionType, Joi.ObjectSchema>> = SECTION_DATA;
 
+/**
+ * The other version of a section converted from / back to imported HTML (`data.importAlternate`),
+ * so the editor can switch between them without losing edits. It is validated (and, for
+ * imported HTML, sanitized) with its own type's schema; an invalid one is dropped, not fatal.
+ */
+const importAlternateSchema = Joi.object({
+  type: Joi.string()
+    .valid(...SECTION_TYPES)
+    .required(),
+  data: Joi.object().unknown(true).required(),
+}).custom((value: { type: SectionType; data: unknown }) => {
+  const { error, value: data } = SECTION_DATA[value.type].validate(value.data, { stripUnknown: true });
+  return error ? undefined : { type: value.type, data };
+});
+
 export const sectionSchema = Joi.object({
   id: text(128).required(),
   type: Joi.string()
@@ -1699,7 +1725,10 @@ export const sectionSchema = Joi.object({
   hidden: Joi.boolean().required(),
   settings: sectionSettingsSchema.required(),
   data: Joi.when("type", {
-    switch: SECTION_TYPES.map((type) => ({ is: type, then: SECTION_DATA[type].required() })),
+    switch: SECTION_TYPES.map((type) => ({
+      is: type,
+      then: SECTION_DATA[type].keys({ importAlternate: importAlternateSchema.optional() }).required(),
+    })),
   }),
 });
 

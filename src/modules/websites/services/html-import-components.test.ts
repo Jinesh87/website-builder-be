@@ -53,18 +53,22 @@ test("untagged SPA: views become pages, chrome is kept, links and CSS are rewrit
   const plan = await planHtmlImport({ files, htmlPaths, siteName: "Shop", upload, prerender: false });
 
   assert.deepEqual(plan.pages.map((p) => [p.name, p.slug]), [["Home", "/"], ["About", "/about"]]);
-  assert.equal(plan.header.hidden, true, "builder header is hidden when the original header is imported");
 
-  const home = plan.pages[0]!.sections.map((s) => s.data as Data);
-  assert.deepEqual(home.map((d) => d.chrome ?? "content"), ["header", "content", "content", "footer"]);
-
-  const header = home[0]!;
+  // The original header/footer are stored once as the site-wide header/footer.
+  assert.equal(plan.header.hidden, false);
+  const header = plan.header.imported as Data;
+  assert.ok(header, "imported header is site-wide");
   assert.match(header.html, /href="\/"/);
   assert.match(header.html, /href="\/about"/);
+  assert.match((plan.footer.imported as Data).html, /© Shop/);
+  assert.deepEqual(plan.theme.colors?.text, "#112233");
 
-  const hero = home[1]!;
+  const home = plan.pages[0]!.sections.map((s) => s.data as Data);
+  assert.equal(home.length, 2, "pages only hold content blocks");
+
+  const hero = home[0]!;
   assert.match(hero.scope!, /^wbi-[a-z0-9]+$/);
-  assert.notEqual(hero.scope, home[2]!.scope, "each block has its own scope");
+  assert.notEqual(hero.scope, home[1]!.scope, "each block has its own scope");
   assert.match(hero.html, /src="\/api\/media\/files\/img\/a\.png"/);
   // Variables survive (:root → scope) and body box props are not repeated per block.
   assert.match(hero.css!, new RegExp(`\\.wb-site \\.${hero.scope}\\{--blue:#123\\}`));
@@ -85,7 +89,7 @@ test("untagged SPA: views become pages, chrome is kept, links and CSS are rewrit
   assert.match(hero.html, /<h1 data-wb-text-id="t\d+">Hello <span data-wb-text-id="t\d+">world<\/span><\/h1>/);
   assert.equal(hero.mediaSlots?.[0]?.url, "/api/media/files/img/a.png");
 
-  const cta = home[2]!;
+  const cta = home[1]!;
   assert.match(cta.html, /href="\/about"/);
   assert.match(cta.css!, /\.btn\{[^}]*\}\s*\.wb-site \.wbi-[a-z0-9]+ \.btn-line\{/);
   assert.doesNotMatch(cta.html, /<script/);
@@ -114,7 +118,7 @@ test("multi-file ZIP: html links map to page slugs", async () => {
   assert.deepEqual(plan.pages.map((p) => p.slug), ["/", "/about"]);
   const aboutBody = plan.pages[1]!.sections.map((s) => (s.data as Data).html).join("");
   assert.match(aboutBody, /href="\/#top"/);
-  assert.match((plan.pages[0]!.sections[0]!.data as Data).html, /href="\/about"/);
+  assert.match((plan.header.imported as Data).html, /href="\/about"/);
 });
 
 test("page JavaScript runs before import (headless Chrome, network blocked)", { timeout: 60_000 }, async (t) => {

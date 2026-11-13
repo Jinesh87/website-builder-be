@@ -212,10 +212,12 @@ export type SavedSectionView = {
   section: Section;
   /** Shared by the platform (read-only for clients). */
   isPlatform: boolean;
+  /** Set when an HTML import added this entry; it is deleted with that website. */
+  sourceWebsiteId?: string | null;
   createdAt: string;
 };
 
-export type SaveSectionInput = { name: string; section: Section };
+export type SaveSectionInput = { name: string; section: Section; fromWebsite?: boolean };
 
 export type ThemeSummary = { id: string; name: string; settings: ThemeSettings };
 

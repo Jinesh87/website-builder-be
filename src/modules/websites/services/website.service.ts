@@ -120,6 +120,7 @@ function toSavedSection(saved: SavedSection): SavedSectionView {
     sectionType: saved.sectionType as Section["type"],
     section: saved.section as unknown as Section,
     isPlatform: saved.clientId === null,
+    sourceWebsiteId: saved.sourceWebsiteId,
     createdAt: saved.createdAt.toISOString(),
   };
 }
@@ -624,6 +625,7 @@ export class WebsiteService {
         sectionType: input.section.type,
         section: input.section as unknown as Prisma.InputJsonValue,
         createdById: actor.id,
+        ...(input.fromWebsite ? { sourceWebsiteId: website.id } : {}),
       },
     });
     return toSavedSection(saved);
