@@ -274,12 +274,25 @@ const MATCHABLE_PSEUDOS = new Set([
 
 const PSEUDO = /::?(-?[a-zA-Z][\w-]*)(\((?:[^()]|\([^()]*\))*\))?/g;
 
-/** Removes dynamic/pseudo-element parts so `.btn:hover::after` can be tested as `.btn`. */
+/**
+ * Classes and attributes the page's own script adds at runtime (an open mobile menu, an active
+ * tab, a scrolled header…). Nothing has them when the page is imported, so they are ignored when
+ * deciding which rules a block uses — otherwise e.g. `.nav.open ul` would be dropped and the
+ * hamburger menu could never open.
+ */
+const STATE_CLASS =
+  /\.(?:open|opened|active|show|shown|is-[\w-]+|has-[\w-]+|menu-open|nav-open|expanded|collapsed|toggled|visible|in|current|selected|scrolled|sticky|loaded|ready|aos-animate)(?![\w-])/g;
+const STATE_ATTRIBUTE = /\[(?:aria-expanded|aria-hidden|aria-selected|aria-pressed|open|data-state)(?:\s*[~|^$*]?=\s*(?:"[^"]*"|'[^']*'|[^\]]*))?\]/g;
+
+/** Removes dynamic/pseudo-element/state parts so `.btn:hover::after` can be tested as `.btn`. */
 export function matchableSelector(selector: string): string {
-  const stripped = selector.replace(PSEUDO, (full, name: string) => {
-    if (full.startsWith("::")) return "";
-    return MATCHABLE_PSEUDOS.has(name.toLowerCase()) ? full : "";
-  });
+  const stripped = selector
+    .replace(PSEUDO, (full, name: string) => {
+      if (full.startsWith("::")) return "";
+      return MATCHABLE_PSEUDOS.has(name.toLowerCase()) ? full : "";
+    })
+    .replace(STATE_CLASS, "")
+    .replace(STATE_ATTRIBUTE, "");
   const cleaned = stripped.replace(/[\s>+~]+$/, "").trim();
   return cleaned || "*";
 }
@@ -289,6 +302,12 @@ type MatchFn = (selector: string) => boolean;
 /** A matcher over a detached section fragment: true when the selector hits any element in it. */
 export function fragmentMatcher(fragmentHtml: string): MatchFn {
   const $ = cheerio.load(fragmentHtml, null, false);
+  // A menu's declared "open" class (data-wb-nav-open-class) is only added at runtime: match as if
+  // it were there so its CSS is kept. This copy is only used for matching, never output.
+  $("[data-wb-nav-open-class]").each((_i, el) => {
+    const name = ($(el).attr("data-wb-nav-open-class") || "").trim();
+    if (/^[\w-]+$/.test(name)) $(el).addClass(name);
+  });
   const cache = new Map<string, boolean>();
   return (selector) => {
     const key = matchableSelector(selector);

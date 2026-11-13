@@ -88,3 +88,21 @@ test("a converted section keeps its imported original (sanitized) for switching 
   assert.equal(bad.error, undefined);
   assert.equal(bad.value.data.importAlternate, undefined);
 });
+
+test("CSS for runtime states (open menu, active tab) survives tree shaking", async () => {
+  const { matchableSelector, sectionMatcher } = await import("./html-import-css.js");
+  assert.equal(matchableSelector(".nav.open ul"), ".nav ul");
+  assert.equal(matchableSelector('.menu-btn[aria-expanded="true"] svg'), ".menu-btn svg");
+  assert.equal(matchableSelector(".inner.active:hover"), ".inner");
+  const matches = sectionMatcher(`<nav class="nav"><ul><li>a</li></ul><button class="menu-btn"></button></nav>`);
+  assert.equal(matches(".nav.open ul"), true);
+  assert.equal(matches(".sidebar.open ul"), false);
+});
+
+test("a menu's declared open class keeps its CSS", async () => {
+  const { sectionMatcher } = await import("./html-import-css.js");
+  const matches = sectionMatcher(`<nav data-wb-nav data-wb-nav-open-class="is-shown-mobile" class="links"><a href="/">Home</a></nav>`);
+  assert.equal(matches(".links.is-shown-mobile a"), true);
+  assert.equal(matches(".links.is-hidden-thing a"), true); // is-* states are always kept
+  assert.equal(matches(".links.unrelated a"), false);
+});
