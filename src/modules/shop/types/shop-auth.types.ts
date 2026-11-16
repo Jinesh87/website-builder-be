@@ -128,6 +128,8 @@ export type ShopCartItemSummary = {
   quantity: number;
   pricePaise: number;
   imageUrl?: string;
+  /** True when the variant has no stock; the line stays in the cart but checkout refuses it. */
+  outOfStock: boolean;
 };
 
 export type ShopWishlistItemSummary = {

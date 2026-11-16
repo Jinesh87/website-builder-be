@@ -62,7 +62,7 @@ type CartRow = {
     priceIncludesGst: boolean | null;
     website: { shopGstPercent: number; shopPriceIncludesGst: boolean };
   };
-  variant: { id: string; name: string; pricePaise: number; images: Prisma.JsonValue };
+  variant: { id: string; name: string; pricePaise: number; quantity: number; images: Prisma.JsonValue };
 };
 
 function toCartItemSummary(row: CartRow): ShopCartItemSummary {
@@ -76,6 +76,7 @@ function toCartItemSummary(row: CartRow): ShopCartItemSummary {
     quantity: row.quantity,
     pricePaise: unit,
     imageUrl: firstImageUrl(row.variant.images) ?? firstImageUrl(row.product.images),
+    outOfStock: row.variant.quantity <= 0,
   };
 }
 
@@ -215,14 +216,13 @@ export class ShopGuestService {
       },
     });
     if (!variant) throw new AppError(404, "That product is no longer available.", "VARIANT_NOT_FOUND");
-    if (variant.quantity <= 0) throw new AppError(400, "This item is out of stock.", "OUT_OF_STOCK");
-
+    // Out-of-stock variants may still be added; checkout refuses them until restocked.
     const existing = await prisma.shopCartItem.findUnique({
       where: { guestSessionId_variantId: { guestSessionId, variantId: variant.id } },
       select: { id: true, quantity: true },
     });
     const nextQty = Math.min(99, (existing?.quantity ?? 0) + quantity);
-    if (nextQty > variant.quantity) {
+    if (variant.quantity > 0 && nextQty > variant.quantity) {
       throw new AppError(400, `Only ${variant.quantity} left in stock.`, "INSUFFICIENT_STOCK");
     }
 
@@ -256,7 +256,7 @@ export class ShopGuestService {
       include: { variant: { select: { quantity: true } } },
     });
     if (!item) throw new AppError(404, "That cart item was not found.", "CART_ITEM_NOT_FOUND");
-    if (qty > item.variant.quantity) {
+    if (item.variant.quantity > 0 && qty > item.variant.quantity) {
       throw new AppError(400, `Only ${item.variant.quantity} left in stock.`, "INSUFFICIENT_STOCK");
     }
     await prisma.shopCartItem.update({ where: { id: item.id }, data: { quantity: qty } });
