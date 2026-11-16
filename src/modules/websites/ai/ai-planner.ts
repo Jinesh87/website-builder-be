@@ -4,7 +4,7 @@ import { AI_CREATABLE_TYPES, MAX_PAGES_PER_REQUEST, type SectionEnvelope } from 
 const SECTION_CATALOG = `
 - header: navigation bar (logo-left, centered, classical, minimalist, floating, transparent).
 - footer: site footer (columns, simple, mega, split, centered, cta-banner).
-- hero: static hero banner with headline, CTAs and optional image (centered, split, split-left, background-image, gradient, soft-card, floating-cards, asymmetric).
+- hero: static hero banner with headline, CTAs and optional image (centered, split, split-left, background-image, gradient, soft-card, floating-cards, asymmetric, arch-collage = headline beside a tall arched photo and two stacked photo tiles, for fashion, boutique and lifestyle stores).
 - carousel: interactive slider (hero-slider = full-width hero banner SLIDER/carousel with auto-play; cards, showcase, minimal-editorial, image-gallery, image-strip, image-coverflow).
 - features: feature grid with icons (pastel-icons, grid, split, cards, minimal).
 - services: service listing (cards-grid, bento-grid, split-showcase, interactive-list, horizontal-cards, minimal-numbered).

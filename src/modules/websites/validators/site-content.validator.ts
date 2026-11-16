@@ -795,6 +795,9 @@ export const heroSchema = Joi.object({
     "campaign": "campaign-banner",
     "event-banner": "campaign-banner",
     "video-banner": "campaign-banner",
+    "arch": "arch-collage",
+    "collage": "arch-collage",
+    "photo-collage": "arch-collage",
   }),
   eyebrow: optionalText(200),
   badgeIcon: optionalText(50),
@@ -817,6 +820,8 @@ export const heroSchema = Joi.object({
   videoLoop: Joi.boolean().optional(),
   image: image.optional().description("Picture shown beside or below the text, positioned by imagePosition. Not the background."),
   secondaryImage: image.optional().description("Second picture used by some variants next to image."),
+  tertiaryImage: image.optional().description("Third picture, used by the arch-collage variant (bottom tile; image is the tall arch, secondaryImage the top tile)."),
+  collagePhotos: Joi.number().integer().valid(1, 2, 3).optional().description("arch-collage only: how many photos to show. 1 = arch only, 2 = arch + one tall tile, 3 = arch + two stacked tiles (default)."),
   backgroundImage: image
     .optional()
     .description("Photo covering the whole section behind the text; works with every variant."),

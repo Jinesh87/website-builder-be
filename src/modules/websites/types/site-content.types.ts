@@ -109,6 +109,7 @@ export const HERO_VARIANTS = [
   "campaign-banner",
   "vintage-editorial",
   "vintage-sunburst",
+  "arch-collage",
 ] as const;
 export const HERO_ALIGNS = ["left", "center", "right"] as const;
 export const HERO_ALIGN_ELEMENTS = ["badge", "heading", "subheading", "description", "actions", "trustedBy"] as const;
@@ -638,6 +639,8 @@ export type HeroData = {
   videoLoop?: boolean;
   image?: ImageRef;
   secondaryImage?: ImageRef;
+  tertiaryImage?: ImageRef;
+  collagePhotos?: 1 | 2 | 3;
   backgroundImage?: ImageRef;
   bgImagePosition?: "bottom" | "center" | "top" | "cover";
   bgOverlayType?: "dark" | "light" | "gradient" | "none";

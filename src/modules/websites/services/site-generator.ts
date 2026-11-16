@@ -388,7 +388,7 @@ ${images.length > 0 ? `${images.length} images are available.` : "No images are 
 // Section clean-up: only owner media, only internal links, then the real schema.
 // ---------------------------------------------------------------------------
 
-const IMAGE_KEYS = new Set(["image", "secondaryImage", "backgroundImage", "splitImage", "photo", "logo"]);
+const IMAGE_KEYS = new Set(["image", "secondaryImage", "tertiaryImage", "backgroundImage", "splitImage", "photo", "logo"]);
 const IMAGE_LIST_KEYS = new Set(["images", "logos"]);
 const REMOVE = Symbol("remove");
 

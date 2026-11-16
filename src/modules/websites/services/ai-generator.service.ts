@@ -297,6 +297,16 @@ export function sanitizeSectionData(
     }
   }
 
+  if (data.tertiaryImage && typeof data.tertiaryImage === "object") {
+    const img = data.tertiaryImage as Record<string, unknown>;
+    if (!img.url || typeof img.url !== "string" || !img.url.trim()) {
+      delete data.tertiaryImage;
+    } else {
+      img.url = (img.url as string).trim();
+      img.alt = enrichImageAlt(img.alt, altContext, "Collection detail");
+    }
+  }
+
   // Nested members (team)
   if (Array.isArray(data.members)) {
     for (const member of data.members) {
@@ -1095,7 +1105,7 @@ SEO, ACCESSIBILITY & LINKING RULES:
 VALID SECTION SCHEMAS & EXACT FIELD KEYS:
 1. "hero":
    data: {
-     "variant": "background-image"|"centered"|"split"|"split-left"|"gradient"|"soft-card"|"floating-cards"|"asymmetric"|"curved-carousel"|"curved-bottom"|"minimal-typography"|"video-bg",
+     "variant": "background-image"|"centered"|"split"|"split-left"|"gradient"|"soft-card"|"floating-cards"|"asymmetric"|"curved-carousel"|"curved-bottom"|"minimal-typography"|"video-bg"|"arch-collage",
      "heading": "...",
      "highlightText": "...",
      "subheading": "...",
@@ -1105,6 +1115,8 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
      "primaryCta": { "label": "Get Started", "href": "/contact" },
      "secondaryCta": { "label": "Learn More", "href": "#features" },
      "image": { "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80", "alt": "Product preview" },
+     "secondaryImage": { "url": "...", "alt": "..." },
+     "tertiaryImage": { "url": "...", "alt": "..." },
      "backgroundImage": { "url": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=2000&q=80", "alt": "Hero Background" },
      "imagePosition": "background"|"right"|"left"|"bottom"|"card",
      "bgImagePosition": "cover"|"center"|"top"|"bottom",
@@ -1114,6 +1126,7 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
      "minHeight": "screen"|"tall"|"compact"|"auto",
      "contentAlign": "center"|"left"|"right"
    }
+   "arch-collage": editorial headline beside a tall arched photo ("image") and two stacked tiles ("secondaryImage" top, "tertiaryImage" bottom). Best for fashion, boutique, jewellery, bridal and lifestyle stores. Set "collagePhotos" to 1 (arch only), 2 (arch + one tile) or 3 (default) and fill that many images, in that order; use pill buttons ("buttonShape": "pill"). Do not set imagePosition or backgroundImage for it.
 2. "features":
    data: { "variant": "pastel-icons"|"grid"|"split"|"cards"|"minimal", "heading": "...", "intro": "...", "columns": 3, "items": [ { "icon": "bolt"|"star"|"shield"|"rocket"|"layers"|"sparkles"|"check", "iconColor": "orange"|"green"|"yellow"|"cyan"|"purple", "title": "...", "description": "...", "badge": "..." } ] }
 3. "services":
