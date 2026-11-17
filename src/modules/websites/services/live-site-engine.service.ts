@@ -568,10 +568,14 @@ Sitemap: ${domain}/sitemap.xml
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
 
-    // 3. 301 Canonical redirect: subdomain → primary custom domain only when that domain is allowed to serve.
+    // 3. 301 Canonical redirect to the primary custom domain (when that domain is allowed to serve) from
+    //    the free subdomain and from the website's other custom domains, so visitors see one address.
     const primaryCustomDomain = website.domains?.[0]?.hostname;
-    const isSubdomainRequest = identifier.toLowerCase() === website.subdomain.toLowerCase();
-    if (primaryCustomDomain && isSubdomainRequest && !basePath) {
+    const requestHost = identifier.toLowerCase();
+    const isSubdomainRequest = requestHost === website.subdomain.toLowerCase();
+    const isOtherCustomDomain =
+      requestHost !== primaryCustomDomain && (website.domains ?? []).some((domain) => domain.hostname === requestHost);
+    if (primaryCustomDomain && (isSubdomainRequest || isOtherCustomDomain) && !basePath) {
       const customAccess = await resolveCustomDomainAccess(primaryCustomDomain);
       if (customAccess?.allow) {
         return {

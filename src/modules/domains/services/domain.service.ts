@@ -116,6 +116,15 @@ export class DomainService {
     if (domain.status !== DomainStatus.ACTIVE) {
       throw new AppError(409, "Verify this domain before making it the main address.", "DOMAIN_NOT_ACTIVE");
     }
+    // Every other address redirects to the main one, so it must already work over HTTPS.
+    const https = await checkHttps(domain.hostname, domain.verifiedAt);
+    if (https.status !== "ready") {
+      throw new AppError(
+        409,
+        `HTTPS isn't working for ${domain.hostname} yet, so visitors can't be sent there. ${https.status === "pending" ? "Try again in a few minutes." : "Check its DNS records, then try again."}`,
+        "DOMAIN_HTTPS_NOT_READY",
+      );
+    }
     const [, updated] = await prisma.$transaction([
       prisma.domain.updateMany({ where: { websiteId: domain.websiteId, id: { not: domain.id } }, data: { isPrimary: false } }),
       prisma.domain.update({ where: { id: domain.id }, data: { isPrimary: true } }),
