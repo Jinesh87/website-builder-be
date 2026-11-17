@@ -101,3 +101,22 @@ export function detectFile(buffer: Buffer): DetectedFile | null {
 
   return null;
 }
+
+/** Web font file types an HTML import may bring along; stored as documents in the media library. */
+export const FONT_MIME_TYPES: ReadonlySet<string> = new Set(["font/woff2", "font/woff", "font/ttf", "font/otf"]);
+
+/**
+ * Recognises a web font by its signature. Only HTML imports store fonts (their CSS @font-face rules
+ * point at them); the media library upload keeps using detectFile, which does not accept fonts.
+ */
+export function detectFont(buffer: Buffer): DetectedFile | null {
+  if (buffer.length < 12) return null;
+  const tag = ascii(buffer, 0, 4);
+  if (tag === "wOF2") return { kind: MediaKind.DOCUMENT, mimeType: "font/woff2", extension: "woff2" };
+  if (tag === "wOFF") return { kind: MediaKind.DOCUMENT, mimeType: "font/woff", extension: "woff" };
+  if (tag === "OTTO") return { kind: MediaKind.DOCUMENT, mimeType: "font/otf", extension: "otf" };
+  if (buffer.readUInt32BE(0) === 0x00010000 || tag === "true") {
+    return { kind: MediaKind.DOCUMENT, mimeType: "font/ttf", extension: "ttf" };
+  }
+  return null;
+}

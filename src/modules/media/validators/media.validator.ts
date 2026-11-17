@@ -11,13 +11,18 @@ export const folderIdParamsSchema = Joi.object({
   folderId: Joi.string().guid().required(),
 });
 
+import { MEDIA_FONT_FILTER } from "../types/media.types.js";
+
 export const listMediaQuerySchema = Joi.object({
   clientId: Joi.string().guid().optional(),
   websiteId: Joi.string().guid().optional(),
   folderId: Joi.alternatives(Joi.string().guid(), Joi.string().valid("none")).optional(),
+  /** A media kind, or "FONT" for web fonts (stored as documents by HTML imports). */
   kind: Joi.string()
-    .valid(...Object.values(MediaKind))
+    .valid(...Object.values(MediaKind), MEDIA_FONT_FILTER)
     .optional(),
+  /** Leaves fonts out of an unfiltered list; the library shows them in their own section. */
+  excludeFonts: Joi.boolean().optional(),
   search: Joi.string().trim().max(120).allow("").optional(),
   page: Joi.number().integer().min(1).max(10_000).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(24),

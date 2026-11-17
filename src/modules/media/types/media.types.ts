@@ -39,12 +39,17 @@ export type MediaUsage = {
 
 export type StorageUsage = { usedBytes: number; limitBytes: number };
 
+/** List filter for web fonts: documents whose MIME type is font/*. */
+export const MEDIA_FONT_FILTER = "FONT";
+
 export type MediaListQuery = {
   clientId?: string;
   websiteId?: string;
   /** A folder id, or "none" for files outside any folder. */
   folderId?: string;
-  kind?: MediaKind;
+  /** A media kind, or "FONT" for web fonts. */
+  kind?: MediaKind | typeof MEDIA_FONT_FILTER;
+  excludeFonts?: boolean;
   search?: string;
   page: number;
   pageSize: number;

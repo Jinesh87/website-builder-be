@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import { MediaKind } from "../../../common/constants/media.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import { openObjectStream, type ByteRange } from "../../../common/storage/object-storage.js";
+import { FONT_MIME_TYPES } from "../services/file-signature.js";
 import { mediaService } from "../services/media.service.js";
 import type { FolderListQuery, GenerateVariationsInput, MediaListQuery } from "../types/media.types.js";
 
@@ -131,7 +132,10 @@ export class MediaController {
 
       const stream = req.method === "HEAD" ? null : await openObjectStream(file.storageKey, range);
       const forceDownload = req.query.download === "1" || req.query.download === "true";
-      const disposition = forceDownload || file.kind === MediaKind.DOCUMENT ? "attachment" : "inline";
+      const isFont = FONT_MIME_TYPES.has(file.mimeType);
+      const disposition = forceDownload || (file.kind === MediaKind.DOCUMENT && !isFont) ? "attachment" : "inline";
+      // Browsers load @font-face files in CORS mode, and sites can live on any domain.
+      if (isFont) res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Content-Type", file.mimeType);
       res.setHeader("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
       res.setHeader("Last-Modified", file.updatedAt.toUTCString());

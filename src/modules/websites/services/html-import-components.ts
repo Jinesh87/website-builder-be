@@ -169,6 +169,52 @@ export function detectSections($: CheerioAPI, root: El, exclude: Set<El> = new S
 // Fragment building
 // ---------------------------------------------------------------------------
 
+/** Page-space box the prerender writes on each element: "top,bottom,marginTop,marginBottom" in px. */
+export const BOX_ATTR = "data-wb-box";
+
+/** Largest space restored above or below a block; anything bigger is treated as a layout quirk. */
+const MAX_BLOCK_SPACE = 320;
+
+type Box = { top: number; bottom: number; marginTop: number; marginBottom: number };
+
+function boxOf(el: El | null | undefined): Box | null {
+  const raw = el?.attribs?.[BOX_ATTR];
+  if (!raw) return null;
+  const [top, bottom, marginTop, marginBottom] = raw.split(",").map(Number);
+  if (![top, bottom, marginTop, marginBottom].every(Number.isFinite)) return null;
+  return { top: top!, bottom: bottom!, marginTop: marginTop!, marginBottom: marginBottom! };
+}
+
+export type BlockSpacing = { before: number; after: number };
+
+/**
+ * Space the original page left above (and, for the last block, below) each block, measured by the
+ * prerender. Blocks keep their own margins, so only the space outside them is returned: gaps and
+ * padding of the layout container they were lifted out of. Blocks without measurements, or that sit
+ * beside or over the previous one, get no extra space.
+ */
+export function measureBlockSpacing(
+  blocks: El[],
+  edges: { above?: El | null; below?: El | null; container?: El | null },
+): BlockSpacing[] {
+  const container = boxOf(edges.container);
+  const above = boxOf(edges.above);
+  const below = boxOf(edges.below);
+  const clamp = (value: number) => (value > 0 && value <= MAX_BLOCK_SPACE ? value : 0);
+  return blocks.map((block, index) => {
+    const box = boxOf(block);
+    if (!box || box.bottom <= box.top) return { before: 0, after: 0 };
+    const previous = index > 0 ? boxOf(blocks[index - 1]) : (above ?? (container ? { ...container, bottom: container.top } : null));
+    const before = previous ? clamp(box.top - previous.bottom - box.marginTop - (index > 0 ? previous.marginBottom : 0)) : 0;
+    let after = 0;
+    if (index === blocks.length - 1) {
+      const nextTop = below?.top ?? container?.bottom;
+      if (nextTop !== undefined) after = clamp(nextTop - box.bottom - box.marginBottom);
+    }
+    return { before, after };
+  });
+}
+
 function escapeAttr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
@@ -335,11 +381,17 @@ export function buildHtmlComponent(
   $: CheerioAPI,
   pieces: El[],
   ctx: ComponentImportContext,
-  options: { label: string; fallbackName: string; chrome?: ChromeKind },
+  options: { label: string; fallbackName: string; chrome?: ChromeKind; spacing?: BlockSpacing },
 ): BuiltHtmlComponent | null {
   if (pieces.length === 0) return null;
-  const fragmentSource = pieces.map((piece) => wrapWithAncestors($, piece)).join("\n");
+  let fragmentSource = pieces.map((piece) => wrapWithAncestors($, piece)).join("\n");
+  // Space the page layout gave this block (container gap/padding), which is lost once it stands alone.
+  const spacing = options.spacing;
+  if (spacing && (spacing.before > 0 || spacing.after > 0)) {
+    fragmentSource = `<div data-wb-import-spacing style="padding-top:${spacing.before}px;padding-bottom:${spacing.after}px">${fragmentSource}</div>`;
+  }
   const $f = cheerio.load(fragmentSource, null, false);
+  $f(`[${BOX_ATTR}]`).removeAttr(BOX_ATTR);
 
   rewriteFragment($f, ctx);
   sanitizeTree($f, $f.root().contents().toArray() as never);

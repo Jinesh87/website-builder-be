@@ -25,8 +25,9 @@ import type {
   UploadedFile,
   UploadMediaInput,
 } from "../types/media.types.js";
+import { MEDIA_FONT_FILTER } from "../types/media.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
-import { detectFile, type DetectedFile } from "./file-signature.js";
+import { detectFile, detectFont, type DetectedFile } from "./file-signature.js";
 import { optimizeMp4FastStart } from "./mp4-faststart.service.js";
 import { generateImageVariations } from "./openai-image-variations.client.js";
 
@@ -97,6 +98,16 @@ async function targetClientId(actor: AuthUser, requested: string | undefined): P
   const exists = await prisma.client.count({ where: { id: requested } });
   if (!exists) throw new AppError(404, "Client not found", "CLIENT_NOT_FOUND");
   return requested;
+}
+
+const IS_FONT: Prisma.MediaFileWhereInput = { kind: MediaKind.DOCUMENT, mimeType: { startsWith: "font/" } };
+
+/** Fonts (documents with a font/* type) are listed on their own, never among documents. */
+function mediaKindWhere(query: Pick<MediaListQuery, "kind" | "excludeFonts">): Prisma.MediaFileWhereInput {
+  if (query.kind === MEDIA_FONT_FILTER) return IS_FONT;
+  if (query.kind === MediaKind.DOCUMENT) return { kind: MediaKind.DOCUMENT, NOT: IS_FONT };
+  if (query.kind) return { kind: query.kind };
+  return query.excludeFonts ? { NOT: IS_FONT } : {};
 }
 
 /** The single place that decides which media an actor may see or change. */
@@ -192,7 +203,7 @@ export class MediaService {
       ...(clientId ? { clientId } : {}),
       ...(query.websiteId ? { websiteId: query.websiteId } : {}),
       ...(query.folderId ? { folderId: query.folderId === "none" ? null : query.folderId } : {}),
-      ...(query.kind ? { kind: query.kind } : {}),
+      ...mediaKindWhere(query),
       ...(search
         ? {
             OR: [
@@ -316,8 +327,10 @@ export class MediaService {
     fileName: string;
     altText?: string;
   }): Promise<MediaFileView> {
-    const detected = detectFile(input.buffer);
-    if (!detected || (detected.kind !== MediaKind.IMAGE && detected.kind !== MediaKind.VIDEO)) {
+    // Imports may also carry the web fonts their CSS uses.
+    const media = detectFile(input.buffer);
+    const detected = media && (media.kind === MediaKind.IMAGE || media.kind === MediaKind.VIDEO) ? media : detectFont(input.buffer);
+    if (!detected) {
       throw new AppError(400, `Unsupported media file in the import: ${input.fileName}`, "IMPORT_MEDIA_UNSUPPORTED");
     }
     if (input.buffer.length > MAX_BYTES_BY_KIND[detected.kind]) {

@@ -315,27 +315,25 @@ export const IMPORT_MARKUP_RULES = {
   forms: {
     title: "Contact forms",
     rules: [
-      "Use data-wb-section=\"contact\".",
-      "Wrap inputs in <form data-wb-field=\"form\">.",
-      "Each control: data-wb-form-field=\"id\" data-wb-form-type=\"text|email|tel|textarea|select|number\" and optional data-wb-required=\"true\".",
-      "Select options: <option> labels, or data-wb-form-options=\"A|B|C\".",
-      "Submit label: data-wb-field=\"submitLabel\" on the button.",
+      "Put every field and the send button inside one real <form>; inputs in plain <div>s are not sent.",
+      "Use <input>, <select> and <textarea>; radio buttons for one choice, checkboxes for several. JavaScript-driven buttons send nothing.",
+      "Give each field a name; radio/checkbox groups share one name inside a <fieldset> with a <legend>.",
+      "Label fields with <label>; mark required ones with the required attribute or a * in the label.",
+      "Submit with <button type=\"submit\"> (or no type) inside the form; page scripts are removed on import.",
     ],
     example: `<section data-wb-section="contact">
   <h2 data-wb-field="heading">Contact us</h2>
   <p data-wb-field="text">We reply within a day.</p>
-  <p data-wb-field="phone">81119 99526</p>
-  <form data-wb-field="form">
-    <label data-wb-form-field="name" data-wb-form-type="text" data-wb-required="true">
-      Name <input name="name" placeholder="Your name">
-    </label>
-    <label data-wb-form-field="phone" data-wb-form-type="tel" data-wb-required="true">
-      Phone <input name="phone">
-    </label>
-    <label data-wb-form-field="message" data-wb-form-type="textarea">
-      Message <textarea name="message"></textarea>
-    </label>
-    <button type="submit" data-wb-field="submitLabel">Send enquiry</button>
+  <form>
+    <label>Name * <input name="name" required></label>
+    <label>Phone * <input type="tel" name="phone" required></label>
+    <fieldset>
+      <legend>Interested in</legend>
+      <label><input type="checkbox" name="interest" value="Doors"> Doors</label>
+      <label><input type="checkbox" name="interest" value="Plywood"> Plywood</label>
+    </fieldset>
+    <label>Message <textarea name="message"></textarea></label>
+    <button type="submit">Send enquiry</button>
   </form>
 </section>`,
   },

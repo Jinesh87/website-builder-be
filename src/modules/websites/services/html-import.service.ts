@@ -14,6 +14,7 @@ import type { FooterData, HeaderData, ImportedHtmlData, Section } from "../types
 import { SAFE_IMAGE_URL } from "../validators/site-content.validator.js";
 import {
   buildHtmlComponent,
+  measureBlockSpacing,
   detectChrome,
   detectContentContainer,
   detectPageRoots,
@@ -290,7 +291,7 @@ function collectAssetRefs($: cheerio.CheerioAPI, htmlPath: string, styles: Style
   }
 }
 
-const UPLOADABLE = /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|mp4|webm|mov|m4v)$/i;
+const UPLOADABLE = /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp|mp4|webm|mov|m4v|woff2?|ttf|otf)$/i;
 
 async function uploadAssets(params: {
   needed: Set<string>;
@@ -406,11 +407,17 @@ function buildDocumentPages(
   const pages: BuiltPage[] = [];
   for (const { plan, root } of roots) {
     const blocks = detectSections($, root, chromeSet);
+    const spacing = measureBlockSpacing(blocks, {
+      above: chrome.header.at(-1),
+      below: chrome.footer[0],
+      container: root,
+    });
     const components = blocks
       .map((block, index) =>
         buildHtmlComponent($, [block], componentCtx, {
           label: `${htmlPath}${doc.pageRoots.length ? `#${plan.key}` : ""}`,
           fallbackName: `${plan.name} block ${index + 1}`,
+          spacing: spacing[index],
         }),
       )
       .filter((component): component is BuiltHtmlComponent => component !== null);

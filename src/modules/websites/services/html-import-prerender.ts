@@ -10,6 +10,7 @@ import path from "node:path";
 import puppeteer, { type Browser, type HTTPRequest } from "puppeteer";
 import { logger } from "../../../config/logger.js";
 import { resolveChromeExecutable } from "../../shop/utils/html-to-pdf.js";
+import { BOX_ATTR } from "./html-import-components.js";
 
 export const PRERENDER_ORIGIN = "https://import.invalid/";
 
@@ -78,6 +79,26 @@ const BOOTSTRAP_SCRIPT = `(() => {
   window.confirm = () => false;
   window.prompt = () => null;
 })();`;
+
+/**
+ * Marks every rendered element with its page-space box as data-wb-box="top,bottom,marginTop,marginBottom"
+ * (whole px). Layout space (flex/grid gaps, container padding, margins) lives in the page's layout,
+ * not in the blocks, so it is measured here and turned back into padding when blocks are split.
+ * The attribute is stripped from imported fragments.
+ */
+const BOX_SCRIPT = `(() => {
+  const all = document.body ? document.body.querySelectorAll("*") : [];
+  for (const el of all) {
+    const tag = el.tagName;
+    if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEMPLATE" || tag === "NOSCRIPT") continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    const style = getComputedStyle(el);
+    const top = Math.round(rect.top + window.scrollY);
+    const bottom = Math.round(rect.bottom + window.scrollY);
+    el.setAttribute("${BOX_ATTR}", [top, bottom, Math.round(parseFloat(style.marginTop) || 0), Math.round(parseFloat(style.marginBottom) || 0)].join(","));
+  }
+})()`;
 
 export type PrerenderResult = {
   /** Rendered HTML per package path (only for pages that rendered successfully). */
@@ -169,6 +190,8 @@ async function renderOne(
     await page.goto(entryUrl, { waitUntil: "load", timeout: PAGE_TIMEOUT_MS });
     await page.waitForNetworkIdle({ idleTime: 300, timeout: 3_000 }).catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+    // Record where each element sits so the importer can restore the space between blocks it lifts out.
+    await page.evaluate(BOX_SCRIPT).catch(() => undefined);
     // Evaluated in the page (string form: the backend tsconfig has no DOM lib).
     const snapshot = await page.evaluate("'<!doctype html>\\n' + document.documentElement.outerHTML");
     return String(snapshot);
