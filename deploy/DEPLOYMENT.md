@@ -144,6 +144,19 @@ Check the backend from outside. It should print 200.
 curl -s -o /dev/null -w '%{http_code}\n' https://webcmsb.hrtrace.com/api/health
 ```
 
+Check that the backend can start Chromium. HTML import uses it to render each uploaded page (so spacing and script-built content are kept), and shop invoices use it to make PDFs. It should print "Chromium OK (sandbox on)".
+
+```bash
+sudo docker compose exec backend node -e 'import("puppeteer").then(async ({ default: p }) => { const b = await p.launch({ executablePath: "/usr/bin/chromium-browser", args: ["--disable-dev-shm-usage", "--disable-gpu"] }); console.log("Chromium OK (sandbox on):", await b.version()); await b.close(); }).catch((e) => { console.error("Chromium FAILED:", e.message.split("\n").slice(0, 4).join(" ")); process.exit(1); })'
+```
+
+If it prints "Chromium FAILED ... Failed to move to new namespace":
+
+- Check that `docker-compose.yml` still has `security_opt: - seccomp=./deploy/chromium-seccomp.json`. Chromium's sandbox needs namespaces that Docker's default profile blocks; this profile is Docker's default plus `clone` and `unshare`.
+- On Ubuntu 24.04 and later, the kernel can also block them. Check with `sysctl kernel.apparmor_restrict_unprivileged_userns`. If it prints `= 1`, send that output to the developers before changing it.
+
+While Chromium can't start, imports still work but fall back to the raw HTML: blocks lose the spacing between them, and content built by the page's own JavaScript is missing. Re-import affected sites after fixing it.
+
 
 ## Step 7: Install the domain sync script
 
