@@ -1,3 +1,4 @@
+import express from "express";
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import multer from "multer";
@@ -79,6 +80,14 @@ websitesRouter.use(
   authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT, UserRole.PARTNER),
 );
 
+/**
+ * Editor saves send the whole draft, and imported HTML blocks carry their own HTML and CSS, so these
+ * routes accept up to 25 MB. The app-wide parser skips them (app.ts EDITOR_SAVE_PATH), so the body
+ * is only read after sign-in. Behind nginx, the API server block needs `client_max_body_size 25m;`.
+ */
+export const EDITOR_SAVE_BODY_LIMIT = "25mb";
+const editorSaveBody = express.json({ limit: EDITOR_SAVE_BODY_LIMIT });
+
 websitesRouter.get(
   "/templates",
   validate(listTemplatesQuerySchema, "query"),
@@ -143,6 +152,7 @@ websitesRouter.delete("/:id", byId, websiteController.delete);
 websitesRouter.put(
   "/:id/draft",
   byId,
+  editorSaveBody,
   validate(saveDraftSchema),
   websiteController.saveDraft,
 );
@@ -150,6 +160,7 @@ websitesRouter.put(
   "/:id/pages/:pageId/content",
   validate(pageContentParamsSchema, "params"),
   rateLimit({ name: "page-autosave", max: 240, windowSeconds: 60 }),
+  editorSaveBody,
   validate(savePageContentSchema),
   websiteController.savePageContent,
 );
