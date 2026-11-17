@@ -2,7 +2,7 @@
 
 FROM node:24.19.0-alpine AS deps
 WORKDIR /app
-# Puppeteer uses the Chromium installed in the production stage, not its own download.
+# Puppeteer connects to the `chromium` service; it never needs its own browser download.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -16,9 +16,8 @@ RUN npm run build && npm prune --omit=dev
 FROM node:24.19.0-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
-# Headless Chromium for HTML import prerendering (runs the page so layout, spacing and
-# script-built content are captured) and for shop invoice PDFs. Fonts cover non-Latin text.
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto font-noto-emoji
+# Chromium (HTML import prerendering, invoice PDFs) runs in the separate `chromium` service
+# (./chromium, see docker-compose.yml), so this image stays small and holds no browser.
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/package.json /app/package-lock.json ./
 COPY --from=build --chown=app:app /app/node_modules ./node_modules

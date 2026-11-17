@@ -78,6 +78,11 @@ export const env = {
 
   /** Renders live pages with the editor's components (frontend `site-renderer`). Falls back to the built-in renderer when unreachable. */
   SITE_RENDERER_URL: (process.env.SITE_RENDERER_URL?.trim() || "http://127.0.0.1:3100").replace(/\/$/, ""),
+  /**
+   * WebSocket URL of the `chromium` container (HTML import prerendering, invoice PDFs), e.g.
+   * ws://127.0.0.1:3200. Unset = Chromium is launched inside this process (local development).
+   */
+  CHROMIUM_WS_URL: process.env.CHROMIUM_WS_URL?.trim() || "",
   /** Public IPs custom domains must point at (A/AAAA records), comma-separated. Unset = routing isn't checked. */
   SITE_SERVER_IPS: (process.env.SITE_SERVER_IPS ?? "")
     .split(",")

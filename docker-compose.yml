@@ -12,11 +12,34 @@ services:
     # PostgreSQL and Redis run on the host. Host networking lets the container reach them
     # with the same localhost URLs as `npm run dev`, and the API listens on the host's PORT.
     network_mode: host
-    # Chromium (HTML import prerender, invoice PDFs) runs with its sandbox on, which needs
-    # namespaces that Docker's default seccomp profile blocks. This profile is Docker's default
-    # plus `clone`/`unshare` only. Without it, imports silently fall back to raw HTML.
-    security_opt:
-      - seccomp=./deploy/chromium-seccomp.json
     environment:
       # The image has no dev dependencies (e.g. pino-pretty), so it always runs in production mode.
       NODE_ENV: production
+      # Chromium runs in the `chromium` service below, reached on the host's loopback port.
+      CHROMIUM_WS_URL: ws://127.0.0.1:${CHROMIUM_PORT:-3200}/?token=${CHROMIUM_TOKEN:-}
+    depends_on:
+      - chromium
+
+  # Headless Chromium for HTML import prerendering (measures imported pages so spacing and
+  # script-built content are kept) and invoice PDFs. A fresh browser per job. It runs apart from
+  # the backend and gets none of its settings, so untrusted imported pages never run next to the
+  # database credentials or secrets.
+  chromium:
+    build:
+      context: ./chromium
+    restart: unless-stopped
+    init: true
+    ports:
+      # Only this server can reach it.
+      - "127.0.0.1:${CHROMIUM_PORT:-3200}:3200"
+    # Chromium's sandbox needs namespaces that Docker's default seccomp profile blocks. This
+    # profile is Docker's default plus `clone`/`unshare` only.
+    security_opt:
+      - seccomp=./deploy/chromium-seccomp.json
+    environment:
+      CHROMIUM_TOKEN: ${CHROMIUM_TOKEN:-}
+      MAX_BROWSERS: ${CHROMIUM_MAX_BROWSERS:-3}
+      # Chromium's own syscall filter (seccomp-bpf) kills its page process on some newer kernels
+      # (seen on Ubuntu 24.04 / kernel 6.8), so it is off by default; the namespace sandbox and the
+      # profile above stay on. Set CHROMIUM_EXTRA_ARGS= (empty) in .env to turn the filter back on.
+      CHROMIUM_EXTRA_ARGS: ${CHROMIUM_EXTRA_ARGS---disable-seccomp-filter-sandbox}

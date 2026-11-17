@@ -8,3 +8,4 @@ src/generated
 Dockerfile
 docker-compose.yml
 uploads
+chromium

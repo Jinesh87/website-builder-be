@@ -1,0 +1,13 @@
+{
+  "name": "webbuilder-chromium",
+  "private": true,
+  "type": "module",
+  "description": "Chromium service for the backend: one fresh browser per WebSocket connection.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "24.43.1",
+    "ws": "8.22.1"
+  }
+}

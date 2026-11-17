@@ -7,9 +7,9 @@
  * to the server's network. Failures fall back to the raw HTML.
  */
 import path from "node:path";
-import puppeteer, { type Browser, type HTTPRequest } from "puppeteer";
+import type { Browser, HTTPRequest } from "puppeteer";
 import { logger } from "../../../config/logger.js";
-import { resolveChromeExecutable } from "../../shop/utils/html-to-pdf.js";
+import { openBrowser } from "../../../common/browser.js";
 import { BOX_ATTR } from "./html-import-components.js";
 
 export const PRERENDER_ORIGIN = "https://import.invalid/";
@@ -207,13 +207,9 @@ export async function prerenderPages(htmlPaths: string[], files: Map<string, Buf
 
   let browser: Browser | null = null;
   try {
-    const executablePath = resolveChromeExecutable();
-    browser = await puppeteer.launch({
-      ...(executablePath ? { executablePath } : {}),
-      headless: true,
-      // Sandbox stays ON: this browser executes uploaded, untrusted JavaScript.
-      args: ["--disable-dev-shm-usage", "--disable-gpu", "--mute-audio", "--no-first-run"],
-    });
+    // Sandbox stays ON when launched here: this browser executes uploaded, untrusted JavaScript.
+    // In production it runs in the separate `chromium` container instead (CHROMIUM_WS_URL).
+    browser = await openBrowser(["--disable-dev-shm-usage", "--disable-gpu", "--mute-audio", "--no-first-run"]);
     for (const htmlPath of htmlPaths) {
       try {
         result.html.set(htmlPath, await renderOne(browser, htmlPath, files, result.externalCss));

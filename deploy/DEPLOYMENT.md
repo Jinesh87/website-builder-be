@@ -144,18 +144,33 @@ Check the backend from outside. It should print 200.
 curl -s -o /dev/null -w '%{http_code}\n' https://webcmsb.hrtrace.com/api/health
 ```
 
-Check that the backend can start Chromium. HTML import uses it to render each uploaded page (so spacing and script-built content are kept), and shop invoices use it to make PDFs. It should print "Chromium OK (sandbox on)".
+The same command also starts the `chromium` service. It runs headless Chromium for the backend: HTML import uses it to render each uploaded page (so spacing and script-built content are kept), and shop invoices use it to make PDFs. It runs in its own container with none of the backend's settings, and only this server can reach it (port 3200 on 127.0.0.1).
+
+Check that it is running. You should see `chromium` marked "Up" and "(healthy)".
 
 ```bash
-sudo docker compose exec backend node -e 'import("puppeteer").then(async ({ default: p }) => { const b = await p.launch({ executablePath: "/usr/bin/chromium-browser", args: ["--disable-dev-shm-usage", "--disable-gpu"] }); console.log("Chromium OK (sandbox on):", await b.version()); await b.close(); }).catch((e) => { console.error("Chromium FAILED:", e.message.split("\n").slice(0, 4).join(" ")); process.exit(1); })'
+sudo docker compose ps
 ```
 
-If it prints "Chromium FAILED ... Failed to move to new namespace":
+Check that the backend can render a page through it. It should print "PRERENDER OK".
 
-- Check that `docker-compose.yml` still has `security_opt: - seccomp=./deploy/chromium-seccomp.json`. Chromium's sandbox needs namespaces that Docker's default profile blocks; this profile is Docker's default plus `clone` and `unshare`.
-- On Ubuntu 24.04 and later, the kernel can also block them. Check with `sysctl kernel.apparmor_restrict_unprivileged_userns`. If it prints `= 1`, send that output to the developers before changing it.
+```bash
+sudo docker compose exec backend node -e 'import("/app/dist/modules/websites/services/html-import-prerender.js").then(async (m) => { const files = new Map([["index.html", Buffer.from("<main style=\"padding:80px\"><section>A</section><section>B</section></main>")]]); const r = await m.prerenderPages(["index.html"], files); const h = r.html.get("index.html"); console.log(h ? "PRERENDER OK, measured elements: " + (h.match(/data-wb-box/g) || []).length : "PRERENDER FAILED (see the warning above)"); process.exit(0); })'
+```
 
-While Chromium can't start, imports still work but fall back to the raw HTML: blocks lose the spacing between them, and content built by the page's own JavaScript is missing. Re-import affected sites after fixing it.
+If it prints "PRERENDER FAILED", look at the Chromium service's log and send the last lines to the developers:
+
+```bash
+sudo docker compose logs --tail=50 chromium
+```
+
+Optional settings, in the backend `.env` file (run `sudo docker compose up -d` after changing them):
+
+- `CHROMIUM_PORT` changes the port (default 3200) if another program on the server already uses it.
+- `CHROMIUM_TOKEN` adds a password between the backend and the Chromium service, for servers that run other projects. Use a long random value.
+- `CHROMIUM_EXTRA_ARGS` holds extra Chromium flags. By default it turns off Chromium's own syscall filter, which kills its page process on newer kernels (seen on Ubuntu 24.04, kernel 6.8); Chromium's namespace sandbox stays on. To try the full sandbox, set `CHROMIUM_EXTRA_ARGS=` (empty) and run the check above; if it fails, remove the line again.
+
+While Chromium can't run, imports still work but fall back to the raw HTML: blocks lose the spacing between them, and content built by the page's own JavaScript is missing. Re-import affected sites after fixing it.
 
 
 ## Step 7: Install the domain sync script
