@@ -3,7 +3,12 @@ import { test } from "node:test";
 import type { ContactFormField, Section } from "../types/site-content.types.js";
 import type { PublishSnapshot } from "../types/website.types.js";
 import { sectionSchema } from "../validators/site-content.validator.js";
-import { findContactFormFields, leadFromEntries, validateContactSubmission } from "./contact-submission.js";
+import {
+  DEFAULT_HERO_REGISTRATION_FIELDS,
+  findContactFormFields,
+  leadFromEntries,
+  validateContactSubmission,
+} from "./contact-submission.js";
 
 const fields: ContactFormField[] = [
   { id: "name", type: "text", label: "Full Name", required: true },
@@ -101,6 +106,40 @@ test("finds the custom fields of a published contact section only", () => {
   const legacy = { ...section, data: { heading: "Hi", showForm: true, submitLabel: "Send" } } as Section;
   assert.equal(findContactFormFields(snapshotWith(legacy), "contact-1"), null);
   assert.equal(findContactFormFields(null, "contact-1"), null);
+});
+
+test("registration-form heroes validate submissions against their sign-up fields", () => {
+  const hero = (data: Record<string, unknown>) =>
+    snapshotWith({ id: "hero-1", type: "hero", hidden: false, settings, data: { heading: "Join", ...data } } as Section);
+
+  const custom = hero({ variant: "registration-form", registrationForm: { fields } });
+  assert.equal(findContactFormFields(custom, "hero-1")?.length, fields.length);
+
+  const defaults = hero({ variant: "registration-form" });
+  assert.deepEqual(findContactFormFields(defaults, "hero-1"), DEFAULT_HERO_REGISTRATION_FIELDS);
+  const answers = { name: "Asha", email: "asha@example.com", phone: "+91 98765 43210" };
+  assert.equal(validateContactSubmission(DEFAULT_HERO_REGISTRATION_FIELDS, answers).ok, true);
+  assert.equal(validateContactSubmission(DEFAULT_HERO_REGISTRATION_FIELDS, { ...answers, phone: "" }).ok, false);
+
+  assert.equal(findContactFormFields(hero({ variant: "centered", registrationForm: { fields } }), "hero-1"), null);
+});
+
+test("registration-form heroes pass schema validation and keep their form", () => {
+  const data = {
+    variant: "registration-form",
+    heading: "Join the session",
+    kicker: "Acme presents",
+    heroFacts: [{ label: "Fee", value: "Free", highlight: true }],
+    checklist: ["Meet the team"],
+    registrationForm: { heading: "Register", submitLabel: "Send", note: "Limited seats", fields },
+  };
+  const result = sectionSchema.validate({ id: "h", type: "hero", hidden: false, settings, data });
+  assert.equal(result.error, undefined);
+  assert.equal((result.value.data as { variant: string }).variant, "registration-form");
+  assert.equal((result.value.data as typeof data).registrationForm.fields.length, fields.length);
+
+  const tooManyFacts = { ...data, heroFacts: Array.from({ length: 5 }, () => ({ label: "a", value: "b" })) };
+  assert.ok(sectionSchema.validate({ id: "h", type: "hero", hidden: false, settings, data: tooManyFacts }).error);
 });
 
 test("contact sections accept custom fields and layouts, and reject broken ones", () => {

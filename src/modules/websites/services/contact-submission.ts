@@ -35,6 +35,26 @@ function isContactField(value: unknown): value is ContactFormField {
 }
 
 /**
+ * Fields of the registration-form hero when the owner hasn't customized them.
+ * Mirrors DEFAULT_HERO_REGISTRATION_FIELDS in the site kit.
+ */
+export const DEFAULT_HERO_REGISTRATION_FIELDS: ContactFormField[] = [
+  { id: "name", type: "text", label: "Full name", required: true, width: "full" },
+  { id: "email", type: "email", label: "Email", required: true, width: "half" },
+  { id: "phone", type: "tel", label: "Mobile number", required: true, width: "half" },
+];
+
+/** Sign-up fields of a registration-form hero; null for every other hero layout. */
+function heroRegistrationFields(data: unknown): ContactFormField[] | null {
+  const hero = data as { variant?: unknown; registrationForm?: { fields?: unknown } } | undefined;
+  if (hero?.variant !== "registration-form") return null;
+  const fields = hero.registrationForm?.fields;
+  if (!Array.isArray(fields) || fields.length === 0) return DEFAULT_HERO_REGISTRATION_FIELDS;
+  const valid = fields.filter(isContactField);
+  return valid.length > 0 ? valid : null;
+}
+
+/**
  * Custom fields of a published contact section. Null when the live site has no such section
  * or the section still uses the default name/email/message form.
  */
@@ -58,6 +78,7 @@ export function findContactFormFields(
         return typeof html === "string" ? importedFormFields(html, formIndex) : null;
       }
       if (section.type === "header" || section.type === "footer") return importedHtml(section.data);
+      if (section.type === "hero") return heroRegistrationFields(section.data);
       if (section.type !== "contact") continue;
       const fields = (section.data as { formFields?: unknown }).formFields;
       if (!Array.isArray(fields)) return null;

@@ -110,6 +110,7 @@ export const HERO_VARIANTS = [
   "vintage-editorial",
   "vintage-sunburst",
   "arch-collage",
+  "registration-form",
 ] as const;
 export const HERO_ALIGNS = ["left", "center", "right"] as const;
 export const HERO_ALIGN_ELEMENTS = ["badge", "heading", "subheading", "description", "actions", "trustedBy"] as const;
@@ -689,6 +690,18 @@ export type HeroData = {
   topStrip?: { left?: string; center?: string; right?: string };
   sunburstTitleWhite?: string;
   circularPortrait?: ImageRef;
+  /** registration-form only: small uppercase line above the badge. */
+  kicker?: string;
+  heroFacts?: { label: string; value: string; highlight?: boolean }[];
+  checklist?: string[];
+  /** registration-form only: sign-up card that posts to the contact endpoint. */
+  registrationForm?: {
+    heading?: string;
+    subheading?: string;
+    submitLabel?: string;
+    note?: string;
+    fields?: ContactFormField[];
+  };
 };
 
 export type SectionDataMap = {

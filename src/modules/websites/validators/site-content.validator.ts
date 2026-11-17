@@ -798,6 +798,9 @@ export const heroSchema = Joi.object({
     "arch": "arch-collage",
     "collage": "arch-collage",
     "photo-collage": "arch-collage",
+    "registration": "registration-form",
+    "signup": "registration-form",
+    "lead-form": "registration-form",
   }),
   eyebrow: optionalText(200),
   badgeIcon: optionalText(50),
@@ -957,6 +960,37 @@ export const heroSchema = Joi.object({
   }).optional(),
   sunburstTitleWhite: optionalText(100),
   circularPortrait: image.optional(),
+  kicker: optionalText(120).description("registration-form only: small uppercase line above the badge, e.g. 'Acme presents'."),
+  heroFacts: Joi.array()
+    .items(
+      Joi.object({
+        label: text(40).required(),
+        value: text(80).required(),
+        highlight: Joi.boolean().optional(),
+      }),
+    )
+    .max(4)
+    .optional()
+    .description("registration-form only: key-fact tiles such as Fee, Date and Mode."),
+  checklist: Joi.array()
+    .items(text(160))
+    .max(6)
+    .optional()
+    .description("registration-form only: short benefit lines shown with check marks."),
+  registrationForm: Joi.object({
+    heading: optionalText(120),
+    subheading: optionalText(160),
+    submitLabel: optionalText(60),
+    note: optionalText(240),
+    fields: Joi.array()
+      .items(contactFormFieldSchema)
+      .max(CONTACT_LIMITS.maxFields)
+      .unique("id")
+      .optional()
+      .meta(locked),
+  })
+    .optional()
+    .description("registration-form only: sign-up card; entries are emailed to the site owner like contact form messages."),
   bannerTopBar: Joi.object({
     enabled: Joi.boolean().optional(),
     logoText: optionalText(100),
