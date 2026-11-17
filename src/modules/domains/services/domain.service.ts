@@ -10,11 +10,14 @@ import { hostingService } from "../../hosting/services/hosting.service.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { liveSiteEngineService } from "../../websites/services/live-site-engine.service.js";
 import { checkDomainDns } from "./dns-check.js";
+import { checkHttps, type HttpsState } from "./https-check.js";
 import { dnsRecordsFor, hostnameProblem, normalizeHostname, type DnsRecord } from "./domain-rules.js";
 
 const MAX_DOMAINS_PER_WEBSITE = 5;
 /** Pending domains are re-checked automatically for this long, then marked FAILED until the client verifies again. */
 export const AUTO_CHECK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** Connected domains are re-checked this often, so a later DNS problem shows up in the Domains tab. */
+const ACTIVE_RECHECK_MS = 60 * 60 * 1000;
 
 export type DomainView = {
   id: string;
@@ -26,6 +29,8 @@ export type DomainView = {
   lastError: string | null;
   createdAt: string;
   records: DnsRecord[];
+  /** Whether https:// works for this domain right now; null until the domain is connected. */
+  https: HttpsState | null;
 };
 
 export type DomainList = {
@@ -36,7 +41,7 @@ export type DomainList = {
 
 const NOT_FOUND = () => new AppError(404, "Domain not found", "DOMAIN_NOT_FOUND");
 
-function toView(domain: Domain): DomainView {
+function toView(domain: Domain, https: HttpsState | null = null): DomainView {
   return {
     id: domain.id,
     hostname: domain.hostname,
@@ -47,7 +52,15 @@ function toView(domain: Domain): DomainView {
     lastError: domain.lastError,
     createdAt: domain.createdAt.toISOString(),
     records: dnsRecordsFor(domain.hostname, domain.verificationToken),
+    https,
   };
+}
+
+/** Adds the live HTTPS state to a connected domain. */
+async function withHttps(domain: Domain): Promise<DomainView> {
+  if (domain.status !== DomainStatus.ACTIVE) return toView(domain);
+  const https = await checkHttps(domain.hostname, domain.verifiedAt).catch(() => null);
+  return toView(domain, https);
 }
 
 export class DomainService {
@@ -57,7 +70,7 @@ export class DomainService {
       where: { websiteId: website.id },
       orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
     });
-    return { domains: domains.map(toView), defaultHostname: `${website.subdomain}.${env.PUBLIC_SITE_DOMAIN}` };
+    return { domains: await Promise.all(domains.map(withHttps)), defaultHostname: `${website.subdomain}.${env.PUBLIC_SITE_DOMAIN}` };
   }
 
   async add(websiteId: string, rawHostname: string, actor: AuthUser): Promise<DomainView> {
@@ -92,10 +105,10 @@ export class DomainService {
     }
   }
 
-  /** Checks the DNS records now. A domain goes live as soon as both records are found. */
+  /** Checks the DNS records (and, once connected, HTTPS) now. A domain goes live as soon as both records are found. */
   async verify(websiteId: string, domainId: string, actor: AuthUser): Promise<DomainView> {
     const domain = await this.findDomainOrThrow(websiteId, domainId, actor);
-    return toView(await this.check(domain));
+    return withHttps(await this.check(domain));
   }
 
   async makePrimary(websiteId: string, domainId: string, actor: AuthUser): Promise<DomainView> {
@@ -131,6 +144,13 @@ export class DomainService {
         });
         continue;
       }
+      await this.check(domain).catch((error: unknown) => logger.warn({ err: error, hostname: domain.hostname }, "Domain check failed"));
+    }
+    const stale = await prisma.domain.findMany({
+      where: { status: DomainStatus.ACTIVE, OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(Date.now() - ACTIVE_RECHECK_MS) } }] },
+      take: 200,
+    });
+    for (const domain of stale) {
       await this.check(domain).catch((error: unknown) => logger.warn({ err: error, hostname: domain.hostname }, "Domain check failed"));
     }
   }

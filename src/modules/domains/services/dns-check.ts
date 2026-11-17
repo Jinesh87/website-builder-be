@@ -5,6 +5,8 @@ import { VERIFY_PREFIX } from "./domain-rules.js";
 export type DnsCheckResult = {
   ownership: boolean;
   routing: boolean;
+  /** Addresses the domain also points to that aren't our server (registrar parking pages, old hosting). */
+  extraAddresses: string[];
   /** What the client still has to fix, in plain words; null when both checks pass. */
   problem: string | null;
 };
@@ -41,16 +43,22 @@ export async function checkDomainDns(hostname: string, verificationToken: string
   const ownership = txt.some((chunks) => chunks.join("").trim() === verificationToken);
   const addresses = [...ipv4, ...ipv6];
   const routingChecked = env.SITE_SERVER_IPS.length > 0 || Boolean(env.SITE_CNAME_TARGET);
-  const routing =
-    !routingChecked ||
-    cnames.some((target) => clean(target) === env.SITE_CNAME_TARGET) ||
-    addresses.some((ip) => env.SITE_SERVER_IPS.includes(ip));
+  const viaCname = cnames.some((target) => clean(target) === env.SITE_CNAME_TARGET);
+  const ours = addresses.filter((ip) => env.SITE_SERVER_IPS.includes(ip));
+  // Every address must be ours: with a stray one (often the registrar's parking page) browsers and
+  // the certificate check land there part of the time, so HTTPS can't be set up reliably.
+  const extraAddresses = !routingChecked || viaCname ? [] : addresses.filter((ip) => !env.SITE_SERVER_IPS.includes(ip));
+  const routing = !routingChecked || viaCname || (ours.length > 0 && extraAddresses.length === 0);
 
   const problems: string[] = [];
   if (!ownership) {
     problems.push(`The TXT record ${VERIFY_PREFIX}.${hostname} wasn't found or doesn't match yet.`);
   }
-  if (!routing) {
+  if (!routing && ours.length > 0) {
+    problems.push(
+      `${hostname} also points to ${extraAddresses.join(", ")}, which isn't our server. This is often your domain company's parking or forwarding page. Delete the A/AAAA records with ${extraAddresses.length === 1 ? "this address" : "these addresses"} and turn off domain forwarding, so every visitor reaches your site.`,
+    );
+  } else if (!routing) {
     problems.push(
       addresses.length > 0
         ? `${hostname} points to ${addresses.join(", ")}, not to our server. If you use Cloudflare, turn the proxy off (grey cloud) for this record.`
@@ -59,5 +67,5 @@ export async function checkDomainDns(hostname: string, verificationToken: string
   }
   if (problems.length > 0) problems.push("DNS changes can take up to a few hours to show up.");
 
-  return { ownership, routing, problem: problems.length > 0 ? problems.join(" ") : null };
+  return { ownership, routing, extraAddresses, problem: problems.length > 0 ? problems.join(" ") : null };
 }
