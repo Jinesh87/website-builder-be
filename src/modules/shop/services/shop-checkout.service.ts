@@ -297,9 +297,22 @@ function isStockFailure(error: unknown): error is AppError {
 
 export class ShopCheckoutService {
   async listCustomerOrders(websiteId: string, customerId: string): Promise<ShopOrderSummary[]> {
+    return this.listOrderSummaries(websiteId, { customerId });
+  }
+
+  /** Orders placed by guest checkout from this browser session, with their public tracking token. */
+  async listGuestOrders(websiteId: string, guestSessionId: string): Promise<ShopOrderSummary[]> {
+    return this.listOrderSummaries(websiteId, { guestSessionId }, true);
+  }
+
+  private async listOrderSummaries(
+    websiteId: string,
+    owner: { customerId: string } | { guestSessionId: string },
+    withTrackToken = false,
+  ): Promise<ShopOrderSummary[]> {
     const [rows, website] = await Promise.all([
       prisma.shopOrder.findMany({
-        where: { websiteId, customerId },
+        where: { websiteId, ...owner },
         orderBy: { createdAt: "desc" },
         take: 100,
         include: {
@@ -325,7 +338,7 @@ export class ShopCheckoutService {
     const productById = new Map(products.map((product) => [product.id, product]));
     return rows.map((row) => {
       const lineProducts = row.items.map((item) => (item.productId ? productById.get(item.productId) ?? null : null));
-      return toOrderSummary(
+      const summary = toOrderSummary(
         row,
         cancelUntil,
         returnFlags({
@@ -336,6 +349,7 @@ export class ShopCheckoutService {
           lineProducts,
         }),
       );
+      return withTrackToken ? { ...summary, trackToken: row.publicAccessToken } : summary;
     });
   }
 

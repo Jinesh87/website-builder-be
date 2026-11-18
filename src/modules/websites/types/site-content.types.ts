@@ -82,6 +82,7 @@ export const HEADER_DESIGNS = [
   "side-drawer",
   "headline-ticker",
   "vintage-editorial",
+  "boutique",
 ] as const;
 export const FOOTER_DESIGNS = [
   "columns",
@@ -468,6 +469,8 @@ export type HeaderData = {
   showSearch?: boolean;
   showAccount?: boolean;
   showCart?: boolean;
+  /** Page the boutique header's search icon opens. Unset is "/shop". */
+  shopHref?: string;
   cartCount?: number;
   currency?: string;
   mobileMenuType?: "drawer" | "fullscreen" | "dropdown";
@@ -712,7 +715,7 @@ export type SectionDataMap = {
     eyebrow?: string;
     heading?: string;
     intro?: string;
-    variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards" | "editorial-process" | "colored-pillars" | "polaroid-grid";
+    variant?: "grid" | "split" | "pastel-icons" | "minimal" | "cards" | "editorial-process" | "colored-pillars" | "polaroid-grid" | "numbered-cards";
     iconStyle?: "pastel-circle" | "square-badge" | "minimal-accent" | "colored-circle" | "none";
     cardStyle?: "transparent" | "surface" | "bordered" | "glass";
     align?: "left" | "center";
@@ -749,7 +752,8 @@ export type SectionDataMap = {
       | "interactive-list"
       | "horizontal-cards"
       | "minimal-numbered"
-      | "editorial-specs";
+      | "editorial-specs"
+      | "collection-cards";
     cardStyle?: "surface" | "bordered" | "flat" | "glass" | "glow" | "elevated" | "gradient";
     iconStyle?: "pastel-circle" | "square-badge" | "minimal-accent" | "colored-circle" | "glow-icon" | "none";
     imageAspect?: "16:9" | "4:3" | "1:1" | "21:9" | "auto";
@@ -908,7 +912,16 @@ export type SectionDataMap = {
     }[];
   };
   cta: {
-    variant?: "centered-card" | "split-visual" | "floating-card" | "minimal-editorial" | "vintage-story" | "vintage-banner";
+    variant?:
+      | "centered-card"
+      | "split-visual"
+      | "floating-card"
+      | "minimal-editorial"
+      | "vintage-story"
+      | "vintage-banner"
+      | "split-banner"
+      | "inline-bar"
+      | "newsletter";
     eyebrow?: string;
     heading: string;
     text?: string;
@@ -923,6 +936,15 @@ export type SectionDataMap = {
     };
     cardStyle?: "default" | "bordered" | "flat" | "glass" | "elevated" | "contrast";
     align?: "left" | "center";
+    /** "split-banner" photo. */
+    image?: ImageRef;
+    /** "split-banner" text panel colour. */
+    panelColor?: string;
+    /** "inline-bar" badge icon, e.g. "brand:whatsapp". */
+    icon?: string;
+    /** "newsletter" email placeholder and thank-you line. */
+    placeholder?: string;
+    successText?: string;
   };
   contact: {
     variant?: (typeof CONTACT_VARIANTS)[number];
@@ -990,8 +1012,9 @@ export type SectionDataMap = {
     bullets: string[];
     image?: ImageRef;
     imagePosition: "left" | "right";
-    imageStyle?: "plain" | "polaroid";
+    imageStyle?: "plain" | "polaroid" | "arch";
     imageTapeLabel?: string;
+    signature?: string;
     cta?: LinkRef;
   };
   stats: { heading?: string; intro?: string; items: { value: string; label: string }[] };
@@ -1300,14 +1323,23 @@ export type BlogPostItem = {
 };
 
 export type ProductsData = {
-  design?: "classic-grid" | "editorial" | "compact" | "showcase";
+  design?: "classic-grid" | "editorial" | "compact" | "showcase" | "featured-grid";
   eyebrow?: string;
   title: string;
   subtitle?: string;
-  layout?: "grid-3" | "grid-2";
+  layout?: "grid-3" | "grid-2" | "grid-4";
+  /** "featured-grid": products shown (4, 8 or 12), view-all link and badge on the first `badgeCount` cards. */
+  limit?: number;
+  viewAllLink?: LinkRef;
+  badgeLabel?: string;
+  badgeCount?: number;
+  cardButton?: "single" | "cart-buy";
+  /** "featured-grid": hand-picked product per card, in order. */
+  picks?: { productId: string; badge?: string }[];
   showSearch?: boolean;
   showCategoryFilter?: boolean;
   showSort?: boolean;
+  showCartIcon?: boolean;
   /** Address of the page that holds the product detail section, such as "/product". */
   detailBase?: string;
   emptyMessage?: string;

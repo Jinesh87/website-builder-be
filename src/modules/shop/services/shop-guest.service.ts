@@ -334,6 +334,11 @@ export class ShopGuestService {
     return this.listAddresses(websiteId, guestSessionId);
   }
 
+  async listOrders(websiteId: string, guestSessionId: string): Promise<ShopOrderSummary[]> {
+    await this.openGuestShop(websiteId);
+    return shopCheckoutService.listGuestOrders(websiteId, guestSessionId);
+  }
+
   async listWishlist(websiteId: string, guestSessionId: string): Promise<ShopWishlistItemSummary[]> {
     await this.openGuestShop(websiteId);
     const rows = await prisma.shopWishlistItem.findMany({
@@ -517,14 +522,11 @@ export class ShopGuestService {
       addressId: orderAddress.id,
       couponCode: input.couponCode,
     });
-    let trackToken = checkout.trackToken ?? null;
-    if (!trackToken) {
-      trackToken = newOrderAccessToken();
-      await prisma.shopOrder.update({
-        where: { id: checkout.orderId },
-        data: { publicAccessToken: trackToken },
-      });
-    }
+    const trackToken = checkout.trackToken ?? newOrderAccessToken();
+    await prisma.shopOrder.update({
+      where: { id: checkout.orderId },
+      data: { publicAccessToken: trackToken, guestSessionId },
+    });
     const trackUrl = orderTrackUrl(siteUrl(shop.subdomain, shop.customDomain), trackToken);
     return { ...checkout, trackToken, trackUrl };
   }

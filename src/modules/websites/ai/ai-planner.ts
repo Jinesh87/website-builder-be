@@ -2,21 +2,21 @@ import { AI_CREATABLE_TYPES, MAX_PAGES_PER_REQUEST, type SectionEnvelope } from 
 
 /** What each section type can render, so the planner picks the closest built-in design first. */
 const SECTION_CATALOG = `
-- header: navigation bar (logo-left, centered, classical, minimalist, floating, transparent).
+- header: navigation bar (logo-left, centered, classical, minimalist, floating, transparent, boutique = logo left, centred menu, search/account/cart icons and a pill button, for online stores).
 - footer: site footer (columns, simple, mega, split, centered, cta-banner).
 - hero: static hero banner with headline, CTAs and optional image (centered, split, split-left, background-image, gradient, soft-card, floating-cards, asymmetric, arch-collage = headline beside a tall arched photo and two stacked photo tiles, for fashion, boutique and lifestyle stores).
 - carousel: interactive slider (hero-slider = full-width hero banner SLIDER/carousel with auto-play; cards, showcase, minimal-editorial, image-gallery, image-strip, image-coverflow).
-- features: feature grid with icons (pastel-icons, grid, split, cards, minimal).
-- services: service listing (cards-grid, bento-grid, split-showcase, interactive-list, horizontal-cards, minimal-numbered).
+- features: feature grid with icons (pastel-icons, grid, split, cards, minimal, numbered-cards = circled 1-2-3 promise cards).
+- services: service listing (cards-grid, bento-grid, split-showcase, interactive-list, horizontal-cards, minimal-numbered, collection-cards = up to five photo cards that open shop categories).
 - stats: key numbers / metrics row.
 - pricing: pricing plans (cards-grid, minimal-monochrome, spotlight-tier, horizontal-rows).
 - testimonials: customer quotes / reviews.
 - team: team members (grid-cards, spotlight-featured, minimal-editorial, glass-overlay).
 - marquee: auto-scrolling ticker of text, badges or cards.
 - faq: questions with expandable answers (accordion-classic, two-column-grid, split-sidebar, minimal-numbered, categorized-cards).
-- cta: call-to-action banner (centered-card, split-visual, floating-card, minimal-editorial).
+- cta: call-to-action banner (centered-card, split-visual, floating-card, minimal-editorial, split-banner = coloured text panel beside a photo, inline-bar = one-row icon + message + button such as a WhatsApp chat bar, newsletter = email signup).
 - contact: contact details (email, phone, address, hours) plus an inquiry form with name, email and message fields that is emailed to the site owner (split-form, cards-hub, minimal-editorial, floating-glass).
-- products: the live shop catalogue (search, category filter, photo, price). Layouts: classic-grid, editorial (filter sidebar), compact, showcase. Cart/Buy guest-login popup styles: soft-card, minimal, glass, split. It reads the website's products; do not invent product cards inside it.
+- products: the live shop catalogue (search, category filter, photo, price). Layouts: classic-grid, editorial (filter sidebar), compact, showcase, featured-grid (homepage strip of the first 4/8/12 products with a view-all link, no filters). Cart/Buy guest-login popup styles: soft-card, minimal, glass, split. It reads the website's products; do not invent product cards inside it.
 - product_detail: one product from the shop, with its photos, option prices and stock. It reads the product in the URL; do not invent a product inside it.
 - auth: shopper login / register / forgot-password screen (diagonal-split, gradient-spotlight, illustration-frame, glass-aurora, dark-wave, product-showcase, minimal-editorial, bento-grid, fullbleed-sheet, tabbed-compact). Put it on a dedicated "/login" page; logged-in shoppers land on "/account". Do not invent social OAuth providers that are not real.
 - account: the signed-in customer's own page: orders, cart and profile (edit details, change password, log out). Visitors who aren't signed in see a configurable sign-in prompt instead. Layouts: sidebar-tabs, top-tabs, overview-cards, minimal-list, dark-panel. Put it on a dedicated "/account" page; it reads the customer's real data, so never invent orders or names inside it.

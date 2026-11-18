@@ -1128,9 +1128,9 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    }
    "arch-collage": editorial headline beside a tall arched photo ("image") and two stacked tiles ("secondaryImage" top, "tertiaryImage" bottom). Best for fashion, boutique, jewellery, bridal and lifestyle stores. Set "collagePhotos" to 1 (arch only), 2 (arch + one tile) or 3 (default) and fill that many images, in that order; use pill buttons ("buttonShape": "pill"). Do not set imagePosition or backgroundImage for it.
 2. "features":
-   data: { "variant": "pastel-icons"|"grid"|"split"|"cards"|"minimal", "heading": "...", "intro": "...", "columns": 3, "items": [ { "icon": "bolt"|"star"|"shield"|"rocket"|"layers"|"sparkles"|"check", "iconColor": "orange"|"green"|"yellow"|"cyan"|"purple", "title": "...", "description": "...", "badge": "..." } ] }
+   data: { "variant": "pastel-icons"|"grid"|"split"|"cards"|"minimal"|"numbered-cards", "heading": "...", "intro": "...", "columns": 3, "items": [ { "icon": "bolt"|"star"|"shield"|"rocket"|"layers"|"sparkles"|"check", "iconColor": "orange"|"green"|"yellow"|"cyan"|"purple", "title": "...", "description": "...", "badge": "..." } ] }
 3. "services":
-   data: { "variant": "cards-grid"|"bento-grid"|"split-showcase"|"interactive-list"|"horizontal-cards"|"minimal-numbered", "heading": "...", "intro": "...", "columns": 3, "items": [ { "title": "...", "description": "...", "badge": "...", "features": ["..."] } ] }
+   data: { "variant": "cards-grid"|"bento-grid"|"split-showcase"|"interactive-list"|"horizontal-cards"|"minimal-numbered"|"collection-cards", "heading": "...", "intro": "...", "columns": 3, "items": [ { "title": "...", "description": "...", "badge": "...", "features": ["..."] } ] }
 4. "stats":
    data: { "heading": "...", "items": [ { "value": "99.9%", "label": "Uptime Guarantee" } ] }
 5. "pricing":
@@ -1158,7 +1158,8 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
 10. "faq":
    data: { "variant": "accordion-classic"|"two-column-grid"|"split-sidebar"|"minimal-numbered"|"categorized-cards", "heading": "...", "intro": "...", "items": [ { "question": "...", "answer": "..." } ] }
 11. "cta":
-   data: { "variant": "centered-card"|"split-visual"|"floating-card"|"minimal-editorial", "heading": "...", "text": "...", "button": { "label": "Get started", "href": "/contact" } }
+   data: { "variant": "centered-card"|"split-visual"|"floating-card"|"minimal-editorial"|"split-banner"|"inline-bar"|"newsletter", "heading": "...", "text": "...", "button": { "label": "Get started", "href": "/contact" } }
+   "split-banner" puts a coloured text panel ("panelColor", a dark hex) beside a photo ("image"). "inline-bar" is a one-row card with an "icon" badge (e.g. "brand:whatsapp") and the button. "newsletter" is an email signup; "button.label" is the submit text and "placeholder" the field hint.
 12. "header":
    data: { "design": "logo-left"|"centered"|"classical"|"minimalist"|"floating", "siteName": "...", "menu": [ { "label": "Home", "href": "/" }, { "label": "About", "href": "/about" } ], "sticky": false }
    settings: { "customColors": { "background": "#rrggbb" } }
@@ -1183,7 +1184,7 @@ VALID SECTION SCHEMAS & EXACT FIELD KEYS:
    "showForm": true adds name, email and message fields. Submissions are emailed to the site owner. Use the brand's real email, phone and address from the brand facts; leave a field out if it is unknown instead of inventing one. Channel values must be that same email or phone.
    Never use "custom" blocks to imitate a contact or signup form.
 15. "products" (lists the website's real shop catalogue; do not invent products, prices or photos):
-   data: { "eyebrow": "Shop", "title": "Our products", "subtitle": "...", "layout": "grid-3"|"grid-2", "showSearch": true, "showCategoryFilter": true, "detailBase": "/product", "emptyMessage": "No products yet." }
+   data: { "design": "classic-grid"|"editorial"|"compact"|"showcase"|"featured-grid", "eyebrow": "Shop", "title": "Our products", "subtitle": "...", "layout": "grid-3"|"grid-2"|"grid-4", "showSearch": true, "showCategoryFilter": true, "detailBase": "/product", "emptyMessage": "No products yet." }
    "detailBase" must be the slug of the page that contains the product_detail section.
 16. "product_detail" (one product from the shop URL, with photos, option prices and stock; do not invent the product):
    data: { "backLabel": "All products", "backHref": "/shop", "showDescription": true, "showStock": true }

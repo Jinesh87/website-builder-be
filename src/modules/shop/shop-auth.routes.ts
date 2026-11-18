@@ -185,6 +185,7 @@ shopAuthRouter.delete(
   shopAuthController.deleteGuestAddress,
 );
 shopAuthRouter.get("/guest/wishlist", websiteParams, ensureShopGuestSession, shopAuthController.listGuestWishlist);
+shopAuthRouter.get("/guest/orders", websiteParams, ensureShopGuestSession, shopAuthController.listGuestOrders);
 shopAuthRouter.post(
   "/guest/wishlist",
   websiteParams,

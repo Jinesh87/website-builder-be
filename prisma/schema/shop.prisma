@@ -283,6 +283,8 @@ model ShopOrder {
   websiteId         String           @db.Uuid
   clientId          String           @db.Uuid
   customerId        String           @db.Uuid
+  /// Browser session that placed a guest checkout order, so the guest's account page can list it.
+  guestSessionId    String?          @db.Uuid
   /// Per-website sequence shown as Order #1001.
   number            Int
   status            ShopOrderStatus  @default(PENDING)
@@ -326,6 +328,7 @@ model ShopOrder {
   @@index([websiteId, createdAt])
   @@index([websiteId, status])
   @@index([customerId, createdAt])
+  @@index([websiteId, guestSessionId])
   @@index([razorpayPaymentId])
   @@index([clientId])
   @@index([couponId])

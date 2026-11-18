@@ -438,6 +438,16 @@ export class ShopAuthController {
     }
   };
 
+  listGuestOrders = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        orders: await shopGuestService.listOrders(req.params.websiteId, req.shopGuestSessionId!),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   listGuestWishlist = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
       res.status(200).json({

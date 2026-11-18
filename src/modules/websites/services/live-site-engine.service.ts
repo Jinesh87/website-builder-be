@@ -33,6 +33,8 @@ type ShopRender = {
   /** Coupons that apply on the active product detail page (cart-wide + this product). */
   coupons?: PublicShopCouponRender[];
   products: PublicShopProduct[];
+  /** Products hand-picked by featured strips on this page; the paged list may not include them. */
+  picked?: PublicShopProduct[];
   productSlug?: string;
   selection?: Record<string, string>;
   list?: PublicShopList;
@@ -605,6 +607,16 @@ Sitemap: ${domain}/sitemap.xml
     }
     const isList = !resolved.productSlug && targetPage.sections.some((section) => section.type === "products");
     const paged = isList ? pagePublicCatalog(products, listQuery) : null;
+    const pickedIds = new Set(
+      targetPage.sections.flatMap((section) => {
+        if (section.type !== "products") return [];
+        const picks = (section.data as { picks?: unknown }).picks;
+        return Array.isArray(picks)
+          ? picks.flatMap((pick) => (pick && typeof pick === "object" && typeof (pick as { productId?: unknown }).productId === "string" ? [(pick as { productId: string }).productId] : []))
+          : [];
+      }),
+    );
+    const picked = paged && pickedIds.size > 0 ? products.filter((product) => pickedIds.has(product.id)) : [];
     const authPage = pages.find((page) => page.sections.some((section) => section.type === "auth"));
     const accountPage = pages.find((page) => page.sections.some((section) => section.type === "account"));
     const cancelUntilStatus = cancelUntilLabel(website.shopCancelUntilStatus);
@@ -629,6 +641,7 @@ Sitemap: ${domain}/sitemap.xml
           products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
           ...(resolved.productSlug ? { productSlug: resolved.productSlug, coupons: productCoupons } : {}),
           ...(paged ? { list: paged.list } : {}),
+          ...(picked.length > 0 ? { picked } : {}),
           ...(Object.keys(selection).length > 0 ? { selection } : {}),
           live: true,
         }

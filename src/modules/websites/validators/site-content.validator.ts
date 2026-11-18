@@ -720,6 +720,7 @@ export const headerSchema = Joi.object({
   showSearch: Joi.boolean().optional(),
   showAccount: Joi.boolean().optional(),
   showCart: Joi.boolean().optional(),
+  shopHref: Joi.string().trim().max(200).allow("").optional().description('"boutique" design: page the search icon opens; default "/shop"'),
   cartCount: Joi.number().integer().min(0).max(999).optional(),
   currency: optionalText(10),
   mobileMenuType: Joi.string().valid("drawer", "fullscreen", "dropdown").optional(),
@@ -1009,9 +1010,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     heading: optionalText(200),
     intro: optionalText(500),
     variant: flexibleVariant(
-      ["grid", "split", "pastel-icons", "minimal", "cards", "editorial-process", "colored-pillars", "polaroid-grid"],
+      ["grid", "split", "pastel-icons", "minimal", "cards", "editorial-process", "colored-pillars", "polaroid-grid", "numbered-cards"],
       "grid",
-      { "cards-grid": "cards", "icons": "pastel-icons" },
+      { "cards-grid": "cards", "icons": "pastel-icons", "numbered": "numbered-cards", "steps": "numbered-cards" },
     ),
     iconStyle: Joi.string().valid("pastel-circle", "square-badge", "minimal-accent", "colored-circle", "none").optional(),
     cardStyle: Joi.string().valid("transparent", "surface", "bordered", "glass").optional(),
@@ -1058,9 +1059,10 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
         "horizontal-cards",
         "minimal-numbered",
         "editorial-specs",
+        "collection-cards",
       ],
       "cards-grid",
-      { "bento": "bento-grid", "cards": "cards-grid", "split": "split-showcase" },
+      { "bento": "bento-grid", "cards": "cards-grid", "split": "split-showcase", "collections": "collection-cards", "categories": "collection-cards" },
     ),
     cardStyle: Joi.string()
       .valid("surface", "bordered", "flat", "glass", "glow", "elevated", "gradient")
@@ -1309,9 +1311,29 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   }),
   cta: Joi.object({
     variant: flexibleVariant(
-      ["centered-card", "split-visual", "floating-card", "minimal-editorial", "vintage-story", "vintage-banner"],
+      [
+        "centered-card",
+        "split-visual",
+        "floating-card",
+        "minimal-editorial",
+        "vintage-story",
+        "vintage-banner",
+        "split-banner",
+        "inline-bar",
+        "newsletter",
+      ],
       "centered-card",
-      { "centered": "centered-card", "split": "split-visual", "floating": "floating-card", "minimal": "minimal-editorial" },
+      {
+        "centered": "centered-card",
+        "split": "split-visual",
+        "floating": "floating-card",
+        "minimal": "minimal-editorial",
+        "banner": "split-banner",
+        "whatsapp": "inline-bar",
+        "inline": "inline-bar",
+        "subscribe": "newsletter",
+        "email-signup": "newsletter",
+      },
     ),
     eyebrow: optionalText(80),
     heading: text(200).required(),
@@ -1329,6 +1351,11 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .valid("default", "bordered", "flat", "glass", "elevated", "contrast")
       .optional(),
     align: Joi.string().valid("left", "center").optional(),
+    image: image.optional().description('"split-banner": photo beside the text panel'),
+    panelColor: Joi.string().max(100).allow("").optional().description('"split-banner": dark text panel colour; default is the theme secondary colour'),
+    icon: Joi.string().max(100).allow("").optional().description('"inline-bar": badge icon, e.g. "brand:whatsapp" or "chat"'),
+    placeholder: optionalText(80).description('"newsletter": email field placeholder'),
+    successText: optionalText(120).description('"newsletter": thank-you line after subscribing'),
   }),
   contact: Joi.object({
     variant: flexibleVariant(
@@ -1412,8 +1439,9 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     bullets: Joi.array().items(text(200)).max(8).required(),
     image: image.optional(),
     imagePosition: Joi.string().valid("left", "right").required(),
-    imageStyle: Joi.string().valid("plain", "polaroid").optional(),
+    imageStyle: Joi.string().valid("plain", "polaroid", "arch").optional(),
     imageTapeLabel: optionalText(80),
+    signature: optionalText(120),
     cta: link.optional(),
   }),
   stats: Joi.object({
@@ -1646,14 +1674,25 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
       .required(),
   }),
   products: Joi.object({
-    design: Joi.string().valid("classic-grid", "editorial", "compact", "showcase").optional(),
+    design: Joi.string().valid("classic-grid", "editorial", "compact", "showcase", "featured-grid").optional(),
     eyebrow: optionalText(120),
     title: text(160).required(),
     subtitle: optionalText(320),
-    layout: Joi.string().valid("grid-3", "grid-2").optional(),
+    layout: Joi.string().valid("grid-3", "grid-2", "grid-4").optional(),
+    limit: Joi.number().integer().valid(4, 8, 12).optional(),
+    viewAllLink: link.optional(),
+    badgeLabel: optionalText(16),
+    badgeCount: Joi.number().integer().min(0).max(12).optional(),
+    cardButton: Joi.string().valid("single", "cart-buy").optional(),
+    picks: Joi.array()
+      .items(Joi.object({ productId: Joi.string().trim().max(64).allow("").required(), badge: optionalText(16) }))
+      .max(12)
+      .optional()
+      .description('"featured-grid": the shop product on each card, in order; empty lists the first products automatically'),
     showSearch: Joi.boolean().optional(),
     showCategoryFilter: Joi.boolean().optional(),
     showSort: Joi.boolean().optional(),
+    showCartIcon: Joi.boolean().optional(),
     detailBase: Joi.string().trim().max(80).pattern(/^\/[A-Za-z0-9/_-]*$/).optional(),
     emptyMessage: optionalText(200),
   }),
