@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { PAYMENT_LOG_KINDS } from "../utils/shop-payment-log.js";
 
 export const shopCategorySchema = Joi.object({
   name: Joi.string().trim().min(1).max(80).required().messages({
@@ -187,6 +188,21 @@ export const shopOrderQuerySchema = Joi.object({
   status: Joi.string()
     .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled", "returned")
     .optional(),
+  page: Joi.number().integer().min(1).default(1),
+});
+
+export const shopPaymentLogQuerySchema = Joi.object({
+  view: Joi.string().valid("owner", "technical").default("owner"),
+  category: Joi.string().valid("payments", "refunds", "problems").optional(),
+  kind: Joi.string().valid(...PAYMENT_LOG_KINDS).optional(),
+  result: Joi.string().valid("success", "failure").optional(),
+  search: Joi.string().trim().max(120).allow("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+});
+
+export const shopReturnQuerySchema = Joi.object({
+  filter: Joi.string().valid("all", "awaiting", "in-progress", "refunded").default("all"),
+  search: Joi.string().trim().max(120).allow("").optional(),
   page: Joi.number().integer().min(1).default(1),
 });
 

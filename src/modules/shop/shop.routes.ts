@@ -25,6 +25,8 @@ import {
   shopOrderEmailTemplateSchema,
   shopOrderParamsSchema,
   shopOrderQuerySchema,
+  shopReturnQuerySchema,
+  shopPaymentLogQuerySchema,
   shopOrderStatusSchema,
   shopPaymentSchema,
   shopProductParamsSchema,
@@ -139,6 +141,19 @@ shopRouter.patch(
   validate(shopOrderParamsSchema, "params"),
   validate(shopOrderStatusSchema),
   shopController.updateOrderStatus,
+);
+shopRouter.get(
+  "/payment-logs",
+  websiteParams,
+  validate(shopPaymentLogQuerySchema, "query"),
+  shopController.listPaymentLogs,
+);
+shopRouter.get("/returns/summary", websiteParams, shopController.returnsSummary);
+shopRouter.get(
+  "/returns",
+  websiteParams,
+  validate(shopReturnQuerySchema, "query"),
+  shopController.listReturns,
 );
 shopRouter.post(
   "/orders/:orderId/refund",

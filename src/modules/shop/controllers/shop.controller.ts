@@ -11,6 +11,8 @@ import {
   type ShopOrderEmailTemplateInput,
 } from "../services/shop-order-emails.service.js";
 import { shopOrdersService, type ShopOrderQuery, type ShopOrderStatusLabel } from "../services/shop-orders.service.js";
+import { shopRefundsService, type ShopReturnQuery } from "../services/shop-refunds.service.js";
+import { shopPaymentLogsService, type ShopPaymentLogQuery } from "../services/shop-payment-logs.service.js";
 import {
   shopCouponService,
   type CreateShopCouponInput,
@@ -197,9 +199,33 @@ export class ShopController {
     }
   };
 
+  listPaymentLogs = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await shopPaymentLogsService.list(req.params.id, req.query as ShopPaymentLogQuery, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  returnsSummary = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ counts: await shopRefundsService.summary(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listReturns = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await shopRefundsService.listReturns(req.params.id, req.query as ShopReturnQuery, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   retryOrderRefund = async (req: Request<OrderParams>, res: Response, next: NextFunction) => {
     try {
-      res.json({ order: await shopOrdersService.retryRefund(req.params.id, req.params.orderId, req.user!) });
+      res.json({ order: await shopRefundsService.refundOrder(req.params.id, req.params.orderId, req.user!) });
     } catch (error) {
       next(error);
     }

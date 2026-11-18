@@ -8,6 +8,7 @@ import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { checkRazorpayKeys, isValidWebhookSignature } from "../../wallet/services/razorpay.client.js";
 import type { RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
+import { logWebhookEvent, recordPaymentLog } from "../utils/shop-payment-log.js";
 import { shopCheckoutService } from "./shop-checkout.service.js";
 
 export type ShopPaymentConfigView = {
@@ -137,6 +138,14 @@ export class ShopPaymentService {
     });
     const secret = config?.razorpayWebhookSecretCipher ? decryptSecret(config.razorpayWebhookSecretCipher) : null;
     if (!signature || !secret || !isValidWebhookSignature(secret, rawBody, signature)) {
+      await recordPaymentLog({
+        websiteId,
+        kind: "webhook",
+        success: false,
+        message: secret
+          ? "Webhook rejected: the signature didn't match. Check the webhook secret in Razorpay settings."
+          : "Webhook rejected: no webhook secret is saved for this shop.",
+      });
       throw new AppError(400, "Invalid Razorpay signature", "WEBHOOK_SIGNATURE_INVALID");
     }
     let event: RazorpayWebhookEvent;
@@ -146,6 +155,7 @@ export class ShopPaymentService {
       throw new AppError(400, "Invalid Razorpay webhook body", "WEBHOOK_BODY_INVALID");
     }
     const handled = await shopCheckoutService.applyWebhook(websiteId, event);
+    await logWebhookEvent(websiteId, event, handled);
     logger.info({ websiteId, event: event.event, handled }, "Shop Razorpay webhook accepted");
   }
 

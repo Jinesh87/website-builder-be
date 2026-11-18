@@ -77,6 +77,7 @@ model Website {
   shopCartItems           ShopCartItem[]
   shopWishlistItems       ShopWishlistItem[]
   shopOrders              ShopOrder[]
+  shopPaymentLogs         ShopPaymentLog[]
   shopOrderEmailDesign    ShopOrderEmailDesign?
   shopOrderEmailTemplates ShopOrderEmailTemplate[]
   shopInvoiceDesign       ShopInvoiceDesign?

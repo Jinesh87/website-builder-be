@@ -4,15 +4,10 @@ import { decryptSecret } from "../../../common/utils/secret-box.js";
 import { prisma } from "../../../config/prisma.js";
 import { logger } from "../../../config/logger.js";
 import { Prisma, ShopOrderStatus, ShopRefundStatus, type ShopOrder } from "../../../generated/prisma/client.js";
-import {
-  captureRazorpayPayment,
-  createRazorpayOrder,
-  toRazorpayContact,
-  createRazorpayRefund,
-  fetchRazorpayPayment,
-  isValidPaymentSignature,
-} from "../../wallet/services/razorpay.client.js";
+import { createRazorpayOrder, toRazorpayContact, createRazorpayRefund } from "../../wallet/services/razorpay.client.js";
 import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
+import { razorpayErrorMessage, recordPaymentLog, refundReasonLabel } from "../utils/shop-payment-log.js";
+import { verifyCheckoutPayment } from "./shop-payment-verify.js";
 import { purgeShopPages } from "./shop-cache.js";
 import { effectiveGst, gstUnitPaise, payableUnitPaise } from "../utils/shop-gst.js";
 import type {
@@ -176,7 +171,12 @@ export function toOrderSummary(
 }
 
 /** Puts deducted units back on the shelf once when a paid order is cancelled. */
-async function restoreStockOnce(tx: Prisma.TransactionClient, orderId: string): Promise<boolean> {
+/** Puts a cancelled order's items back into stock once (clears stockDeductedAt). `userId` credits a store user in the log. */
+export async function restoreStockOnce(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  userId: string | null = null,
+): Promise<boolean> {
   const order = await tx.shopOrder.findUnique({
     where: { id: orderId },
     include: { items: true },
@@ -211,7 +211,7 @@ async function restoreStockOnce(tx: Prisma.TransactionClient, orderId: string): 
         delta: item.quantity,
         quantityAfter: updated.quantity,
         note: `Order #${order.number} cancelled`,
-        userId: null,
+        userId,
       },
     });
   }
@@ -606,6 +606,7 @@ export class ShopCheckoutService {
         },
       });
     } catch (error) {
+      void recordPaymentLog({ websiteId, orderId: order.id, kind: "order_created", success: false, amountPaise: totalPaise, message: razorpayErrorMessage(error) });
       await releaseStockForOrder(websiteId, order.id, order.items);
       await prisma.shopOrder.update({
         where: { id: order.id },
@@ -613,6 +614,7 @@ export class ShopCheckoutService {
       });
       throw error;
     }
+    void recordPaymentLog({ websiteId, orderId: order.id, kind: "order_created", success: true, amountPaise: totalPaise, razorpayRef: razorpay.id, message: "Checkout started." });
 
     await prisma.shopOrder.update({
       where: { id: order.id },
@@ -668,24 +670,7 @@ export class ShopCheckoutService {
     const keys = await shopPaymentKeys(websiteId);
     if (!keys) throw new AppError(400, "This shop isn't set up to take payments yet.", "PAYMENTS_NOT_CONFIGURED");
 
-    if (!isValidPaymentSignature(keys.keySecret, input.razorpayOrderId, input.razorpayPaymentId, input.razorpaySignature)) {
-      throw new AppError(
-        400,
-        "We couldn't verify this payment. If money was taken, your order will update automatically.",
-        "PAYMENT_VERIFICATION_FAILED",
-      );
-    }
-
-    let payment = await fetchRazorpayPayment(keys, input.razorpayPaymentId);
-    if (payment.order_id !== order.razorpayOrderId || payment.amount !== order.totalPaise || payment.currency !== order.currency) {
-      throw new AppError(400, "This payment doesn't match the order.", "PAYMENT_VERIFICATION_FAILED");
-    }
-    if (payment.status === "authorized") {
-      payment = await captureRazorpayPayment(keys, payment.id, order.totalPaise, order.currency);
-    }
-    if (payment.status !== "captured") {
-      throw new AppError(400, "The payment hasn't completed yet. Your order updates as soon as it does.", "PAYMENT_PENDING");
-    }
+    const payment = await verifyCheckoutPayment(websiteId, keys, order, input);
 
     const paid = await this.markPaid(order.id, payment.id);
     let trackToken = paid.publicAccessToken;
@@ -733,6 +718,7 @@ export class ShopCheckoutService {
         receipt: `srf_${orderId.replace(/-/g, "").slice(0, 24)}_${receiptTail}`.slice(0, 40),
       });
       const refundStatus = refundStatusFromRazorpay(refund.status);
+      void recordPaymentLog({ websiteId, orderId, kind: "refund", success: true, razorpayRef: refund.id, amountPaise: refund.amount, message: `Refund ${refund.status ?? "created"}: ${refundReasonLabel(purpose)}.` });
       await prisma.shopOrder.update({
         where: { id: orderId },
         data: {
@@ -745,6 +731,7 @@ export class ShopCheckoutService {
       return { ok: true, refundStatus };
     } catch (error) {
       logger.error({ err: error, websiteId, orderId, razorpayPaymentId }, "Shop Razorpay refund failed");
+      void recordPaymentLog({ websiteId, orderId, kind: "refund", success: false, razorpayRef: razorpayPaymentId, message: `Refund failed (${refundReasonLabel(purpose)}): ${razorpayErrorMessage(error)}` });
       await prisma.shopOrder.update({
         where: { id: orderId },
         data: { razorpayPaymentId, refundStatus: ShopRefundStatus.FAILED },
@@ -1257,44 +1244,17 @@ export class ShopCheckoutService {
       });
     });
 
-    let refundMessage = "Return requested.";
-    if (existing.razorpayPaymentId) {
-      const refund = await this.refundCapturedPayment(
-        existing.websiteId,
-        existing.id,
-        existing.razorpayPaymentId,
-        reason,
-        "shop_customer_return",
-      );
-      const refundNote = refund.ok
-        ? refund.refundStatus === ShopRefundStatus.PROCESSED
-          ? "Order returned; payment refunded"
-          : "Order returned; refund in progress"
-        : "Order returned; refund failed — contact the store";
-      await prisma.shopOrder.update({
-        where: { id: existing.id },
-        data: { failureReason: `${refundNote}. ${reason}`.slice(0, 300) },
-      });
-      refundMessage = refund.ok
-        ? refund.refundStatus === ShopRefundStatus.PROCESSED
-          ? "Return accepted. Your payment has been refunded."
-          : "Return accepted. Your refund is in progress."
-        : "Return accepted. Contact the store — a refund may be needed.";
-      if (!refund.ok) {
-        logger.error(
-          { websiteId, orderId: existing.id, paymentId: existing.razorpayPaymentId },
-          "Customer return refund failed",
-        );
-      }
-    } else {
-      refundMessage = "Return accepted.";
-    }
+    // Returns are refunded by the store from Shop → Returns once the item is back; nothing is refunded here.
+    const refundMessage = existing.razorpayPaymentId
+      ? "Return accepted. The store will refund you once your return is checked."
+      : "Return accepted.";
 
     void shopOrderEmailsService.notifyStatusChange(existing.id, ShopOrderStatus.RETURNED);
     logger.info({ websiteId, orderId: existing.id, number: existing.number }, "Shop order returned by customer");
 
     const detail = await this.getCustomerOrder(websiteId, customerId, existing.id);
-    return { ...detail, failureReason: detail.failureReason || refundMessage };
+    // The popup flashes failureReason after the action, so tell the shopper the refund comes from the store.
+    return { ...detail, failureReason: refundMessage };
   }
 
   private async meGuard(websiteId: string, customerId: string): Promise<void> {

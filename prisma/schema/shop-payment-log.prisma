@@ -1,0 +1,24 @@
+/// One Razorpay interaction for a shop (order created, payment checked/captured, refund, webhook), shown to the owner
+/// under Shop → Razorpay logs. Kept short: the message is Razorpay's own description or ours.
+model ShopPaymentLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  websiteId   String   @db.Uuid
+  clientId    String   @db.Uuid
+  /// The shop order it concerns, when known (copied number survives order clean-up).
+  orderId     String?  @db.Uuid
+  orderNumber Int?
+  /// order_created | payment_verified | payment_captured | refund | webhook
+  kind        String   @db.VarChar(40)
+  success     Boolean
+  amountPaise Int?
+  /// Razorpay order / payment / refund id, or the webhook event name.
+  razorpayRef String?  @db.VarChar(80)
+  message     String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  website Website @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
+
+  @@index([websiteId, createdAt])
+  @@index([clientId])
+  @@map("shop_payment_logs")
+}
