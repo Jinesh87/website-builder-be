@@ -4,7 +4,9 @@ import { sanitizeImportedHtml } from "../services/html-import-sanitize.js";
 import Joi from "joi";
 import { hasRichText, sanitizeRichText, toPlainText } from "../../../common/utils/rich-text.js";
 import {
+  ACCOUNT_ORDER_DETAIL_VARIANTS,
   ACCOUNT_PREVIEWS,
+  ACCOUNT_SUCCESS_POPUP_VARIANTS,
   ACCOUNT_VARIANTS,
   AUTH_ANIMATIONS,
   AUTH_FIELD_TYPES,
@@ -1716,11 +1718,15 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     subheading: optionalText(320),
     showOrders: Joi.boolean().optional(),
     showCart: Joi.boolean().optional(),
+    showWishlist: Joi.boolean().optional(),
     showProfile: Joi.boolean().optional(),
+    showAddresses: Joi.boolean().optional(),
     showPassword: Joi.boolean().optional(),
     ordersLabel: optionalText(40),
     cartLabel: optionalText(40),
+    wishlistLabel: optionalText(40),
     profileLabel: optionalText(40),
+    addressesLabel: optionalText(40),
     passwordLabel: optionalText(40),
     logoutLabel: optionalText(40),
     saveLabel: optionalText(40),
@@ -1733,6 +1739,11 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     guestHeading: optionalText(160),
     guestText: optionalText(320),
     guestButtonLabel: optionalText(60),
+    successPopupVariant: Joi.string().valid(...ACCOUNT_SUCCESS_POPUP_VARIANTS).optional().description("Layout of the popup shown after payment"),
+    successHeading: optionalText(120),
+    successText: optionalText(320),
+    successButtonLabel: optionalText(60),
+    orderDetailVariant: Joi.string().valid(...ACCOUNT_ORDER_DETAIL_VARIANTS).optional().description("Layout of the order detail / tracking popup"),
   }),
   blog_detail: Joi.object({
     design: Joi.string().valid(...BLOG_DETAIL_DESIGNS).required(),

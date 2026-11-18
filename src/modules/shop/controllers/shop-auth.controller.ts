@@ -516,6 +516,26 @@ export class ShopAuthController {
     }
   };
 
+  cancelTrackedOrder = async (req: Request<WebsiteParams & { token: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        order: await shopGuestService.cancelTrackedOrder(req.params.websiteId, req.params.token, req.body),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  returnTrackedOrder = async (req: Request<WebsiteParams & { token: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json({
+        order: await shopGuestService.returnTrackedOrder(req.params.websiteId, req.params.token, req.body),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   trackOrderInvoice = async (req: Request<WebsiteParams & { token: string }>, res: Response, next: NextFunction) => {
     try {
       const invoice = await shopGuestService.renderTrackedInvoice(req.params.websiteId, req.params.token);

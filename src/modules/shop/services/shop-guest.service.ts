@@ -10,12 +10,14 @@ import { effectiveGst, payableUnitPaise } from "../utils/shop-gst.js";
 import { newOrderAccessToken, orderTrackUrl } from "../utils/shop-order-access.js";
 import type {
   ShopAddToCartInput,
+  ShopCancelOrderInput,
   ShopCartItemSummary,
   ShopCheckoutSession,
   ShopCustomerAddressInput,
   ShopCustomerAddressView,
   ShopOrderDetailView,
   ShopOrderSummary,
+  ShopReturnOrderInput,
   ShopWishlistItemSummary,
 } from "../types/shop-auth.types.js";
 import { shopCheckoutService, type ShopCheckoutConfirmation } from "./shop-checkout.service.js";
@@ -452,25 +454,22 @@ export class ShopGuestService {
     });
     if (guestLines.length === 0) throw new AppError(400, "Your cart is empty.", "CART_EMPTY");
 
+    // The guest pays for exactly what this browser's cart shows: the email's guest record gets a fresh copy of
+    // those lines (anything left there by an earlier unfinished checkout is invisible to the shopper, so it is
+    // dropped). The browser's own lines stay until payment is confirmed, so closing Razorpay keeps the cart.
+    // Registered accounts never reach here: upsertGuestCustomer refuses their email.
     await prisma.$transaction(async (tx) => {
-      for (const line of guestLines) {
-        const existing = await tx.shopCartItem.findUnique({
-          where: { customerId_variantId: { customerId: customer.id, variantId: line.variantId } },
-          select: { id: true, quantity: true },
-        });
-        if (existing) {
-          await tx.shopCartItem.update({
-            where: { id: existing.id },
-            data: { quantity: Math.min(99, existing.quantity + line.quantity) },
-          });
-          await tx.shopCartItem.delete({ where: { id: line.id } });
-        } else {
-          await tx.shopCartItem.update({
-            where: { id: line.id },
-            data: { customerId: customer.id, guestSessionId: null },
-          });
-        }
-      }
+      await tx.shopCartItem.deleteMany({ where: { websiteId, customerId: customer.id } });
+      await tx.shopCartItem.createMany({
+        data: guestLines.map((line) => ({
+          websiteId: shop.id,
+          clientId: shop.clientId,
+          customerId: customer.id,
+          productId: line.productId,
+          variantId: line.variantId,
+          quantity: line.quantity,
+        })),
+      });
     });
 
     // Keep a guest-session copy for return visits, and attach a customer address for the order.
@@ -596,6 +595,26 @@ export class ShopGuestService {
       ...detail,
       trackUrl: orderTrackUrl(siteUrl(website?.subdomain ?? "", website?.domains[0]?.hostname ?? null), token),
     };
+  }
+
+  /** Cancel or return through the order's tracking token (emailed link / guest account), under the same policy as members. */
+  async cancelTrackedOrder(websiteId: string, token: string, input: ShopCancelOrderInput): Promise<ShopOrderDetailView> {
+    const order = await this.trackedOrderRef(websiteId, token);
+    return shopCheckoutService.cancelCustomerOrder(websiteId, order.customerId, order.id, input);
+  }
+
+  async returnTrackedOrder(websiteId: string, token: string, input: ShopReturnOrderInput): Promise<ShopOrderDetailView> {
+    const order = await this.trackedOrderRef(websiteId, token);
+    return shopCheckoutService.returnCustomerOrder(websiteId, order.customerId, order.id, input);
+  }
+
+  private async trackedOrderRef(websiteId: string, token: string): Promise<{ id: string; customerId: string }> {
+    const order = await prisma.shopOrder.findFirst({
+      where: { websiteId, publicAccessToken: token },
+      select: { id: true, customerId: true },
+    });
+    if (!order) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    return order;
   }
 
   async renderTrackedInvoice(websiteId: string, token: string) {

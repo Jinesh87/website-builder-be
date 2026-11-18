@@ -222,6 +222,20 @@ shopAuthRouter.get(
   rateLimit({ name: "shop-track-order", max: 60, windowSeconds: MINUTE }),
   shopAuthController.trackOrder,
 );
+shopAuthRouter.post(
+  "/track/:token/cancel",
+  validate(shopTrackParamsSchema, "params"),
+  rateLimit({ name: "shop-track-cancel", max: 10, windowSeconds: MINUTE }),
+  validate(shopCancelOrderSchema),
+  shopAuthController.cancelTrackedOrder,
+);
+shopAuthRouter.post(
+  "/track/:token/return",
+  validate(shopTrackParamsSchema, "params"),
+  rateLimit({ name: "shop-track-return", max: 10, windowSeconds: MINUTE }),
+  validate(shopReturnOrderSchema),
+  shopAuthController.returnTrackedOrder,
+);
 shopAuthRouter.get(
   "/track/:token/invoice",
   validate(shopTrackParamsSchema, "params"),

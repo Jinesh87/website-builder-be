@@ -206,7 +206,10 @@ export const SECTION_TYPES = [
 
 /** Mirrors frontend/src/site-kit/types.ts. Stored in site data, so values are only ever appended. */
 export const ACCOUNT_VARIANTS = ["sidebar-tabs", "top-tabs", "overview-cards", "minimal-list", "dark-panel"] as const;
-export const ACCOUNT_PREVIEWS = ["member", "guest"] as const;
+export const ACCOUNT_PREVIEWS = ["member", "guest", "success", "order-detail"] as const;
+/** Mirrors frontend ACCOUNT_SUCCESS_POPUP_VARIANTS / ACCOUNT_ORDER_DETAIL_VARIANTS; values are only ever appended. */
+export const ACCOUNT_SUCCESS_POPUP_VARIANTS = ["simple", "celebration", "receipt"] as const;
+export const ACCOUNT_ORDER_DETAIL_VARIANTS = ["timeline", "steps", "compact"] as const;
 
 export type AccountData = {
   variant: (typeof ACCOUNT_VARIANTS)[number];
@@ -237,6 +240,15 @@ export type AccountData = {
   guestHeading?: string;
   guestText?: string;
   guestButtonLabel?: string;
+  showWishlist?: boolean;
+  showAddresses?: boolean;
+  wishlistLabel?: string;
+  addressesLabel?: string;
+  successPopupVariant?: (typeof ACCOUNT_SUCCESS_POPUP_VARIANTS)[number];
+  successHeading?: string;
+  successText?: string;
+  successButtonLabel?: string;
+  orderDetailVariant?: (typeof ACCOUNT_ORDER_DETAIL_VARIANTS)[number];
 };
 
 export const AUTH_VARIANTS = [
