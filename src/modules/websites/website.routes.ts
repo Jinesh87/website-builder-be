@@ -33,6 +33,7 @@ import {
   websiteIdParamsSchema,
   websiteVersionParamsSchema,
 } from "./validators/website.validator.js";
+import { rebuildImportedHtmlSchema } from "./validators/imported-html-code.validator.js";
 
 const IMPORT_MAX_BYTES = 50 * 1024 * 1024;
 
@@ -155,6 +156,14 @@ websitesRouter.put(
   editorSaveBody,
   validate(saveDraftSchema),
   websiteController.saveDraft,
+);
+websitesRouter.post(
+  "/:id/imported-html/rebuild",
+  byId,
+  rateLimit({ name: "imported-html-rebuild", max: 120, windowSeconds: 60 }),
+  editorSaveBody,
+  validate(rebuildImportedHtmlSchema),
+  websiteController.rebuildImportedHtml,
 );
 websitesRouter.put(
   "/:id/pages/:pageId/content",

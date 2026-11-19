@@ -332,34 +332,73 @@ function camelToLabel(value: string): string {
   return value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
-/** Marks every element that directly holds words as an editable text, and every img/video as media. */
-function extractEditableFields($: CheerioAPI): { texts: ImportedHtmlText[]; mediaSlots: ImportedHtmlMediaSlot[] } {
+/** Labels kept from before a re-tag (e.g. after a code edit), keyed by text id. */
+export type PreviousFields = { texts?: ImportedHtmlText[] };
+
+const TEXT_ID = "data-wb-text-id";
+const MEDIA_KEY = "data-wb-media-key";
+
+/** Next unused `<prefix><n>` after the highest number already in the markup. */
+function counter($: CheerioAPI, attr: string, prefix: string): () => string {
+  let max = -1;
+  $(`[${attr}]`).each((_, raw) => {
+    const n = Number(($(raw).attr(attr) || "").slice(prefix.length));
+    if (Number.isInteger(n)) max = Math.max(max, n);
+  });
+  return () => `${prefix}${++max}`;
+}
+
+/**
+ * Marks every element that directly holds words as an editable text, and every img/video as media.
+ * Ids already in the markup are kept (so click-to-edit and style tweaks survive a code edit);
+ * new or duplicated elements get fresh ids, and elements that no longer qualify lose theirs.
+ */
+export function extractEditableFields(
+  $: CheerioAPI,
+  previous: PreviousFields = {},
+): { texts: ImportedHtmlText[]; mediaSlots: ImportedHtmlMediaSlot[] } {
   const texts: ImportedHtmlText[] = [];
   const mediaSlots: ImportedHtmlMediaSlot[] = [];
+  const labels = new Map((previous.texts ?? []).map((text) => [text.id, text.label]));
+  const nextTextId = counter($, TEXT_ID, "t");
+  const nextMediaKey = counter($, MEDIA_KEY, "m");
+  const seenTexts = new Set<string>();
+  const seenMedia = new Set<string>();
 
   $("*").each((_, raw) => {
     const el = raw as El;
     const tag = tagOf(el);
     const node = $(raw);
 
-    if ((tag === "img" || tag === "video") && mediaSlots.length < MAX_MEDIA) {
+    if (tag === "img" || tag === "video") {
+      node.removeAttr(TEXT_ID);
       const url = node.attr("src") || (tag === "video" ? node.find("source[src]").first().attr("src") : "") || "";
-      if (url && !url.startsWith("data:")) {
-        const key = `m${mediaSlots.length}`;
-        node.attr("data-wb-media-key", key);
-        const alt = node.attr("alt") || node.attr("aria-label");
-        mediaSlots.push({ key, kind: tag === "video" ? "video" : "image", url, ...(alt ? { alt: alt.slice(0, 300) } : {}) });
+      if (!url || url.startsWith("data:") || mediaSlots.length >= MAX_MEDIA) {
+        node.removeAttr(MEDIA_KEY);
+        return;
       }
+      const existing = node.attr(MEDIA_KEY);
+      const key = existing && !seenMedia.has(existing) ? existing : nextMediaKey();
+      seenMedia.add(key);
+      node.attr(MEDIA_KEY, key);
+      const alt = node.attr("alt") || node.attr("aria-label");
+      mediaSlots.push({ key, kind: tag === "video" ? "video" : "image", url, ...(alt ? { alt: alt.slice(0, 300) } : {}) });
       return;
     }
 
-    if (texts.length >= MAX_TEXTS || node.closest("svg").length > 0) return;
+    node.removeAttr(MEDIA_KEY);
     const value = ownText(el);
-    if (!value || value.length > 5000 || !HAS_WORD.test(value)) return;
-    const id = `t${texts.length}`;
-    node.attr("data-wb-text-id", id);
+    if (texts.length >= MAX_TEXTS || node.closest("svg").length > 0 || !value || value.length > 5000 || !HAS_WORD.test(value)) {
+      node.removeAttr(TEXT_ID);
+      return;
+    }
+    const existing = node.attr(TEXT_ID);
+    const id = existing && !seenTexts.has(existing) ? existing : nextTextId();
+    seenTexts.add(id);
+    node.attr(TEXT_ID, id);
     const field = (node.attr("data-wb-field") || "").trim();
-    texts.push({ id, label: (field ? camelToLabel(field) : TEXT_LABELS[tag] ?? "Text").slice(0, 120), value });
+    const label = labels.get(id) ?? (field ? camelToLabel(field) : TEXT_LABELS[tag] ?? "Text");
+    texts.push({ id, label: label.slice(0, 120), value });
   });
 
   return { texts, mediaSlots };

@@ -72,7 +72,7 @@ app.use(
 app.use("/api/payments/razorpay/webhook", razorpayWebhookRouter);
 app.use("/api/shop/razorpay/webhook", shopRazorpayWebhookRouter);
 // Editor saves parse their own (larger) JSON body after sign-in; see EDITOR_SAVE_BODY_LIMIT.
-const EDITOR_SAVE_PATH = /^\/api\/websites\/[^/]+\/(draft|pages\/[^/]+\/content)\/?$/;
+const EDITOR_SAVE_PATH = /^\/api\/websites\/[^/]+\/(draft|pages\/[^/]+\/content|imported-html\/rebuild)\/?$/;
 const jsonBody = express.json({ limit: "1mb" });
 app.use((req, res, next) => (EDITOR_SAVE_PATH.test(req.path) ? next() : jsonBody(req, res, next)));
 app.use(cookieParser());

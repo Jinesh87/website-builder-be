@@ -10,6 +10,7 @@ import { aiSeoService } from "../services/ai-seo.service.js";
 import { aiSiteCopilotService } from "../services/ai-site-copilot.service.js";
 import { isEditableSectionType } from "../services/site-generator.js";
 import { liveSiteEngineService } from "../services/live-site-engine.service.js";
+import { rebuildImportedBlock } from "../services/html-import-code.js";
 import { htmlImportService } from "../services/html-import.service.js";
 import { websiteGenerationService } from "../services/website-generation.service.js";
 import { websiteService } from "../services/website.service.js";
@@ -199,6 +200,16 @@ export class WebsiteController {
     try {
       await websiteService.delete(req.params.id, req.user!);
       res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Re-processes hand-edited code of one imported block; nothing is stored until the page autosaves. */
+  rebuildImportedHtml = async (req: Request<IdParams>, res: Response, next: NextFunction) => {
+    try {
+      await websiteService.assertAccessible(req.params.id, req.user!);
+      res.json({ block: rebuildImportedBlock(req.body) });
     } catch (error) {
       next(error);
     }

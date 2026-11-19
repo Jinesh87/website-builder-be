@@ -1178,6 +1178,11 @@ export class WebsiteService {
     return this.get(id, actor);
   }
 
+  /** Throws NOT_FOUND unless the actor may edit this website. */
+  async assertAccessible(id: string, actor: AuthUser): Promise<void> {
+    await this.findAccessibleOrThrow(id, actor);
+  }
+
   private async findAccessibleOrThrow(id: string, actor: AuthUser): Promise<{ id: string; clientId: string }> {
     const website = await prisma.website.findFirst({
       where: { id, ...scopeFor(actor) },
