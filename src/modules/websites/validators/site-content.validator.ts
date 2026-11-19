@@ -2,6 +2,7 @@ import { enforceScopedCss, IMPORT_SCOPE_PATTERN } from "../services/html-import-
 import { prepareImportedForms } from "../services/html-import-forms.js";
 import { sanitizeImportedHtml } from "../services/html-import-sanitize.js";
 import Joi from "joi";
+import { showcaseSchema } from "./showcase.schema.js";
 import { hasRichText, sanitizeRichText, toPlainText } from "../../../common/utils/rich-text.js";
 import {
   ACCOUNT_ORDER_DETAIL_VARIANTS,
@@ -1786,6 +1787,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     newsletterTitle: optionalText(160),
     newsletterDescription: optionalText(320),
   }),
+  showcase: showcaseSchema({ text, optionalText, image, link, columns }),
 };
 
 /** Content schema of each section type; the single source for validation and the AI field catalog. */

@@ -3,6 +3,8 @@
  * keep the two in sync until the kit moves into a shared package.
  */
 
+import type { ShowcaseData } from "./showcase.types.js";
+
 export type ImageRef = { url: string; alt: string };
 export const LINK_ACTION_TYPES = ["link", "download", "video"] as const;
 export const LINK_ICON_POSITIONS = ["left", "right"] as const;
@@ -202,6 +204,7 @@ export const SECTION_TYPES = [
   "product_detail",
   "account",
   "imported_html",
+  "showcase",
 ] as const;
 
 /** Mirrors frontend/src/site-kit/types.ts. Stored in site data, so values are only ever appended. */
@@ -1240,6 +1243,7 @@ export type SectionDataMap = {
   product_detail: ProductDetailData;
   account: AccountData;
   imported_html: ImportedHtmlData;
+  showcase: ShowcaseData;
 };
 
 /** One editable text node extracted from an imported HTML page. */
