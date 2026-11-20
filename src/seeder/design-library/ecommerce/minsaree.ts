@@ -388,7 +388,7 @@ const account = shopperPage("/account", (data) => ({
 /** Built-in boutique e-commerce template built from the minsaree homepage design. */
 export const MINSAREE: WebsiteTemplateSeed = {
   key: "minsaree-boutique",
-  name: "Minsaree",
+  name: "Premium",
   category: "E-commerce",
   description:
     "Rose-and-cream saree boutique: arched hero, collection cards, latest-products strip, founder story, WhatsApp pre-booking and newsletter.",
