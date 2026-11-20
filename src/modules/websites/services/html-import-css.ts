@@ -505,6 +505,13 @@ export function prepareStylesheet(css: string, keyframePrefix: string): Prepared
         continue;
       }
       if (DROPPED_AT_RULES.has(node.name)) continue;
+      // Unlayered CSS always beats layered CSS, so a layered import (e.g. Tailwind v4) would lose to
+      // the builder's own styles whatever its specificity. Unwrap layers in source order instead;
+      // `@layer a, b;` order statements have nothing left to order.
+      if (node.name === "layer") {
+        if (node.children) out.push(...transform(node.children));
+        continue;
+      }
       if (/^(?:-webkit-|-moz-)?keyframes$/.test(node.name)) {
         const name = node.prelude.replace(/^["']|["']$/g, "").trim();
         out.push({ ...node, prelude: keyframeRenames.get(name) ?? node.prelude });

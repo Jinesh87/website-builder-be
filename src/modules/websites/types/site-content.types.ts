@@ -661,6 +661,20 @@ export type HeroData = {
   tertiaryImage?: ImageRef;
   collagePhotos?: 1 | 2 | 3;
   backgroundImage?: ImageRef;
+  /** Exact hero sizes; unset values keep the layout's own. */
+  sizing?: {
+    height?: number;
+    headingSize?: number;
+    textSize?: number;
+    gap?: number;
+    buttonsGap?: number;
+    buttonSize?: "sm" | "md" | "lg" | "xl";
+    textWidth?: number;
+  };
+  /** background-image variant: 2+ photos crossfade behind the text. */
+  backgroundSlides?: ImageRef[];
+  /** Seconds per background slide; 0 = no autoplay. */
+  slideInterval?: number;
   bgImagePosition?: "bottom" | "center" | "top" | "cover";
   bgOverlayType?: "dark" | "light" | "gradient" | "none";
   backgroundVideoUrl?: string;
@@ -1012,12 +1026,18 @@ export type SectionDataMap = {
       badge?: string;
       description?: string;
       link?: string;
+      /** Filter tab the photo belongs to (e.g. "Kitchen"). */
+      category?: string;
     })[];
     align?: "left" | "center" | "right";
     imageAspect?: "4:3" | "1:1" | "16:9" | "3:4" | "auto";
-    cardStyle?: "default" | "surface" | "overlay";
+    /** "reveal": dark overlay + centred title on hover. */
+    cardStyle?: "default" | "surface" | "overlay" | "reveal";
     imageRadius?: "default" | "soft" | "pill" | "sharp";
     cta?: LinkRef;
+    /** Shows "All" plus one tab per photo category. */
+    filters?: boolean;
+    allLabel?: string;
   };
   logos: { heading?: string; grayscale: boolean; logos: ImageRef[] };
   split: {

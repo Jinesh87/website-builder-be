@@ -185,6 +185,7 @@ const galleryImage = image.keys({
   badge: optionalText(80),
   description: optionalText(1000),
   link: Joi.string().trim().max(2048).allow("").optional(),
+  category: optionalText(60),
 });
 
 const blogSocialLinks = Joi.array()
@@ -832,6 +833,23 @@ export const heroSchema = Joi.object({
   backgroundImage: image
     .optional()
     .description("Photo covering the whole section behind the text; works with every variant."),
+  sizing: Joi.object({
+    height: Joi.number().min(30).max(100).optional(),
+    headingSize: Joi.number().min(20).max(120).optional(),
+    textSize: Joi.number().min(12).max(32).optional(),
+    gap: Joi.number().min(0).max(64).optional(),
+    buttonsGap: Joi.number().min(0).max(80).optional(),
+    buttonSize: Joi.string().valid("sm", "md", "lg", "xl").optional(),
+    textWidth: Joi.number().min(320).max(1200).optional(),
+  })
+    .optional()
+    .description("Exact hero sizes: height (vh), headingSize/textSize/gap/buttonsGap/textWidth (px), buttonSize; unset keeps the layout's own."),
+  backgroundSlides: Joi.array()
+    .items(image)
+    .max(8)
+    .optional()
+    .description("background-image variant: 2+ photos crossfade behind the text with arrows and dots."),
+  slideInterval: Joi.number().integer().min(0).max(30).optional().description("Seconds per background slide; 0 = no autoplay."),
   bgImagePosition: Joi.string().valid("bottom", "center", "top", "cover").optional().description("Focus of backgroundImage."),
   bgOverlayType: Joi.string()
     .valid("dark", "light", "gradient", "none")
@@ -1426,9 +1444,11 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
     images: Joi.array().items(galleryImage).max(48).required(),
     align: Joi.string().valid("left", "center", "right").optional(),
     imageAspect: Joi.string().valid("4:3", "1:1", "16:9", "3:4", "auto").optional(),
-    cardStyle: Joi.string().valid("default", "surface", "overlay").optional(),
+    cardStyle: Joi.string().valid("default", "surface", "overlay", "reveal").optional(),
     imageRadius: Joi.string().valid("default", "soft", "pill", "sharp").optional(),
     cta: link.optional(),
+    filters: Joi.boolean().optional(),
+    allLabel: optionalText(40),
   }),
   logos: Joi.object({
     heading: optionalText(200),
