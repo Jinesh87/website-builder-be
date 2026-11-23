@@ -90,13 +90,23 @@ model ShopPaymentConfig {
   razorpayKeyId               String?  @db.VarChar(100)
   razorpayKeySecretCipher     String?  @db.Text
   razorpayWebhookSecretCipher String?  @db.Text
-  createdAt                   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt                   DateTime @updatedAt @db.Timestamptz(6)
+  /// Set while the shop is connected through the platform's Razorpay partner app (OAuth); used before the keys above.
+  razorpayAccountId           String?   @db.VarChar(64)
+  oauthAccessTokenCipher      String?   @db.Text
+  oauthRefreshTokenCipher     String?   @db.Text
+  /// Razorpay Checkout key for the connected account.
+  oauthPublicToken            String?   @db.VarChar(100)
+  oauthMode                   String?   @db.VarChar(10)
+  oauthExpiresAt              DateTime? @db.Timestamptz(6)
+  oauthConnectedAt            DateTime? @db.Timestamptz(6)
+  createdAt                   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @db.Timestamptz(6)
 
   website Website @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
 
   @@unique([websiteId, clientId])
   @@index([clientId])
+  @@index([razorpayAccountId])
   @@map("shop_payment_configs")
 }
 

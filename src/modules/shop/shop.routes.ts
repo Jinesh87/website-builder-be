@@ -7,6 +7,7 @@ import {
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { shopController } from "./controllers/shop.controller.js";
+import { shopRazorpayConnectController } from "./controllers/shop-razorpay-connect.controller.js";
 import {
   shopCategoryParamsSchema,
   shopCategorySchema,
@@ -29,6 +30,7 @@ import {
   shopPaymentLogQuerySchema,
   shopOrderStatusSchema,
   shopPaymentSchema,
+  shopRazorpayConnectSchema,
   shopProductParamsSchema,
   shopProductQuerySchema,
   shopProductSchema,
@@ -229,6 +231,15 @@ shopRouter.get(
   rateLimit({ name: "shop-payment-secrets", max: 20, windowSeconds: 60 * 60 }),
   shopController.revealPaymentSecrets,
 );
+
+shopRouter.post(
+  "/payments/razorpay/connect",
+  websiteParams,
+  rateLimit({ name: "shop-razorpay-connect", max: 30, windowSeconds: 60 * 60 }),
+  validate(shopRazorpayConnectSchema),
+  shopRazorpayConnectController.start,
+);
+shopRouter.delete("/payments/razorpay/connect", websiteParams, shopRazorpayConnectController.disconnect);
 
 /** Public. Mounted before express.json() so the Razorpay signature covers the raw body. */
 export const shopRazorpayWebhookRouter = Router();

@@ -67,6 +67,11 @@ export const env = {
   UPLOAD_LOCAL_DIR: process.env.UPLOAD_LOCAL_DIR?.trim() || "uploads",
   /** Public base URL of this API, used to build media URLs embedded in website content. */
   API_PUBLIC_URL: (process.env.API_PUBLIC_URL?.trim() || `http://localhost:${process.env.PORT ?? 3000}`).replace(/\/$/, ""),
+  /**
+   * Optional: the Razorpay partner OAuth redirect URL, when it must differ from API_PUBLIC_URL
+   * (e.g. an ngrok address for local testing). Must match a redirect URL saved on the partner app.
+   */
+  RAZORPAY_OAUTH_REDIRECT_URI: process.env.RAZORPAY_OAUTH_REDIRECT_URI?.trim() || "",
 
   SEED_SUPER_ADMIN_EMAIL: required("SEED_SUPER_ADMIN_EMAIL").toLowerCase(),
   SEED_SUPER_ADMIN_PASSWORD: required("SEED_SUPER_ADMIN_PASSWORD"),

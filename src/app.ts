@@ -27,6 +27,7 @@ import publicTemplatesRouter from "./modules/websites/public-template.routes.js"
 import publicSiteRouter from "./modules/websites/public-site.routes.js";
 import templateCategoriesRouter from "./modules/websites/template-category.routes.js";
 import shopRouter, { shopRazorpayWebhookRouter } from "./modules/shop/shop.routes.js";
+import { shopRazorpayOAuthRouter, shopRazorpayPartnerWebhookRouter } from "./modules/shop/shop-razorpay.routes.js";
 import shopAuthRouter from "./modules/shop/shop-auth.routes.js";
 import websitesRouter from "./modules/websites/website.routes.js";
 import adminEnquiriesRouter from "./modules/contact/admin-enquiry.routes.js";
@@ -71,6 +72,8 @@ app.use(
 );
 app.use("/api/payments/razorpay/webhook", razorpayWebhookRouter);
 app.use("/api/shop/razorpay/webhook", shopRazorpayWebhookRouter);
+app.use("/api/shop/razorpay/partner-webhook", shopRazorpayPartnerWebhookRouter);
+app.use("/api/shop/razorpay/oauth", shopRazorpayOAuthRouter);
 // Editor saves parse their own (larger) JSON body after sign-in; see EDITOR_SAVE_BODY_LIMIT.
 const EDITOR_SAVE_PATH = /^\/api\/websites\/[^/]+\/(draft|pages\/[^/]+\/content|imported-html\/rebuild)\/?$/;
 const jsonBody = express.json({ limit: "1mb" });

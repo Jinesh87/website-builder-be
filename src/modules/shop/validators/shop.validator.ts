@@ -137,6 +137,11 @@ export const shopPaymentSchema = Joi.object({
   razorpayWebhookSecret: Joi.string().trim().allow("").max(200).optional(),
 });
 
+export const shopRazorpayConnectSchema = Joi.object({
+  /** App path to come back to after Razorpay, e.g. "/shop?website=…". */
+  returnTo: Joi.string().trim().max(500).pattern(/^\/(?!\/)/).optional(),
+});
+
 export const shopWebhookParamsSchema = Joi.object({
   websiteId: Joi.string().guid().required(),
 });

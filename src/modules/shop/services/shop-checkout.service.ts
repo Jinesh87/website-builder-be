@@ -1,10 +1,15 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import { UserStatus } from "../../../common/constants/roles.js";
-import { decryptSecret } from "../../../common/utils/secret-box.js";
 import { prisma } from "../../../config/prisma.js";
 import { logger } from "../../../config/logger.js";
 import { Prisma, ShopOrderStatus, ShopRefundStatus, type ShopOrder } from "../../../generated/prisma/client.js";
-import { createRazorpayOrder, toRazorpayContact, createRazorpayRefund } from "../../wallet/services/razorpay.client.js";
+import {
+  checkoutKeyOf,
+  createRazorpayOrder,
+  createRazorpayRefund,
+  toRazorpayContact,
+} from "../../wallet/services/razorpay.client.js";
+import { shopRazorpayAuth } from "./shop-razorpay-auth.js";
 import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
 import { razorpayErrorMessage, recordPaymentLog, refundReasonLabel } from "../utils/shop-payment-log.js";
 import { verifyCheckoutPayment } from "./shop-payment-verify.js";
@@ -223,17 +228,6 @@ export async function restoreStockOnce(
   return cleared.count > 0;
 }
 
-async function shopPaymentKeys(websiteId: string): Promise<{ keyId: string; keySecret: string } | null> {
-  const config = await prisma.shopPaymentConfig.findUnique({
-    where: { websiteId },
-    select: { razorpayKeyId: true, razorpayKeySecretCipher: true },
-  });
-  if (!config?.razorpayKeyId || !config.razorpayKeySecretCipher) return null;
-  const keySecret = decryptSecret(config.razorpayKeySecretCipher);
-  if (!keySecret) return null;
-  return { keyId: config.razorpayKeyId, keySecret };
-}
-
 /**
  * Deducts stock for each line once using an atomic DB check (`quantity >= need`).
  * Throws INSUFFICIENT_STOCK / VARIANT_NOT_FOUND when a line cannot be taken — caller may refund.
@@ -414,7 +408,7 @@ export class ShopCheckoutService {
       country: address.country,
     };
 
-    const keys = await shopPaymentKeys(websiteId);
+    const keys = await shopRazorpayAuth(websiteId);
     if (!keys) {
       throw new AppError(400, "This shop isn't set up to take payments yet.", "PAYMENTS_NOT_CONFIGURED");
     }
@@ -635,7 +629,7 @@ export class ShopCheckoutService {
     return {
       orderId: order.id,
       orderNumber: String(order.number),
-      keyId: keys.keyId,
+      keyId: checkoutKeyOf(keys),
       razorpayOrderId: razorpay.id,
       amountPaise: totalPaise,
       currency: PAYMENT_CURRENCY,
@@ -667,7 +661,7 @@ export class ShopCheckoutService {
     });
     if (!order) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
 
-    const keys = await shopPaymentKeys(websiteId);
+    const keys = await shopRazorpayAuth(websiteId);
     if (!keys) throw new AppError(400, "This shop isn't set up to take payments yet.", "PAYMENTS_NOT_CONFIGURED");
 
     const payment = await verifyCheckoutPayment(websiteId, keys, order, input);
@@ -702,7 +696,7 @@ export class ShopCheckoutService {
     reason: string,
     purpose = "shop_stock_unavailable",
   ): Promise<{ ok: boolean; refundStatus: ShopRefundStatus }> {
-    const keys = await shopPaymentKeys(websiteId);
+    const keys = await shopRazorpayAuth(websiteId);
     if (!keys) {
       logger.error({ websiteId, orderId, razorpayPaymentId }, "Shop refund skipped: payment keys missing");
       await prisma.shopOrder.update({

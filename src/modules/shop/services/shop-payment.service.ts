@@ -7,12 +7,24 @@ import { logger } from "../../../config/logger.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { checkRazorpayKeys, isValidWebhookSignature } from "../../wallet/services/razorpay.client.js";
+import { razorpayPartnerSettingsService } from "../../wallet/services/razorpay-partner-settings.service.js";
 import type { RazorpayWebhookEvent } from "../../wallet/services/wallet.service.js";
 import { logWebhookEvent, recordPaymentLog } from "../utils/shop-payment-log.js";
 import { shopCheckoutService } from "./shop-checkout.service.js";
 
+export type ShopRazorpayConnectionView = {
+  accountId: string | null;
+  mode: "test" | "live";
+  connectedAt: string | null;
+};
+
 export type ShopPaymentConfigView = {
+  /** The shop can take payments: connected through Razorpay, or its own API keys are saved. */
   configured: boolean;
+  /** The platform's Razorpay partner app is set up, so "Connect with Razorpay" can be offered. */
+  connectAvailable: boolean;
+  /** Set while connected through Razorpay; this account is used instead of the API keys below. */
+  connection: ShopRazorpayConnectionView | null;
   mode: "test" | "live" | null;
   razorpayKeyId: string | null;
   razorpayKeySecretMasked: string | null;
@@ -70,12 +82,19 @@ export class ShopPaymentService {
 
   async getConfig(websiteId: string, actor: AuthUser): Promise<ShopPaymentConfigView> {
     const website = await this.openWebsite(websiteId, actor);
-    return this.toView(website);
+    return this.toView(website, await razorpayPartnerSettingsService.isConfigured());
   }
 
   async updateConfig(websiteId: string, input: UpdateShopPaymentInput, actor: AuthUser): Promise<ShopPaymentConfigView> {
     const website = await this.openWebsite(websiteId, actor);
     const existing = website.shopPayment;
+    if (existing?.oauthAccessTokenCipher) {
+      throw new AppError(
+        409,
+        "This shop is connected with Razorpay. Disconnect it first to use API keys instead.",
+        "RAZORPAY_CONNECTED",
+      );
+    }
     const keyId = input.razorpayKeyId.trim();
     const newSecret = input.razorpayKeySecret?.trim();
     const newWebhookSecret = input.razorpayWebhookSecret?.trim();
@@ -111,7 +130,7 @@ export class ShopPaymentService {
         ...(newWebhookSecret ? { razorpayWebhookSecretCipher: encryptSecret(newWebhookSecret) } : {}),
       },
     });
-    return this.toView({ ...website, shopPayment: saved });
+    return this.toView({ ...website, shopPayment: saved }, await razorpayPartnerSettingsService.isConfigured());
   }
 
   async revealSecrets(
@@ -134,9 +153,15 @@ export class ShopPaymentService {
   async handleWebhook(websiteId: string, rawBody: Buffer, signature: string | undefined): Promise<void> {
     const config = await prisma.shopPaymentConfig.findUnique({
       where: { websiteId },
-      select: { razorpayWebhookSecretCipher: true },
+      select: { razorpayWebhookSecretCipher: true, oauthAccessTokenCipher: true },
     });
     const secret = config?.razorpayWebhookSecretCipher ? decryptSecret(config.razorpayWebhookSecretCipher) : null;
+    // A shop that switched to "Connect with Razorpay" may still have its old webhook on Razorpay. Its events now
+    // arrive on the partner webhook, so acknowledge (without trusting or applying) to stop Razorpay retrying.
+    if (!secret && config?.oauthAccessTokenCipher) {
+      logger.info({ websiteId }, "Old shop webhook ignored: the shop is connected through the partner app");
+      return;
+    }
     if (!signature || !secret || !isValidWebhookSignature(secret, rawBody, signature)) {
       await recordPaymentLog({
         websiteId,
@@ -167,18 +192,32 @@ export class ShopPaymentService {
       razorpayKeyId: string | null;
       razorpayKeySecretCipher: string | null;
       razorpayWebhookSecretCipher: string | null;
+      razorpayAccountId: string | null;
+      oauthAccessTokenCipher: string | null;
+      oauthMode: string | null;
+      oauthConnectedAt: Date | null;
       updatedAt: Date;
     } | null;
-  }): ShopPaymentConfigView {
+  }, connectAvailable: boolean): ShopPaymentConfigView {
     const config = website.shopPayment;
     const keySecret = config?.razorpayKeySecretCipher ? decryptSecret(config.razorpayKeySecretCipher) : null;
     const webhookSecret = config?.razorpayWebhookSecretCipher ? decryptSecret(config.razorpayWebhookSecretCipher) : null;
+    const connection: ShopRazorpayConnectionView | null = config?.oauthAccessTokenCipher
+      ? {
+          accountId: config.razorpayAccountId,
+          mode: config.oauthMode === "test" ? "test" : "live",
+          connectedAt: config.oauthConnectedAt?.toISOString() ?? null,
+        }
+      : null;
     return {
-      configured: Boolean(config?.razorpayKeyId && keySecret),
-      mode: modeOf(config?.razorpayKeyId),
+      configured: Boolean(connection || (config?.razorpayKeyId && keySecret)),
+      connectAvailable,
+      connection,
+      mode: connection?.mode ?? modeOf(config?.razorpayKeyId),
       razorpayKeyId: config?.razorpayKeyId ?? null,
       razorpayKeySecretMasked: keySecret ? mask(keySecret) : null,
-      webhookConfigured: Boolean(webhookSecret),
+      // A connected account's events arrive on the platform's partner webhook.
+      webhookConfigured: Boolean(connection || webhookSecret),
       webhookUrl: webhookUrl(website.id),
       siteUrl: siteUrl(website.subdomain, website.domains[0]?.hostname ?? null),
       updatedAt: config?.updatedAt.toISOString() ?? null,

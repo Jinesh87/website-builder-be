@@ -2,8 +2,9 @@ import { AppError } from "../../../common/errors/AppError.js";
 import {
   captureRazorpayPayment,
   fetchRazorpayPayment,
+  isOAuthKeys,
   isValidPaymentSignature,
-  type RazorpayKeys,
+  type RazorpayAuth,
   type RazorpayPayment,
 } from "../../wallet/services/razorpay.client.js";
 import { razorpayErrorMessage, recordPaymentLog } from "../utils/shop-payment-log.js";
@@ -22,19 +23,21 @@ type PaymentProof = {
 };
 
 /**
- * Checks the checkout's Razorpay signature, confirms the payment matches the order, and captures it when only
+ * Checks the checkout's Razorpay signature (API-key shops), confirms the payment matches the order, and captures it when only
  * authorized. Returns the captured payment; every outcome is written to the shop's Razorpay logs.
  */
 export async function verifyCheckoutPayment(
   websiteId: string,
-  keys: RazorpayKeys,
+  keys: RazorpayAuth,
   order: CheckoutOrder,
   proof: PaymentProof,
 ): Promise<RazorpayPayment> {
   const log = (kind: "payment_verified" | "payment_captured", success: boolean, message: string, ref = proof.razorpayPaymentId) =>
     recordPaymentLog({ websiteId, orderId: order.id, kind, success, amountPaise: order.totalPaise, razorpayRef: ref, message });
 
-  if (!isValidPaymentSignature(keys.keySecret, proof.razorpayOrderId, proof.razorpayPaymentId, proof.razorpaySignature)) {
+  // A connected (OAuth) account has no key secret to sign with; the payment fetched below with the shop's own
+  // access token is the proof instead: it must belong to this Razorpay order, amount and currency.
+  if (!isOAuthKeys(keys) && !isValidPaymentSignature(keys.keySecret, proof.razorpayOrderId, proof.razorpayPaymentId, proof.razorpaySignature)) {
     await log("payment_verified", false, "Payment signature didn't match; the payment was not accepted.");
     throw new AppError(
       400,

@@ -13,6 +13,7 @@ import { ensureTemplateStudio } from "./modules/websites/services/template-studi
 import { exchangeRateService } from "./modules/wallet/services/exchange-rate.service.js";
 import { hostingBillingWorker } from "./modules/hosting/services/hosting-billing.worker.js";
 import { websiteBackupWorker } from "./modules/websites/services/website-backup.worker.js";
+import { shopRazorpayTokenWorker } from "./modules/shop/services/shop-razorpay-token.worker.js";
 
 async function bootstrap() {
   await prisma.$connect();
@@ -32,6 +33,7 @@ async function bootstrap() {
   exchangeRateService.start();
   hostingBillingWorker.start();
   websiteBackupWorker.start();
+  shopRazorpayTokenWorker.start();
   if (env.NODE_ENV === "production" && env.SITE_SERVER_IPS.length === 0 && !env.SITE_CNAME_TARGET) {
     logger.warn("SITE_SERVER_IPS is not set: custom domains are verified by TXT record only and customers get no A record to add");
   }
@@ -43,6 +45,7 @@ async function bootstrap() {
     exchangeRateService.stop();
     hostingBillingWorker.stop();
     websiteBackupWorker.stop();
+    shopRazorpayTokenWorker.stop();
     server.close(() => {
       void Promise.allSettled([prisma.$disconnect(), redis.quit()]).finally(() => process.exit(0));
     });

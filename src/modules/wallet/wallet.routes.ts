@@ -8,6 +8,7 @@ import {
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { walletController } from "./controllers/wallet.controller.js";
+import { razorpayPartnerController } from "./controllers/razorpay-partner.controller.js";
 import {
   CONNECTS_PACK_SIZE,
   MAX_PURCHASE_CONNECTS,
@@ -134,6 +135,21 @@ paymentSettingsRouter.get(
     windowSeconds: 60 * 60,
   }),
   walletController.revealSecrets,
+);
+
+const updateRazorpayPartnerSchema = Joi.object({
+  clientId: Joi.string().trim().min(4).max(100).required(),
+  clientSecret: Joi.string().trim().allow("").max(200).optional(),
+  webhookSecret: Joi.string().trim().allow("").max(200).optional(),
+  mode: Joi.string().valid("test", "live").required(),
+});
+
+paymentSettingsRouter.get("/partner", razorpayPartnerController.get);
+paymentSettingsRouter.put("/partner", validate(updateRazorpayPartnerSchema), razorpayPartnerController.update);
+paymentSettingsRouter.get(
+  "/partner/secrets",
+  rateLimit({ name: "razorpay-partner-secrets-reveal", max: 20, windowSeconds: 60 * 60 }),
+  razorpayPartnerController.revealSecrets,
 );
 
 const updateBillingSchema = Joi.object({

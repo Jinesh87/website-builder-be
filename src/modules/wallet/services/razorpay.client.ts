@@ -5,6 +5,26 @@ const API_BASE = "https://api.razorpay.com/v1";
 
 export type RazorpayKeys = { keyId: string; keySecret: string };
 
+/** A merchant account connected through the platform's partner app (OAuth). */
+export type RazorpayOAuthKeys = { accessToken: string; publicToken: string };
+
+/** Either the account's own API keys or an OAuth connection. */
+export type RazorpayAuth = RazorpayKeys | RazorpayOAuthKeys;
+
+export function isOAuthKeys(auth: RazorpayAuth): auth is RazorpayOAuthKeys {
+  return "accessToken" in auth;
+}
+
+/** The `key` Razorpay Checkout needs in the browser. */
+export function checkoutKeyOf(auth: RazorpayAuth): string {
+  return isOAuthKeys(auth) ? auth.publicToken : auth.keyId;
+}
+
+function authorizationHeader(auth: RazorpayAuth): string {
+  if (isOAuthKeys(auth)) return `Bearer ${auth.accessToken}`;
+  return `Basic ${Buffer.from(`${auth.keyId}:${auth.keySecret}`).toString("base64")}`;
+}
+
 /**
  * Prefill contact for Checkout. Digits only; strip a leading India country code / trunk 0
  * so "+919526040251" becomes "9526040251". A 12-digit "91…" value breaks some methods.
@@ -53,13 +73,12 @@ export type RazorpaySubscription = {
   paid_count: number;
 };
 
-async function call<T>(keys: RazorpayKeys, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-  const auth = Buffer.from(`${keys.keyId}:${keys.keySecret}`).toString("base64");
+async function call<T>(keys: RazorpayAuth, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+      headers: { Authorization: authorizationHeader(keys), "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     });
@@ -69,7 +88,10 @@ async function call<T>(keys: RazorpayKeys, method: "GET" | "POST", path: string,
   const json = (await response.json().catch(() => ({}))) as T & { error?: { description?: string } };
   if (!response.ok) {
     if (response.status === 401) {
-      throw new AppError(502, "Razorpay rejected the API keys. Check the payment settings.", "PAYMENT_GATEWAY_AUTH");
+      const message = isOAuthKeys(keys)
+        ? "Razorpay rejected the connection. Reconnect Razorpay in the shop's payment settings."
+        : "Razorpay rejected the API keys. Check the payment settings.";
+      throw new AppError(502, message, "PAYMENT_GATEWAY_AUTH");
     }
     throw new AppError(502, json.error?.description || "Razorpay couldn't process the request.", "PAYMENT_GATEWAY_ERROR");
   }
@@ -77,7 +99,7 @@ async function call<T>(keys: RazorpayKeys, method: "GET" | "POST", path: string,
 }
 
 export function createRazorpayOrder(
-  keys: RazorpayKeys,
+  keys: RazorpayAuth,
   input: { amountPaise: number; currency: string; receipt: string; notes: Record<string, string> },
 ): Promise<RazorpayOrder> {
   return call(keys, "POST", "/orders", {
@@ -88,12 +110,12 @@ export function createRazorpayOrder(
   });
 }
 
-export function fetchRazorpayPayment(keys: RazorpayKeys, paymentId: string): Promise<RazorpayPayment> {
+export function fetchRazorpayPayment(keys: RazorpayAuth, paymentId: string): Promise<RazorpayPayment> {
   return call(keys, "GET", `/payments/${encodeURIComponent(paymentId)}`);
 }
 
 export function captureRazorpayPayment(
-  keys: RazorpayKeys,
+  keys: RazorpayAuth,
   paymentId: string,
   amountPaise: number,
   currency: string,
@@ -111,7 +133,7 @@ export type RazorpayRefund = {
 
 /** Full refund when `amountPaise` is omitted. Only works on captured payments. */
 export function createRazorpayRefund(
-  keys: RazorpayKeys,
+  keys: RazorpayAuth,
   paymentId: string,
   input: { amountPaise?: number; notes?: Record<string, string>; receipt?: string } = {},
 ): Promise<RazorpayRefund> {
@@ -157,7 +179,7 @@ export function cancelRazorpaySubscription(keys: RazorpayKeys, subscriptionId: s
 }
 
 /** Cheap authenticated call used to check keys before saving them. */
-export async function checkRazorpayKeys(keys: RazorpayKeys): Promise<void> {
+export async function checkRazorpayKeys(keys: RazorpayAuth): Promise<void> {
   await call(keys, "GET", "/orders?count=1");
 }
 

@@ -172,3 +172,18 @@ enum AutopayStatus {
   COMPLETED
   EXPIRED
 }
+
+/// Singleton (id = "default"): the platform's Razorpay Technology Partner app, used to connect shop owners'
+/// Razorpay accounts with OAuth. Secrets are AES-256-GCM encrypted with APP_ENCRYPTION_KEY.
+model RazorpayPartnerApp {
+  id                  String   @id @default("default") @db.VarChar(50)
+  clientId            String?  @db.VarChar(100)
+  clientSecretCipher  String?  @db.Text
+  webhookSecretCipher String?  @db.Text
+  /// "test" (development client) or "live" (production client).
+  mode                String   @default("live") @db.VarChar(10)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("razorpay_partner_app")
+}
