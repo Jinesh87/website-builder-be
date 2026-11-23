@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { resolveTemplateKey } from "../utils/template-key-aliases.js";
 
 const name = Joi.string().trim().min(2).max(120);
 const categoryId = Joi.string().guid().messages({ "string.guid": "Choose a category", "any.required": "Choose a category" });
@@ -37,6 +38,7 @@ export const createStudioWebsiteSchema = Joi.object({
       .trim()
       .max(80)
       .pattern(/^[a-z0-9-]+$/)
+      .custom(resolveTemplateKey)
       .required(),
     otherwise: Joi.forbidden(),
   }),

@@ -9,9 +9,9 @@ import type { ThemeSeed } from "../themes.js";
 import type { WebsiteTemplateSeed } from "../templates.js";
 import { PANNJHA_SAREE } from "./pannjha-saree.js";
 
-/** Rose-and-cream boutique theme paired with the Minsaree template. */
-export const MINSAREE_THEME: ThemeSeed = {
-  name: "Minsaree Rose",
+/** Rose-and-cream boutique theme paired with the Premium template. */
+export const PREMIUM_BOUTIQUE_THEME: ThemeSeed = {
+  name: "Premium Boutique",
   settings: {
     fonts: { heading: "cormorant", body: "work-sans" },
     colors: {
@@ -134,7 +134,7 @@ const home: TemplatePage = {
       "hero",
       {
         variant: "arch-collage",
-        eyebrow: "Minsaree by Mini",
+        eyebrow: "Our story",
         heading: "Drape Your Story in Grace",
         subheading:
           "Curated sarees, kurtas and kaftans, chosen with love for every occasion, from everyday elegance to festive grace.",
@@ -172,7 +172,7 @@ const home: TemplatePage = {
         design: "featured-grid",
         cardButton: "single",
         eyebrow: "New this season",
-        title: "Latest from minsaree",
+        title: "Latest arrivals",
         layout: "grid-4",
         limit: 8,
         badgeLabel: "NEW",
@@ -202,11 +202,11 @@ const home: TemplatePage = {
         eyebrow: "Our story",
         heading: "Every dream begins with a single step.",
         body:
-          "Minsaree by Mini began as a quiet dream, rooted in love, strengthened by gratitude and inspired by the timeless grace of tradition.\n\nWith the support of family and friends, Mini took the leap. What started as a dream became a purpose: to bring elegance, confidence and timeless style to every wardrobe.",
+          "Our boutique began as a quiet dream, rooted in love, strengthened by gratitude and inspired by the timeless grace of tradition.\n\nWith the support of family and friends, we took the leap. What started as a dream became a purpose: to bring elegance, confidence and timeless style to every wardrobe.",
         bullets: [],
         imagePosition: "left",
         imageStyle: "arch",
-        signature: "— Mini, Founder",
+        signature: "— The Founder",
         cta: { label: "Read Our Story", href: "/about" },
       },
       { background: "surface", anchor: "story" },
@@ -218,7 +218,7 @@ const home: TemplatePage = {
       text: "Get exclusive deals and early access to new products.",
       button: { label: "Subscribe", href: "#" },
       placeholder: "Your email address",
-      successText: "Subscribed. Welcome to minsaree!",
+      successText: "Subscribed. Welcome aboard!",
     }),
   ],
 };
@@ -280,11 +280,11 @@ const about: TemplatePage = {
         eyebrow: "Our story",
         heading: "Every dream begins with a single step.",
         body:
-          "Minsaree by Mini began as a quiet dream, rooted in love, strengthened by gratitude and inspired by the timeless grace of tradition.\n\nWith the support of family and friends, Mini took the leap. What started as a dream became a purpose: to bring elegance, confidence and timeless style to every wardrobe.\n\nEvery saree, kurta and kaftan in the collection is chosen by hand, for the way it drapes, the way it feels and the moments it is made for.",
+          "Our boutique began as a quiet dream, rooted in love, strengthened by gratitude and inspired by the timeless grace of tradition.\n\nWith the support of family and friends, we took the leap. What started as a dream became a purpose: to bring elegance, confidence and timeless style to every wardrobe.\n\nEvery saree, kurta and kaftan in the collection is chosen by hand, for the way it drapes, the way it feels and the moments it is made for.",
         bullets: [],
         imagePosition: "left",
         imageStyle: "arch",
-        signature: "— Mini, Founder",
+        signature: "— The Founder",
         cta: { label: "Shop the Collection", href: "/shop" },
       },
       { background: "surface", spacing: "relaxed" },
@@ -385,14 +385,14 @@ const account = shopperPage("/account", (data) => ({
   subheading: "Your orders, cart and profile in one place.",
 }));
 
-/** Built-in boutique e-commerce template built from the minsaree homepage design. */
-export const MINSAREE: WebsiteTemplateSeed = {
-  key: "minsaree-boutique",
+/** Built-in "Premium" boutique e-commerce template. */
+export const PREMIUM_BOUTIQUE: WebsiteTemplateSeed = {
+  key: "premium-boutique",
   name: "Premium",
   category: "E-commerce",
   description:
     "Rose-and-cream saree boutique: arched hero, collection cards, latest-products strip, founder story, WhatsApp pre-booking and newsletter.",
-  themeName: MINSAREE_THEME.name,
+  themeName: PREMIUM_BOUTIQUE_THEME.name,
   header,
   footer,
   pages: [home, shop, product, about, contact, login, account, ...policies],

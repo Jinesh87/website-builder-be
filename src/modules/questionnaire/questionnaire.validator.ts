@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { resolveTemplateKey } from "../websites/utils/template-key-aliases.js";
 import {
   BUSINESS_TYPES,
   DOMAIN_OPTIONS,
@@ -108,7 +109,7 @@ export const questionnaireAnswersSchema = Joi.object({
       "any.required": "Please specify how soon you need the website.",
     }),
   themeId: Joi.string().guid().allow(null).default(null),
-  templateKey: Joi.string().trim().max(80).empty("").allow(null).default(null),
+  templateKey: Joi.string().trim().max(80).custom(resolveTemplateKey).empty("").allow(null).default(null),
   logoMediaId: Joi.string().guid().allow(null).default(null),
   mediaIds: Joi.array()
     .items(Joi.string().guid())

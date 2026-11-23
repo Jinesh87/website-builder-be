@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { resolveTemplateKey } from "../utils/template-key-aliases.js";
 import { BuilderType, PageType, WebsiteStatus } from "../../../common/constants/website.js";
 import { GENERATION_TONES, MAX_BRIEF_IMAGES, MAX_GENERATED_PAGES } from "../types/website-generation.types.js";
 import { footerSchema, headerSchema, sectionSchema, sectionsSchema, themeSchema } from "./site-content.validator.js";
@@ -38,6 +39,7 @@ export const templateKeyParamsSchema = Joi.object({
     .trim()
     .max(80)
     .pattern(/^[a-z0-9-]+$/)
+    .custom(resolveTemplateKey)
     .required(),
 });
 
@@ -82,7 +84,7 @@ export const listWebsitesQuerySchema = Joi.object({
 export const createWebsiteSchema = Joi.object({
   clientId: Joi.string().guid().optional(),
   name: Joi.string().trim().min(2).max(120).required(),
-  templateKey: Joi.string().trim().max(80).optional(),
+  templateKey: Joi.string().trim().max(80).custom(resolveTemplateKey).optional(),
   themeId: Joi.string().guid().optional(),
   subdomain: Joi.string()
     .trim()

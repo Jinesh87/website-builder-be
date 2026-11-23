@@ -28,6 +28,7 @@ import type {
   QuestionnaireView,
   UpdateQuestionnaireInput,
 } from "./questionnaire.types.js";
+import { resolveTemplateKey } from "../websites/utils/template-key-aliases.js";
 
 const DEFAULT_SALES_EMAIL = "support@bytezoracoders.com";
 
@@ -124,7 +125,7 @@ const platformTemplateWhere = (key: string): Prisma.WebsiteTemplateWhereInput =>
   const isNum = /^[0-9]+$/.test(key);
   return {
     OR: [
-      { key },
+      { key: resolveTemplateKey(key) },
       ...(isNum ? [{ number: parseInt(key, 10) }] : []),
     ],
     clientId: null,
