@@ -85,6 +85,10 @@ export const HEADER_DESIGNS = [
   "headline-ticker",
   "vintage-editorial",
   "boutique",
+  "contact-topbar",
+  "call-now",
+  "contact-stacked",
+  "centered-phone",
 ] as const;
 export const FOOTER_DESIGNS = [
   "columns",
@@ -499,6 +503,11 @@ export type HeaderData = {
   menuLabel?: string;
   contactLabel?: string;
   contactEmail?: string;
+  phone?: string;
+  phoneLabel?: string;
+  contactHours?: string;
+  contactAddress?: string;
+  mobileCallButton?: boolean;
   featured?: {
     badge?: string;
     title: string;

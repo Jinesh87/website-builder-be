@@ -815,6 +815,10 @@ export function sanitizeSectionData(
         "mega-menu-grid",
         "side-drawer",
         "headline-ticker",
+        "contact-topbar",
+        "call-now",
+        "contact-stacked",
+        "centered-phone",
       ];
       if (
         typeof data.design !== "string" ||
