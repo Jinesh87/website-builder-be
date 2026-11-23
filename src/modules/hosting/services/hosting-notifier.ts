@@ -51,6 +51,15 @@ function adminMessage(event: HostingEvent, site: string, clientName: string): Me
       ];
       return { title: `Renewal due: ${who}`, body: lines.join(" "), heading: "Hosting renewal coming up", lines };
     }
+    case "OVERDUE_REMINDER": {
+      const lines = [
+        `Hosting for ${who} expired on ${formatBillingDate(event.periodEnd)} and is still unpaid${priceText(event.price)}.`,
+        event.graceEndsAt
+          ? `It goes offline on ${formatBillingDate(event.graceEndsAt)} unless paid.`
+          : "The site is offline until it's paid.",
+      ];
+      return { title: `Renewal overdue: ${who}`, body: lines.join(" "), heading: "Hosting renewal overdue", lines };
+    }
     case "PAID": {
       const lines = [
         `Hosting for ${who} is paid for ${formatPeriod(event.periodStart, event.periodEnd)}, ${howPaid(event)} (${paidText(event)}).`,

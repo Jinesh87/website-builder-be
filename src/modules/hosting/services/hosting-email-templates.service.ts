@@ -73,6 +73,14 @@ function renewsNote(
   return `Renew it from the website's Hosting tab before ${due} to keep the site live.`;
 }
 
+function overdueNote(event: Extract<HostingEvent, { kind: "OVERDUE_REMINDER" }>): string {
+  const price = priceSuffix(event.price);
+  if (event.graceEndsAt) {
+    return `The site stays live until ${formatBillingDate(event.graceEndsAt)}. Renew it${price} from the website's Hosting tab before then, or it goes offline.`;
+  }
+  return `The site is offline. Renew hosting${price} from the website's Hosting tab and it goes live again straight away.`;
+}
+
 function paidAmount(event: Extract<HostingEvent, { kind: "PAID" }>): string {
   if (event.amountPaise === 0) return "free";
   return event.connects
@@ -97,8 +105,26 @@ function eventVars(event: HostingEvent, websiteName: string, clientName: string)
         amount: "",
         restoredNote: "",
         reasonDetail: "",
+        daysOverdue: "",
+        overdueNote: "",
       };
     }
+    case "OVERDUE_REMINDER":
+      return {
+        ...base,
+        renewalDate: formatBillingDate(event.periodEnd),
+        graceEndsAt: event.graceEndsAt ? formatBillingDate(event.graceEndsAt) : "",
+        priceSuffix: priceSuffix(event.price),
+        price: priceLabel(event.price),
+        renewalNote: "",
+        packageName: "",
+        period: "",
+        amount: "",
+        restoredNote: "",
+        reasonDetail: "",
+        daysOverdue: event.daysOverdue === 1 ? "1 day" : `${event.daysOverdue} days`,
+        overdueNote: overdueNote(event),
+      };
     case "PAID":
       return {
         ...base,
@@ -112,6 +138,8 @@ function eventVars(event: HostingEvent, websiteName: string, clientName: string)
         amount: paidAmount(event),
         restoredNote: event.restored ? "The site is live again." : "",
         reasonDetail: "",
+        daysOverdue: "",
+        overdueNote: "",
       };
     case "EXPIRED":
       return {
@@ -126,6 +154,8 @@ function eventVars(event: HostingEvent, websiteName: string, clientName: string)
         amount: "",
         restoredNote: "",
         reasonDetail: "",
+        daysOverdue: "",
+        overdueNote: "",
       };
     case "SUSPENDED":
       return {
@@ -140,6 +170,8 @@ function eventVars(event: HostingEvent, websiteName: string, clientName: string)
         amount: "",
         restoredNote: "",
         reasonDetail: "",
+        daysOverdue: "",
+        overdueNote: "",
       };
     case "AUTOPAY_STOPPED":
       return {
@@ -154,6 +186,8 @@ function eventVars(event: HostingEvent, websiteName: string, clientName: string)
         amount: "",
         restoredNote: "",
         reasonDetail: AUTOPAY_STOPPED_DETAIL[event.reason](websiteName),
+        daysOverdue: "",
+        overdueNote: "",
       };
   }
 }

@@ -24,6 +24,14 @@ export type HostingEvent =
       paidBy: HostingPayer;
       restored: boolean;
     }
+  | {
+      kind: "OVERDUE_REMINDER";
+      periodEnd: Date;
+      daysOverdue: number;
+      /** Set while the site is still live in its grace days; null once it was taken offline. */
+      graceEndsAt: Date | null;
+      price: number | null;
+    }
   | { kind: "EXPIRED"; graceEndsAt: Date; price: number | null }
   | { kind: "SUSPENDED" }
   | { kind: "AUTOPAY_STOPPED"; reason: AutopayStopReason };

@@ -55,9 +55,15 @@ import {
 const CONFIG_ID = "default";
 const RECENT_PAYMENTS = 20;
 
-export type HostingRules = Pick<HostingConfig, "enabled" | "allowConnectsPayment" | "reminderDays" | "graceDays">;
+export type HostingRules = Pick<
+  HostingConfig,
+  "enabled" | "allowConnectsPayment" | "reminderDaysBefore" | "reminderDaysAfter" | "graceDays"
+> & {
+  /** Earliest renewal reminder: when renew banners start. 0 when no reminder is set. */
+  reminderDays: number;
+};
 
-const DEFAULT_RULES: HostingRules = { enabled: false, allowConnectsPayment: true, reminderDays: 3, graceDays: 3 };
+const DEFAULT_CONFIG = { enabled: false, allowConnectsPayment: true, reminderDaysBefore: [3], reminderDaysAfter: [], graceDays: 3 };
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -199,7 +205,15 @@ export function toPackageView(pkg: HostingPackage, website: PackageWebsiteContex
 }
 
 export async function loadHostingRules(db: Db = prisma): Promise<HostingRules> {
-  return (await db.hostingConfig.findUnique({ where: { id: CONFIG_ID } })) ?? DEFAULT_RULES;
+  const config = (await db.hostingConfig.findUnique({ where: { id: CONFIG_ID } })) ?? DEFAULT_CONFIG;
+  return {
+    enabled: config.enabled,
+    allowConnectsPayment: config.allowConnectsPayment,
+    reminderDaysBefore: config.reminderDaysBefore,
+    reminderDaysAfter: config.reminderDaysAfter,
+    graceDays: config.graceDays,
+    reminderDays: Math.max(0, ...config.reminderDaysBefore),
+  };
 }
 
 /** Packages on sale, in display order. */

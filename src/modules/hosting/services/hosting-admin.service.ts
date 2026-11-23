@@ -26,10 +26,12 @@ import type {
   SubscriptionListQuery,
   UpdateClientBackupPolicyInput,
   UpdateClientStoragePolicyInput,
+  UpdateHostingRemindersInput,
   UpdateHostingSettingsInput,
   UpdatePackageInput,
 } from "../types/hosting.types.js";
 import { addDays, CYCLE_LABELS, formatBillingDate } from "./hosting-period.js";
+import { normalizeReminderDays } from "./hosting-reminders.js";
 import {
   availablePrice,
   loadHostingRules,
@@ -158,11 +160,13 @@ export class HostingAdminService {
       }),
       paymentSettingsService.isConfigured(),
     ]);
-    const rules = row ?? (await loadHostingRules());
+    const rules = await loadHostingRules();
     return {
       enabled: rules.enabled,
       allowConnectsPayment: rules.allowConnectsPayment,
       reminderDays: rules.reminderDays,
+      reminderDaysBefore: rules.reminderDaysBefore,
+      reminderDaysAfter: rules.reminderDaysAfter,
       graceDays: rules.graceDays,
       connectsPerRupee: CONNECTS_PER_RUPEE,
       razorpayConfigured,
@@ -187,6 +191,16 @@ export class HostingAdminService {
     }
     await prisma.hostingConfig.upsert({ where: { id: CONFIG_ID }, create: { id: CONFIG_ID, ...input }, update: input });
     logger.info({ actorId: actor.id, enabled: input.enabled, allowConnectsPayment: input.allowConnectsPayment }, "Hosting settings updated");
+    return this.settings();
+  }
+
+  async updateReminders(input: UpdateHostingRemindersInput, actor: AuthUser): Promise<HostingSettingsView> {
+    const data = {
+      reminderDaysBefore: normalizeReminderDays(input.daysBefore),
+      reminderDaysAfter: normalizeReminderDays(input.daysAfter),
+    };
+    await prisma.hostingConfig.upsert({ where: { id: CONFIG_ID }, create: { id: CONFIG_ID, ...data }, update: data });
+    logger.info({ actorId: actor.id, ...data }, "Hosting reminder schedule updated");
     return this.settings();
   }
 

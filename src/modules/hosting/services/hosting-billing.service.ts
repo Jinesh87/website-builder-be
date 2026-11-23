@@ -13,6 +13,7 @@ import { LIVE_AUTOPAY } from "../../wallet/services/autopay.js";
 import { connectsForPaise } from "../../wallet/services/wallet.service.js";
 import { notifyHostingInBackground, type AutoRenewal, type HostingNoticeTarget } from "./hosting-notifier.js";
 import { addDays, DAY_MS } from "./hosting-period.js";
+import { OVERDUE_CATCH_UP_DAYS, reminderAfterOffset, reminderBeforeOffset } from "./hosting-reminders.js";
 import {
   effectiveGraceDays,
   hostingService,
@@ -64,9 +65,14 @@ function renewsBy(subscription: DueSubscription, rules: HostingRules): AutoRenew
 }
 
 /** Records that a notice went out for this period; false when it already had (so it is sent once). */
-async function claimNotice(subscription: HostingSubscription, kind: HostingNoticeKind, periodEnd: Date): Promise<boolean> {
+async function claimNotice(
+  subscription: HostingSubscription,
+  kind: HostingNoticeKind,
+  periodEnd: Date,
+  offsetDays = 0,
+): Promise<boolean> {
   try {
-    await prisma.hostingNotice.create({ data: { subscriptionId: subscription.id, kind, periodEnd } });
+    await prisma.hostingNotice.create({ data: { subscriptionId: subscription.id, kind, periodEnd, offsetDays } });
     return true;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
@@ -88,22 +94,62 @@ export class HostingBillingService {
     await this.suspendExpired(now);
   }
 
-  private async sendReminders(rules: HostingRules, now: Date): Promise<void> {
-    if (rules.reminderDays <= 0) return;
-    const due = await prisma.hostingSubscription.findMany({
-      where: { status: HostingStatus.ACTIVE, currentPeriodEnd: { gt: now, lte: addDays(now, rules.reminderDays) } },
-      include: subscriptionInclude,
-      take: BATCH_SIZE,
-    });
-    for (const subscription of due) {
-      const periodEnd = subscription.currentPeriodEnd!;
-      if (!(await claimNotice(subscription, HostingNoticeKind.RENEWAL_REMINDER, periodEnd))) continue;
-      notifyHostingInBackground(target(subscription), {
-        kind: "RENEWAL_REMINDER",
-        periodEnd,
-        price: planPrice(subscription),
-        renewsBy: renewsBy(subscription, rules),
+  /** Pages through every match, so plans already reminded can't fill a batch and starve the rest. */
+  private async eachDue(where: Prisma.HostingSubscriptionWhereInput, handle: (subscription: DueSubscription) => Promise<void>) {
+    let cursor: string | undefined;
+    for (;;) {
+      const page = await prisma.hostingSubscription.findMany({
+        where,
+        include: subscriptionInclude,
+        orderBy: { id: "asc" },
+        take: BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       });
+      for (const subscription of page) await handle(subscription);
+      if (page.length < BATCH_SIZE) return;
+      cursor = page[page.length - 1]!.id;
+    }
+  }
+
+  /** One email per "days before" entry while the plan is active, and per "days after" entry once it lapsed. */
+  private async sendReminders(rules: HostingRules, now: Date): Promise<void> {
+    if (rules.reminderDaysBefore.length > 0) {
+      const furthest = Math.max(...rules.reminderDaysBefore);
+      await this.eachDue({ status: HostingStatus.ACTIVE, currentPeriodEnd: { gt: now, lte: addDays(now, furthest) } }, async (subscription) => {
+        const periodEnd = subscription.currentPeriodEnd!;
+        const offset = reminderBeforeOffset(rules.reminderDaysBefore, periodEnd, now);
+        if (offset === null || !(await claimNotice(subscription, HostingNoticeKind.RENEWAL_REMINDER, periodEnd, offset))) return;
+        notifyHostingInBackground(target(subscription), {
+          kind: "RENEWAL_REMINDER",
+          periodEnd,
+          price: planPrice(subscription),
+          renewsBy: renewsBy(subscription, rules),
+        });
+      });
+    }
+
+    if (rules.reminderDaysAfter.length > 0) {
+      const nearest = Math.min(...rules.reminderDaysAfter);
+      const furthest = Math.max(...rules.reminderDaysAfter) + OVERDUE_CATCH_UP_DAYS;
+      await this.eachDue(
+        {
+          status: { in: [HostingStatus.GRACE, HostingStatus.SUSPENDED] },
+          currentPeriodEnd: { lte: addDays(now, -nearest), gt: addDays(now, -furthest) },
+        },
+        async (subscription) => {
+          const periodEnd = subscription.currentPeriodEnd!;
+          const offset = reminderAfterOffset(rules.reminderDaysAfter, periodEnd, now);
+          if (offset === null || !(await claimNotice(subscription, HostingNoticeKind.OVERDUE_REMINDER, periodEnd, offset))) return;
+          const inGrace = subscription.status === HostingStatus.GRACE && subscription.graceEndsAt !== null;
+          notifyHostingInBackground(target(subscription), {
+            kind: "OVERDUE_REMINDER",
+            periodEnd,
+            daysOverdue: offset,
+            graceEndsAt: inGrace ? subscription.graceEndsAt : null,
+            price: planPrice(subscription),
+          });
+        },
+      );
     }
   }
 

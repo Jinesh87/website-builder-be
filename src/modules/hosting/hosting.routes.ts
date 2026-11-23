@@ -26,6 +26,7 @@ import {
   updateCouponSchema,
   updatePackageSchema,
   updatePlanSchema,
+  updateRemindersSchema,
   updateSettingsSchema,
   grantFreePeriodSchema,
   websiteParamsSchema,
@@ -127,6 +128,7 @@ export const hostingSettingsRouter = Router();
 hostingSettingsRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN));
 hostingSettingsRouter.get("/", hostingController.getSettings);
 hostingSettingsRouter.put("/", validate(updateSettingsSchema), hostingController.updateSettings);
+hostingSettingsRouter.put("/reminders", validate(updateRemindersSchema), hostingController.updateReminders);
 hostingSettingsRouter.put(
   "/packages/:packageId",
   validate(packageParamsSchema, "params"),

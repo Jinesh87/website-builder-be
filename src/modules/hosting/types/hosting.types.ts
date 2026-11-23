@@ -231,7 +231,12 @@ export type HostingCheckoutResult =
 export type HostingSettingsView = {
   enabled: boolean;
   allowConnectsPayment: boolean;
+  /** Earliest renewal reminder, in days before expiry; 0 = none. */
   reminderDays: number;
+  /** Renewal reminders, in days before expiry, ascending. */
+  reminderDaysBefore: number[];
+  /** Overdue reminders, in days after expiry, ascending. */
+  reminderDaysAfter: number[];
   graceDays: number;
   connectsPerRupee: number;
   /** Clients can only pay online once Razorpay keys are saved. */
@@ -246,8 +251,12 @@ export type HostingSettingsView = {
 export type UpdateHostingSettingsInput = {
   enabled: boolean;
   allowConnectsPayment: boolean;
-  reminderDays: number;
   graceDays: number;
+};
+
+export type UpdateHostingRemindersInput = {
+  daysBefore: number[];
+  daysAfter: number[];
 };
 
 export type UpdatePackageInput = {

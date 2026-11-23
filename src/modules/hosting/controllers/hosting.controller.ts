@@ -181,6 +181,14 @@ export class HostingController {
     }
   };
 
+  updateReminders = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ settings: await hostingAdminService.updateReminders(req.body, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   updatePackage = async (req: Request<PackageParams>, res: Response, next: NextFunction) => {
     try {
       const settings = await hostingAdminService.updatePackage(req.params.packageId, req.body, req.user!);

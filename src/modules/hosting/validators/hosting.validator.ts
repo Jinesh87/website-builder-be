@@ -92,8 +92,14 @@ export const collectHostingSchema = Joi.object({
 export const updateSettingsSchema = Joi.object({
   enabled: Joi.boolean().required(),
   allowConnectsPayment: Joi.boolean().required(),
-  reminderDays: Joi.number().integer().min(0).max(60).required(),
   graceDays: Joi.number().integer().min(0).max(60).required(),
+});
+
+const reminderDays = Joi.array().items(Joi.number().integer().min(1).max(90)).max(10).unique().required();
+
+export const updateRemindersSchema = Joi.object({
+  daysBefore: reminderDays,
+  daysAfter: reminderDays,
 });
 
 export const updatePackageSchema = Joi.object({

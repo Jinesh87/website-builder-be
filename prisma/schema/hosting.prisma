@@ -5,8 +5,10 @@ model HostingConfig {
   enabled              Boolean  @default(false)
   /// Clients may also pay hosting from their connects; Razorpay is always the default.
   allowConnectsPayment Boolean  @default(true)
-  /// Days before a period ends that the renewal reminder goes out.
-  reminderDays         Int      @default(3)
+  /// Days before a period ends that a renewal reminder goes out (one email per entry).
+  reminderDaysBefore   Int[]    @default([3])
+  /// Days after an unpaid period ended that an overdue reminder goes out (one email per entry).
+  reminderDaysAfter    Int[]    @default([])
   /// Days an unpaid site stays live after its period ends.
   graceDays            Int      @default(3)
   updatedAt            DateTime @updatedAt @db.Timestamptz(6)
@@ -267,11 +269,13 @@ model HostingNotice {
   subscriptionId String            @db.Uuid
   kind           HostingNoticeKind
   periodEnd      DateTime          @db.Timestamptz(6)
+  /// Reminders only: which "days before / after" entry this was; 0 for other notices.
+  offsetDays     Int               @default(0)
   createdAt      DateTime          @default(now()) @db.Timestamptz(6)
 
   subscription HostingSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-  @@unique([subscriptionId, kind, periodEnd])
+  @@unique([subscriptionId, kind, periodEnd, offsetDays])
   @@map("hosting_notices")
 }
 
@@ -331,6 +335,7 @@ enum HostingPaymentMethod {
 
 enum HostingNoticeKind {
   RENEWAL_REMINDER
+  OVERDUE_REMINDER
   EXPIRED
   SUSPENDED
 }
@@ -338,6 +343,7 @@ enum HostingNoticeKind {
 /// Client-facing hosting email the Super Admin can customize (subject / heading / message).
 enum HostingEmailKind {
   RENEWAL_REMINDER
+  OVERDUE_REMINDER
   PAID
   EXPIRED
   SUSPENDED

@@ -3,6 +3,7 @@ import type { HostingEmailKind } from "../../../generated/prisma/client.js";
 /** URL / API label for each hosting email kind. */
 export type HostingEmailKindLabel =
   | "renewal_reminder"
+  | "overdue_reminder"
   | "paid"
   | "expired"
   | "suspended"
@@ -10,6 +11,7 @@ export type HostingEmailKindLabel =
 
 export const HOSTING_EMAIL_KIND_LABELS: HostingEmailKindLabel[] = [
   "renewal_reminder",
+  "overdue_reminder",
   "paid",
   "expired",
   "suspended",
@@ -18,6 +20,7 @@ export const HOSTING_EMAIL_KIND_LABELS: HostingEmailKindLabel[] = [
 
 export const KIND_FROM_LABEL: Record<HostingEmailKindLabel, HostingEmailKind> = {
   renewal_reminder: "RENEWAL_REMINDER",
+  overdue_reminder: "OVERDUE_REMINDER",
   paid: "PAID",
   expired: "EXPIRED",
   suspended: "SUSPENDED",
@@ -26,6 +29,7 @@ export const KIND_FROM_LABEL: Record<HostingEmailKindLabel, HostingEmailKind> = 
 
 export const LABEL_FROM_KIND: Record<HostingEmailKind, HostingEmailKindLabel> = {
   RENEWAL_REMINDER: "renewal_reminder",
+  OVERDUE_REMINDER: "overdue_reminder",
   PAID: "paid",
   EXPIRED: "expired",
   SUSPENDED: "suspended",
@@ -34,6 +38,7 @@ export const LABEL_FROM_KIND: Record<HostingEmailKind, HostingEmailKindLabel> = 
 
 export const HOSTING_EMAIL_KIND_DISPLAY: Record<HostingEmailKindLabel, string> = {
   renewal_reminder: "Renewal reminder",
+  overdue_reminder: "Overdue reminder",
   paid: "Payment received",
   expired: "Hosting expired",
   suspended: "Site offline",
@@ -54,6 +59,8 @@ export const HOSTING_EMAIL_PLACEHOLDERS = [
   "{{amount}}",
   "{{restoredNote}}",
   "{{reasonDetail}}",
+  "{{daysOverdue}}",
+  "{{overdueNote}}",
 ] as const;
 
 export type HostingEmailDefault = {
@@ -69,6 +76,11 @@ export const DEFAULT_HOSTING_EMAILS: Record<HostingEmailKindLabel, HostingEmailD
     heading: "Hosting renewal coming up",
     message:
       "Hosting for {{websiteName}} renews on {{renewalDate}}{{priceSuffix}}.\n\n{{renewalNote}}",
+  },
+  overdue_reminder: {
+    subject: "{{websiteName}}: hosting renewal overdue",
+    heading: "Hosting renewal overdue",
+    message: "Hosting for {{websiteName}} expired on {{renewalDate}}, {{daysOverdue}} ago.\n\n{{overdueNote}}",
   },
   paid: {
     subject: "{{websiteName}}: hosting paid",
