@@ -27,7 +27,7 @@ import type {
 } from "../types/media.types.js";
 import { MEDIA_FONT_FILTER } from "../types/media.types.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
-import { detectFile, detectFont, type DetectedFile } from "./file-signature.js";
+import { detectFile, detectFont, detectIcon, type DetectedFile } from "./file-signature.js";
 import { optimizeMp4FastStart } from "./mp4-faststart.service.js";
 import { generateImageVariations } from "./openai-image-variations.client.js";
 
@@ -329,7 +329,8 @@ export class MediaService {
   }): Promise<MediaFileView> {
     // Imports may also carry the web fonts their CSS uses.
     const media = detectFile(input.buffer);
-    const detected = media && (media.kind === MediaKind.IMAGE || media.kind === MediaKind.VIDEO) ? media : detectFont(input.buffer);
+    const detected =
+      media && (media.kind === MediaKind.IMAGE || media.kind === MediaKind.VIDEO) ? media : (detectIcon(input.buffer) ?? detectFont(input.buffer));
     if (!detected) {
       throw new AppError(400, `Unsupported media file in the import: ${input.fileName}`, "IMPORT_MEDIA_UNSUPPORTED");
     }

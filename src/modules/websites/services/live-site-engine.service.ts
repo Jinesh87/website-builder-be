@@ -9,6 +9,7 @@ import { shopService, pagePublicCatalog } from "../../shop/services/shop.service
 import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
 import { cancelUntilLabel } from "../../shop/utils/shop-order-cancel.js";
 import type { PublishSnapshot } from "../types/website.types.js";
+import { faviconHeadTags } from "./live-site-favicon.js";
 import type { Section } from "../types/site-content.types.js";
 import { shopPage } from "../ai/shop-pages.js";
 import { toPlainText } from "../../../common/utils/rich-text.js";
@@ -188,6 +189,7 @@ const renderStateSelect = {
   contactPhone: true,
   address: true,
   logoMediaId: true,
+  logo: { select: { id: true, mimeType: true } },
   shopEnabled: true,
   shopAllowGuestCheckout: true,
   shopCancelUntilStatus: true,
@@ -657,6 +659,7 @@ Sitemap: ${domain}/sitemap.xml
     const contactPhone = website.contactPhone || "";
     const address = website.address || "";
     const faviconUrl = website.logoMediaId ? `${env.API_PUBLIC_URL}/api/media/files/${website.logoMediaId}` : "";
+    const faviconTags = await faviconHeadTags(snapshot.theme?.favicon, website.logo);
 
     const title = activeProduct
       ? `${activeProduct.name} | ${businessName}`
@@ -813,7 +816,7 @@ Sitemap: ${domain}/sitemap.xml
     <link rel="canonical" href="${escapeHtml(pageUrl)}" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
-    ${faviconUrl ? `<link rel="icon" type="image/x-icon" href="${escapeHtml(faviconUrl)}" />` : ""}
+    ${faviconTags}
 
     <!-- Open Graph / Social Sharing -->
     <meta property="og:type" content="website" />

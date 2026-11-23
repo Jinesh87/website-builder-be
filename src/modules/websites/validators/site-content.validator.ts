@@ -553,6 +553,7 @@ function flexibleVariant<T extends string>(
 }
 
 export const themeSchema = Joi.object({
+  favicon: image.optional().description("Browser-tab icon (square PNG or ICO). Leave out to use the website logo."),
   language: Joi.string()
     .trim()
     .pattern(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/)

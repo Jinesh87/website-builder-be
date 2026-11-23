@@ -120,3 +120,11 @@ export function detectFont(buffer: Buffer): DetectedFile | null {
   }
   return null;
 }
+
+/** Windows .ico (favicon). Only HTML imports store these, for the site favicon; library uploads use detectFile. */
+export function detectIcon(buffer: Buffer): DetectedFile | null {
+  if (buffer.length < 22) return null;
+  // ICONDIR: reserved 0, type 1 (icon), at least one image.
+  if (buffer.readUInt16LE(0) !== 0 || buffer.readUInt16LE(2) !== 1 || buffer.readUInt16LE(4) < 1) return null;
+  return { kind: MediaKind.IMAGE, mimeType: "image/x-icon", extension: "ico" };
+}

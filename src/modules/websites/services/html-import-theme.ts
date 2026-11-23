@@ -11,6 +11,7 @@ export type ThemePatch = {
   colors?: Partial<ThemeSettings["colors"]>;
   fonts?: Partial<ThemeSettings["fonts"]>;
   radius?: ThemeSettings["radius"];
+  favicon?: ThemeSettings["favicon"];
 };
 
 const NAMED: Record<string, string> = { white: "#ffffff", black: "#000000" };
@@ -226,5 +227,6 @@ export function applyThemePatch(theme: ThemeSettings, patch: ThemePatch): ThemeS
     colors: { ...theme.colors, ...patch.colors },
     fonts: { ...theme.fonts, ...patch.fonts },
     ...(patch.radius ? { radius: patch.radius } : {}),
+    ...(patch.favicon ? { favicon: patch.favicon } : {}),
   };
 }

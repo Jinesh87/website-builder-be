@@ -397,6 +397,8 @@ export type GridColumns = 1 | 2 | 3 | 4;
 
 export type ThemeSettings = {
   language?: string;
+  /** Browser-tab icon. Unset falls back to the website logo. */
+  favicon?: ImageRef;
   colors: {
     primary: string;
     secondary: string;

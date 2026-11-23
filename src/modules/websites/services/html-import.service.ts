@@ -24,6 +24,7 @@ import {
   type El,
 } from "./html-import-components.js";
 import { forEachCssUrl, prepareStylesheet, rewriteCssUrls } from "./html-import-css.js";
+import { findFavicon, isStorableFavicon, svgFaviconDataUri } from "./html-import-favicon.js";
 import { prerenderPages } from "./html-import-prerender.js";
 import { applyThemePatch, extractThemeFromCss, type ThemePatch } from "./html-import-theme.js";
 import { extractHeaderFromChrome } from "./html-import-section-mappers.js";
@@ -476,7 +477,14 @@ export async function planHtmlImport(params: {
   // 3. Upload every image/video referenced by markup or CSS.
   const needed = new Set<string>();
   for (const doc of docs) collectAssetRefs(doc.$, doc.htmlPath, doc.styles, needed);
+  const faviconRef = docs[0] ? findFavicon(docs[0].$, docs[0].htmlPath, files, resolveRelative) : null;
+  if (faviconRef && "packagePath" in faviconRef && isStorableFavicon(faviconRef.packagePath)) needed.add(faviconRef.packagePath);
   const uploaded = await params.upload(needed);
+  const faviconUrl = !faviconRef
+    ? null
+    : "url" in faviconRef
+      ? faviconRef.url
+      : (uploaded.get(faviconRef.packagePath) ?? svgFaviconDataUri(faviconRef.packagePath, files.get(faviconRef.packagePath)));
 
   // 4. Every block gets its own CSS scope; keyframes share one prefix per import.
   const importId = randomBytes(3).toString("hex");
@@ -574,6 +582,8 @@ export async function planHtmlImport(params: {
     hidden: false,
     ...(footerComponent ? { imported: importedChrome(footerComponent) } : {}),
   };
+
+  if (faviconUrl) theme.favicon = { url: faviconUrl, alt: "" };
 
   return { pages, header, footer, components, theme };
 }

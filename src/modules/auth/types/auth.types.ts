@@ -10,7 +10,8 @@ export type PublicUser = {
   role: UserRole;
   status: UserStatus;
   emailVerified: boolean;
-  client: { id: string; businessName: string } | null;
+  /** shopFeatureEnabled: the Super Admin turned the shop on for this client (shows the Shop menu). */
+  client: { id: string; businessName: string; shopFeatureEnabled: boolean } | null;
   createdAt: string;
 };
 

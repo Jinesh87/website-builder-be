@@ -41,9 +41,9 @@ import {
   type VerifyCodeResult,
 } from "../utils/verification-code.js";
 
-type UserWithClient = User & { client: { id: string; businessName: string } | null };
+type UserWithClient = User & { client: { id: string; businessName: string; shopFeatureEnabled: boolean } | null };
 
-const clientSelect = { select: { id: true, businessName: true } } as const;
+const clientSelect = { select: { id: true, businessName: true, shopFeatureEnabled: true } } as const;
 
 /** Compared against when the email is unknown so response time doesn't reveal which accounts exist. */
 const dummyPasswordHash = hashPassword(randomUUID());
