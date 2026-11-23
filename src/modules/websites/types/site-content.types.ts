@@ -507,6 +507,7 @@ export type HeaderData = {
   contactEmail?: string;
   phone?: string;
   phoneLabel?: string;
+  phoneIcon?: "phone" | "phone-solid" | "phone-call" | "smartphone" | "headset" | "whatsapp";
   contactHours?: string;
   contactAddress?: string;
   mobileCallButton?: boolean;

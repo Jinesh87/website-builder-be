@@ -740,7 +740,11 @@ export const headerSchema = Joi.object({
   contactLabel: optionalText(60),
   contactEmail: Joi.string().trim().email().max(255).allow("").optional(),
   phone: optionalText(32).meta(meta({ fact: "contactPhone" })).description('Business phone for designs "contact-topbar", "call-now", "contact-stacked", "centered-phone"'),
-  phoneLabel: optionalText(40).description('Small label above the phone number, e.g. "Call us 24/7"'),
+  phoneLabel: optionalText(40).description('Small label above the phone number, e.g. "Call us 24/7"; hidden when empty'),
+  phoneIcon: Joi.string()
+    .valid("phone", "phone-solid", "phone-call", "smartphone", "headset", "whatsapp")
+    .optional()
+    .description('Icon beside the phone number; default "phone"'),
   contactHours: optionalText(80),
   contactAddress: optionalText(160).meta(meta({ fact: "address" })),
   mobileCallButton: Joi.boolean().optional().description("Tap-to-call button beside the mobile menu button; default true"),
