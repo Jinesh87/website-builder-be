@@ -1,5 +1,6 @@
 import type { CookieOptions, Request, Response } from "express";
 import { env } from "../../config/env.js";
+import { refreshTokenLifetime } from "./jwt.js";
 import { parseDurationMs } from "./duration.js";
 
 const ACCESS_COOKIE = "access_token";
@@ -39,7 +40,7 @@ export function setAuthCookies(res: Response, tokens: AuthTokens, remember: bool
   res.cookie(REFRESH_COOKIE, tokens.refreshToken, {
     ...baseCookieOptions(),
     path: REFRESH_COOKIE_PATH,
-    ...(remember ? { maxAge: parseDurationMs(env.JWT_REFRESH_EXPIRES_IN) } : {}),
+    ...(remember ? { maxAge: parseDurationMs(refreshTokenLifetime(true)) } : {}),
   });
 }
 

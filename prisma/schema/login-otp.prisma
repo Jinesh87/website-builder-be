@@ -1,0 +1,11 @@
+/// Extra inboxes that receive the Super Admin login code, so the Super Admin login can be shared.
+/// The Super Admin account's own email always receives it as well.
+model LoginOtpRecipient {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  /// Optional note, e.g. who this inbox belongs to.
+  label     String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("login_otp_recipients")
+}

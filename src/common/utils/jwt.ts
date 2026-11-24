@@ -41,9 +41,14 @@ export function signAccessToken(payload: Omit<AccessTokenPayload, "type">): stri
   } as jwt.SignOptions);
 }
 
+/** "Remember me" sessions last JWT_REFRESH_REMEMBER_EXPIRES_IN (30 days); others JWT_REFRESH_EXPIRES_IN. */
+export function refreshTokenLifetime(remember: boolean): string {
+  return remember ? env.JWT_REFRESH_REMEMBER_EXPIRES_IN : env.JWT_REFRESH_EXPIRES_IN;
+}
+
 export function signRefreshToken(payload: Omit<RefreshTokenPayload, "type">): string {
   return jwt.sign({ ...payload, type: "refresh" }, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRES_IN,
+    expiresIn: refreshTokenLifetime(payload.remember),
   } as jwt.SignOptions);
 }
 

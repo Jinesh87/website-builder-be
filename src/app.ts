@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from "./common/middleware/error-handler
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import authRouter from "./modules/auth/auth.routes.js";
+import loginOtpRecipientsRouter from "./modules/auth/login-otp-recipients.routes.js";
 import { domainSyncRouter, websiteDomainsRouter } from "./modules/domains/domain.routes.js";
 import clientsRouter from "./modules/clients/client.routes.js";
 import emailSettingsRouter from "./modules/email/email.routes.js";
@@ -99,6 +100,7 @@ app.use((req, res, next) => {
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin/settings/email", emailSettingsRouter);
+app.use("/api/admin/settings/login-otp", loginOtpRecipientsRouter);
 app.use("/api/admin/settings/ai", aiSettingsRouter);
 app.use("/api/account/ai-settings", clientAiSettingsRouter);
 app.use("/api/account/email", clientEmailRouter);

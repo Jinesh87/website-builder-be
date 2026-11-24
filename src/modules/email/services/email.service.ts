@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "../../../common/utils/secret-box.j
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import type { MessagingConfig } from "../../../generated/prisma/client.js";
+import { loginOtpEmail } from "../templates/login-otp.templates.js";
 import {
   clientInviteEmail,
   contactFormLeadEmail,
@@ -168,6 +169,16 @@ export class EmailService {
 
   async sendVerificationCode(params: { to: string; fullName: string; code: string; expiresInMinutes: number }) {
     await this.send(params.to, (brand) => verificationCodeEmail({ brand, ...params }));
+  }
+
+  async sendLoginOtp(params: {
+    to: string;
+    fullName: string;
+    code: string;
+    expiresInMinutes: number;
+    accountEmail: string;
+  }) {
+    await this.send(params.to, (brand) => loginOtpEmail({ brand, ...params }));
   }
 
   async sendEmailChangeCode(params: { to: string; fullName: string; code: string; expiresInMinutes: number }) {

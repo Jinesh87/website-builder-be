@@ -1,4 +1,4 @@
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -7,7 +7,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function layout(brand: string, body: string): string {
+export function layout(brand: string, body: string): string {
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:24px;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#1a1d23;">

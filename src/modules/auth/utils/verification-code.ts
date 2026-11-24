@@ -1,4 +1,5 @@
 import { randomInt, timingSafeEqual } from "node:crypto";
+import { AppError } from "../../../common/errors/AppError.js";
 import { sha256 } from "../../../common/utils/hash.js";
 import { redis } from "../../../config/redis.js";
 
@@ -6,13 +7,18 @@ export const VERIFICATION_CODE_TTL_SECONDS = 10 * 60;
 export const RESEND_COOLDOWN_SECONDS = 45;
 const MAX_ATTEMPTS = 5;
 
-/** Each purpose has its own keys, so a signup code can never confirm an email change (or the reverse). */
-export type VerificationPurpose = "signup" | "email-change" | "shop-signup";
+/**
+ * Each purpose has its own keys, so a signup code can never confirm an email change (or the reverse).
+ * "login" codes are keyed by the login challenge id rather than the user id, so two people sharing
+ * one login (the Super Admin) don't overwrite each other's codes.
+ */
+export type VerificationPurpose = "signup" | "email-change" | "shop-signup" | "login";
 
 const KEY_PREFIX: Record<VerificationPurpose, string> = {
   signup: "auth:verify",
   "email-change": "auth:email-change",
   "shop-signup": "shop:verify",
+  login: "auth:login-otp",
 };
 
 const codeKey = (userId: string, purpose: VerificationPurpose) => `${KEY_PREFIX[purpose]}:code:${userId}`;
@@ -74,4 +80,17 @@ export async function checkVerificationCode(
 
 export async function clearVerificationCode(userId: string, purpose: VerificationPurpose = "signup"): Promise<void> {
   await redis.del(codeKey(userId, purpose), attemptsKey(userId, purpose));
+}
+
+/** Throws the matching 4xx error for anything but a valid code. */
+export function assertCodeAccepted(result: VerifyCodeResult): void {
+  if (result === "expired") {
+    throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
+  }
+  if (result === "too_many_attempts") {
+    throw new AppError(429, "Too many incorrect attempts. Request a new code.", "CODE_ATTEMPTS_EXCEEDED");
+  }
+  if (result === "invalid") {
+    throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
+  }
 }

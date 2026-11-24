@@ -90,3 +90,19 @@ export const resetPasswordSchema = Joi.object({
   token: Joi.string().trim().min(20).max(200).required(),
   password: password.required(),
 });
+
+const loginChallengeId = Joi.string().guid({ version: "uuidv4" }).required();
+
+export const verifyLoginOtpSchema = Joi.object({
+  challengeId: loginChallengeId,
+  code: verificationCode.required(),
+});
+
+export const resendLoginOtpSchema = Joi.object({
+  challengeId: loginChallengeId,
+});
+
+export const addLoginOtpRecipientSchema = Joi.object({
+  email: email.required(),
+  label: Joi.string().trim().max(100).allow("").optional(),
+});

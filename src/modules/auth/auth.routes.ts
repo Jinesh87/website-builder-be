@@ -8,12 +8,14 @@ import {
   changePasswordSchema,
   emailOnlySchema,
   loginSchema,
+  resendLoginOtpSchema,
   resetPasswordQuerySchema,
   resetPasswordSchema,
   signupSchema,
   updateProfileSchema,
   verifyEmailChangeSchema,
   verifyEmailSchema,
+  verifyLoginOtpSchema,
 } from "./validators/auth.validator.js";
 
 const MINUTE = 60;
@@ -44,6 +46,18 @@ authRouter.post(
   rateLimit({ name: "login", max: 30, windowSeconds: 15 * MINUTE }),
   validate(loginSchema),
   authController.login,
+);
+authRouter.post(
+  "/login/verify-otp",
+  rateLimit({ name: "login-otp-verify", max: 30, windowSeconds: 15 * MINUTE }),
+  validate(verifyLoginOtpSchema),
+  authController.verifyLoginOtp,
+);
+authRouter.post(
+  "/login/resend-otp",
+  rateLimit({ name: "login-otp-resend", max: 10, windowSeconds: HOUR }),
+  validate(resendLoginOtpSchema),
+  authController.resendLoginOtp,
 );
 authRouter.post("/refresh", authController.refresh);
 authRouter.post("/logout", authController.logout);

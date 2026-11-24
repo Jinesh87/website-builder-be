@@ -48,6 +48,14 @@ export const env = {
   JWT_REFRESH_SECRET: requiredSecret("JWT_REFRESH_SECRET"),
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN ?? "7d",
+  /** Refresh token lifetime when "Remember me" is ticked at login. */
+  JWT_REFRESH_REMEMBER_EXPIRES_IN: process.env.JWT_REFRESH_REMEMBER_EXPIRES_IN ?? "30d",
+
+  /**
+   * Login asks for an emailed one-time code after the password. On by default in production only;
+   * set LOGIN_OTP_ENABLED=true locally to test it (the code is also logged outside production).
+   */
+  LOGIN_OTP_ENABLED: bool("LOGIN_OTP_ENABLED", isProd),
 
   COOKIE_SECURE: bool("COOKIE_SECURE", isProd),
   COOKIE_SAMESITE: sameSite(process.env.COOKIE_SAMESITE),

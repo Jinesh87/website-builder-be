@@ -51,3 +51,14 @@ export type VerificationDispatch = {
   emailSent: boolean;
   resendAvailableInSeconds: number;
 };
+
+/** Returned by login instead of a session when an emailed code is still needed. */
+export type LoginOtpChallenge = {
+  otpRequired: true;
+  /** Opaque id of the pending login; sent back with the code. */
+  challengeId: string;
+  /** Masked inboxes the code was sent to. */
+  sentTo: string[];
+  expiresInMinutes: number;
+  resendAvailableInSeconds: number;
+};

@@ -36,7 +36,28 @@ export class AuthController {
 
   login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      sendSession(res, await authService.login(req.body));
+      const result = await authService.login(req.body);
+      if ("otpRequired" in result) {
+        res.status(200).json(result);
+        return;
+      }
+      sendSession(res, result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  verifyLoginOtp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSession(res, await authService.verifyLoginOtp(req.body.challengeId, req.body.code));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resendLoginOtp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json(await authService.resendLoginOtp(req.body.challengeId));
     } catch (error) {
       next(error);
     }

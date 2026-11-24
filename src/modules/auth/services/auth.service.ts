@@ -4,7 +4,12 @@ import { ClientSource, UserRole, UserStatus } from "../../../common/constants/ro
 import type { AuthTokens } from "../../../common/utils/cookies.js";
 import { parseDurationMs } from "../../../common/utils/duration.js";
 import { hashPassword, sha256, verifyPassword } from "../../../common/utils/hash.js";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../../common/utils/jwt.js";
+import {
+  refreshTokenLifetime,
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+} from "../../../common/utils/jwt.js";
 import { env, isProduction } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
@@ -15,6 +20,7 @@ import type {
   AuthResult,
   ChangePasswordInput,
   LoginInput,
+  LoginOtpChallenge,
   PublicUser,
   SignupInput,
   UpdateProfileInput,
@@ -29,8 +35,10 @@ import {
   RESET_TOKEN_TTL_SECONDS,
   revokePasswordResetToken,
 } from "../utils/password-reset.js";
+import { loginOtpService } from "./login-otp.service.js";
 import { clearPendingEmail, getPendingEmail, storePendingEmail } from "../utils/pending-email.js";
 import {
+  assertCodeAccepted,
   checkVerificationCode,
   clearVerificationCode,
   generateVerificationCode,
@@ -38,7 +46,6 @@ import {
   RESEND_COOLDOWN_SECONDS,
   storeVerificationCode,
   VERIFICATION_CODE_TTL_SECONDS,
-  type VerifyCodeResult,
 } from "../utils/verification-code.js";
 
 type UserWithClient = User & { client: { id: string; businessName: string; shopFeatureEnabled: boolean } | null };
@@ -87,18 +94,6 @@ function userLockoutKey(userId: string): string {
 
 function lockoutKey(user: { id: string } | null, identifier: string): string {
   return user ? userLockoutKey(user.id) : `identifier:${identifier}`;
-}
-
-function assertCodeAccepted(result: VerifyCodeResult): void {
-  if (result === "expired") {
-    throw new AppError(400, "The code has expired. Request a new one.", "CODE_EXPIRED");
-  }
-  if (result === "too_many_attempts") {
-    throw new AppError(429, "Too many incorrect attempts. Request a new code.", "CODE_ATTEMPTS_EXCEEDED");
-  }
-  if (result === "invalid") {
-    throw new AppError(400, "The code is incorrect.", "INVALID_CODE");
-  }
 }
 
 function lockedError(lockedUntil: Date) {
@@ -198,7 +193,8 @@ export class AuthService {
     return this.createSession(verified, true);
   }
 
-  async login(input: LoginInput): Promise<AuthResult> {
+  /** Returns a session, or an OTP challenge when LOGIN_OTP_ENABLED and the account has an email to send it to. */
+  async login(input: LoginInput): Promise<AuthResult | LoginOtpChallenge> {
     const identifier = input.identifier.trim().toLowerCase();
     const user = await prisma.user.findUnique({
       where: identifierWhere(identifier),
@@ -225,13 +221,40 @@ export class AuthService {
       throw new AppError(403, "Please verify your email first.", "EMAIL_NOT_VERIFIED", { email: user.email });
     }
 
+    if (env.LOGIN_OTP_ENABLED) {
+      if (user.email) return loginOtpService.start(user, input.remember);
+      // Username-only accounts have nowhere to receive a code.
+      logger.warn({ userId: user.id }, "Login code skipped: account has no email");
+    }
+
     await clearLoginLockout(lockKey);
+    return this.completeLogin(user.id, input.remember);
+  }
+
+  /** Second login step: the emailed code. Wrong codes count toward the account's login lockout. */
+  async verifyLoginOtp(challengeId: string, code: string): Promise<AuthResult> {
+    const pending = await loginOtpService.verify(challengeId, code, async (userId) => {
+      await recordFailedLoginAttempt(userLockoutKey(userId));
+    });
+    const lock = await getLoginLockStatus(userLockoutKey(pending.userId));
+    if (lock.locked) throw lockedError(lock.lockedUntil);
+    await clearLoginLockout(userLockoutKey(pending.userId));
+    return this.completeLogin(pending.userId, pending.remember);
+  }
+
+  async resendLoginOtp(challengeId: string): Promise<LoginOtpChallenge> {
+    return loginOtpService.resend(challengeId, (userId) => this.findActiveUser(userId));
+  }
+
+  /** Re-reads the account so a suspension between the password and code steps still blocks the login. */
+  private async completeLogin(userId: string, remember: boolean): Promise<AuthResult> {
+    const existing = await this.findActiveUser(userId);
     const updated = await prisma.user.update({
-      where: { id: user.id },
+      where: { id: existing.id },
       data: { lastSignedInAt: new Date() },
       include: { client: clientSelect },
     });
-    return this.createSession(updated, input.remember);
+    return this.createSession(updated, remember);
   }
 
   /** Rotates the refresh token. Reusing an already-rotated token revokes every session of that user. */
@@ -580,7 +603,7 @@ export class AuthService {
         id: tokenId,
         userId: user.id,
         tokenHash: sha256(refreshToken),
-        expiresAt: new Date(Date.now() + parseDurationMs(env.JWT_REFRESH_EXPIRES_IN)),
+        expiresAt: new Date(Date.now() + parseDurationMs(refreshTokenLifetime(remember))),
       },
     });
 
