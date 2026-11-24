@@ -64,6 +64,19 @@ const optionSetSchema = Joi.object({
     )
     .max(100)
     .optional(),
+  barcodes: Joi.array()
+    .items(
+      Joi.object({
+        key: Joi.string().trim().max(500).allow("").required(),
+        // Printed barcodes are letters, digits and symbols with no spaces (EAN/UPC are digits only).
+        barcode: Joi.string().trim().max(64).pattern(/^[\x21-\x7E]*$/).allow("").required().messages({
+          "string.pattern.base": "A barcode can't contain spaces or special characters",
+          "string.max": "A barcode must be 64 characters or less",
+        }),
+      }),
+    )
+    .max(100)
+    .optional(),
   images: Joi.array()
     .items(
       Joi.object({
@@ -193,6 +206,9 @@ export const shopOrderQuerySchema = Joi.object({
   channel: Joi.string().valid("online", "pos").optional(),
   /** Orders placed on this day (IST), YYYY-MM-DD. */
   date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
+  /** Orders placed from this day through `to` (IST, inclusive). */
+  from: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
+  to: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
   status: Joi.string()
     .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled", "returned")
     .optional(),
@@ -343,4 +359,6 @@ export const shopPosEmailSchema = Joi.object({
 
 export const shopPosSummaryQuerySchema = Joi.object({
   date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
+  from: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
+  to: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
 });

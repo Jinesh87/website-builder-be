@@ -61,8 +61,8 @@ export class ShopPosController {
 
   summary = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
-      const { date } = req.query as { date?: string };
-      res.json({ summary: await shopPosReportsService.summary(req.params.id, date, req.user!) });
+      const query = req.query as { date?: string; from?: string; to?: string };
+      res.json({ summary: await shopPosReportsService.summary(req.params.id, query, req.user!) });
     } catch (error) {
       next(error);
     }

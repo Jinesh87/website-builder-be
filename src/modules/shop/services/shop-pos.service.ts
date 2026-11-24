@@ -135,6 +135,7 @@ export class ShopPosService {
             id: variant.id,
             name: variant.name,
             sku: variant.sku,
+            barcode: variant.barcode,
             imageUrl: variantPhotos(variant, optionSets)[0]?.url ?? null,
             unitPaise: pricing.unitPayable,
             gstPercent: pricing.gst.gstPercent,

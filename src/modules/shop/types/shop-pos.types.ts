@@ -6,6 +6,8 @@ export type PosCatalogVariant = {
   id: string;
   name: string;
   sku: string | null;
+  /** Printed barcode; a scan matches this first, then the SKU. */
+  barcode: string | null;
   /** The variant's photo (its own, or the one shared by its option value). */
   imageUrl: string | null;
   /** What the customer pays per unit, GST included. */
@@ -76,8 +78,11 @@ export type PosReceipt = {
 };
 
 export type PosDailySummary = {
-  /** Day in the shop's time zone (Asia/Kolkata), YYYY-MM-DD. */
+  /** First day covered, in the shop's time zone (Asia/Kolkata), YYYY-MM-DD. Same as `from`. */
   date: string;
+  /** Days covered, YYYY-MM-DD, both inclusive. */
+  from: string;
+  to: string;
   /** Completed sales (paid, not cancelled or returned). */
   salesCount: number;
   totalPaise: number;

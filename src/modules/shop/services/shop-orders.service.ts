@@ -2,7 +2,7 @@ import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { prisma } from "../../../config/prisma.js";
 import { ShopOrderChannel, ShopOrderStatus } from "../../../generated/prisma/client.js";
-import { istDayRange } from "../utils/shop-day.js";
+import { istRange, reportDays } from "../utils/shop-day.js";
 import { recordOrderStatusEvent } from "../utils/shop-order-timeline.js";
 import { openShopForAdmin } from "./shop-admin-access.js";
 import { purgeShopPages } from "./shop-cache.js";
@@ -27,6 +27,9 @@ export type ShopOrderQuery = {
   channel?: "online" | "pos";
   /** YYYY-MM-DD: only orders placed that day (IST). */
   date?: string;
+  /** YYYY-MM-DD: orders placed from `from` through `to` (IST, inclusive). */
+  from?: string;
+  to?: string;
   status?: ShopOrderStatusLabel;
   page?: number;
 };
@@ -37,12 +40,14 @@ export class ShopOrdersService {
     const page = Math.max(1, Math.floor(query.page ?? 1));
     const search = query.search?.trim();
     const status = query.status ? STATUS_FROM_LABEL[query.status] : undefined;
+    const days = reportDays(query);
+    const placed = days ? istRange(days.from, days.to) : null;
 
     const where = {
       websiteId,
       ...(status ? { status } : {}),
       ...(query.channel ? { channel: query.channel === "pos" ? ShopOrderChannel.POS : ShopOrderChannel.ONLINE } : {}),
-      ...(query.date ? { createdAt: { gte: istDayRange(query.date).start, lt: istDayRange(query.date).end } } : {}),
+      ...(placed ? { createdAt: { gte: placed.start, lt: placed.end } } : {}),
       ...(search
         ? {
             OR: [

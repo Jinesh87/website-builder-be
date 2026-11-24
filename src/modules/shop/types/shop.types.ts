@@ -14,6 +14,8 @@ export type ShopOptionSetInput = {
   overrides?: { key: string; pricePaise: number }[];
   /** Optional SKU per combination key (same key as price overrides). */
   skus?: { key: string; sku: string }[];
+  /** Optional printed barcode per combination key, scanned at the POS till. */
+  barcodes?: { key: string; barcode: string }[];
   images?: { key: string; images: ShopImageInput[] }[];
 };
 
@@ -29,6 +31,7 @@ export type ShopOptionSetView = {
   options: ShopOptionView[];
   overrides?: { key: string; pricePaise: number }[];
   skus?: { key: string; sku: string }[];
+  barcodes?: { key: string; barcode: string }[];
   images?: { key: string; images: ShopImageView[] }[];
 };
 
@@ -102,6 +105,7 @@ export type ShopVariantView = {
   id: string;
   name: string;
   sku: string | null;
+  barcode: string | null;
   pricePaise: number;
   sortOrder: number;
   quantity: number;

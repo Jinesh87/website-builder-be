@@ -4,7 +4,7 @@ import { prisma } from "../../../config/prisma.js";
 import { Prisma, ShopOrderChannel, ShopOrderStatus } from "../../../generated/prisma/client.js";
 import type { PosDailySummary, PosPaymentMethodLabel, PosReceipt } from "../types/shop-pos.types.js";
 import { htmlToPdf } from "../utils/html-to-pdf.js";
-import { istDayRange, shopToday } from "../utils/shop-day.js";
+import { istRange, reportDays, shopToday } from "../utils/shop-day.js";
 import { orderBuyer } from "../utils/shop-order-buyer.js";
 import { openShopForAdmin } from "./shop-admin-access.js";
 import { shopInvoiceService } from "./shop-invoice.service.js";
@@ -128,18 +128,24 @@ export class ShopPosReportsService {
     return { to: recipient };
   }
 
-  /** Totals for one day of POS sales (defaults to today). */
-  async summary(websiteId: string, date: string | undefined, actor: AuthUser): Promise<PosDailySummary> {
+  /** POS totals for a day (`date`, default today) or the days `from` through `to`. */
+  async summary(
+    websiteId: string,
+    query: { date?: string; from?: string; to?: string },
+    actor: AuthUser,
+  ): Promise<PosDailySummary> {
     await openShopForAdmin(websiteId, actor);
-    const day = date || shopToday();
-    const { start, end } = istDayRange(day);
+    const days = reportDays(query, shopToday())!;
+    const { start, end } = istRange(days.from, days.to);
     const orders = await prisma.shopOrder.findMany({
       where: { websiteId, channel: ShopOrderChannel.POS, createdAt: { gte: start, lt: end } },
       select: { status: true, posPaymentMethod: true, posCashReceivedPaise: true, totalPaise: true, discountPaise: true, paidAt: true },
     });
 
     const summary: PosDailySummary = {
-      date: day,
+      date: days.from,
+      from: days.from,
+      to: days.to,
       salesCount: 0,
       totalPaise: 0,
       discountPaise: 0,

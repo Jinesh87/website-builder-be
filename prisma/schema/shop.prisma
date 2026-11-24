@@ -64,6 +64,8 @@ model ProductVariant {
   productId  String  @db.Uuid
   name       String  @db.VarChar(160)
   sku        String? @db.VarChar(64)
+  /// The item's printed barcode (EAN/UPC/Code 128), scanned at the POS till. Unique within a shop.
+  barcode    String? @db.VarChar(64)
   pricePaise Int
   sortOrder  Int     @default(0)
   /// Photos for this variant, in display order. Each item is `{ mediaId, alt }`.
@@ -79,6 +81,7 @@ model ProductVariant {
   shopCoupons ShopCoupon[]
 
   @@index([productId, sortOrder])
+  @@index([barcode])
   @@map("product_variants")
 }
 

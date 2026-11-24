@@ -26,6 +26,7 @@ import type {
   ShopProductView,
   ShopVariantView,
 } from "../types/shop.types.js";
+import { assertBarcodesFree } from "../utils/shop-barcodes.js";
 
 const MAX_CATEGORIES = 100;
 const MAX_PRODUCTS = 500;
@@ -61,6 +62,7 @@ function toVariant(variant: ProductRow["variants"][number]): ShopVariantView {
     id: variant.id,
     name: variant.name,
     sku: variant.sku,
+    barcode: variant.barcode,
     pricePaise: variant.pricePaise,
     sortOrder: variant.sortOrder,
     quantity: variant.quantity,
@@ -184,7 +186,14 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
-    const set = entry as { pricePaise?: unknown; options?: unknown; overrides?: unknown; skus?: unknown; images?: unknown };
+    const set = entry as {
+      pricePaise?: unknown;
+      options?: unknown;
+      overrides?: unknown;
+      skus?: unknown;
+      barcodes?: unknown;
+      images?: unknown;
+    };
     if (typeof set.pricePaise !== "number" || !Array.isArray(set.options)) return [];
     const options = set.options.flatMap((option) => {
       if (!option || typeof option !== "object" || Array.isArray(option)) return [];
@@ -221,6 +230,15 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
           return [{ key: row.key, sku }];
         })
       : [];
+    const barcodes = Array.isArray(set.barcodes)
+      ? set.barcodes.flatMap((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+          const row = entry as { key?: unknown; barcode?: unknown };
+          if (typeof row.key !== "string" || typeof row.barcode !== "string") return [];
+          const barcode = row.barcode.trim();
+          return barcode ? [{ key: row.key, barcode }] : [];
+        })
+      : [];
     const images = Array.isArray(set.images)
       ? set.images.flatMap((group) => {
           if (!group || typeof group !== "object" || Array.isArray(group)) return [];
@@ -236,6 +254,7 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
       options,
       ...(overrides.length ? { overrides } : {}),
       ...(skus.length ? { skus } : {}),
+      ...(barcodes.length ? { barcodes } : {}),
       ...(images.length ? { images } : {}),
     }];
   });
@@ -371,6 +390,7 @@ export class ShopService {
               { category: { name: { contains: search, mode: "insensitive" } } },
               { variants: { some: { name: { contains: search, mode: "insensitive" } } } },
               { variants: { some: { sku: { contains: search, mode: "insensitive" } } } },
+              { variants: { some: { barcode: { contains: search, mode: "insensitive" } } } },
             ],
           }
         : {}),
@@ -398,6 +418,7 @@ export class ShopService {
       throw new AppError(409, `A shop can have up to ${MAX_PRODUCTS} products.`, "PRODUCT_LIMIT");
     }
     const expanded = expandOptionSets(input.optionSets);
+    await assertBarcodesFree(websiteId, expanded.variants);
     const images = await this.resolveImages(website.clientId, input.images ?? []);
     await this.assertImages(website.clientId, imageIds(expanded));
 
@@ -439,6 +460,7 @@ export class ShopService {
     const categoryId = emptyToNull(input.categoryId ?? undefined);
     if (categoryId) await this.findCategory(websiteId, categoryId);
     const expanded = expandOptionSets(input.optionSets);
+    await assertBarcodesFree(websiteId, expanded.variants, productId);
     const images = await this.resolveImages(current.clientId, input.images ?? []);
     await this.assertImages(current.clientId, imageIds(expanded));
 
@@ -599,7 +621,13 @@ export class ShopService {
 
 }
 
-type ExpandedVariant = { name: string; sku: string | null; pricePaise: number; images: { mediaId: string; alt: string }[] };
+type ExpandedVariant = {
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  pricePaise: number;
+  images: { mediaId: string; alt: string }[];
+};
 
 function variantImages(images: ShopImageInput[] | undefined): { mediaId: string; alt: string }[] {
   const list = images ?? [];
@@ -674,7 +702,13 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
         .map((row) => [row.key, row.sku.trim()] as const)
         .filter((row) => row[1].length > 0),
     );
+    const barcodeMap = new Map(
+      (set.barcodes ?? [])
+        .map((row) => [row.key, row.barcode.trim()] as const)
+        .filter((row) => row[1].length > 0),
+    );
     const imageGroups = new Map((set.images ?? []).map((group) => [group.key, variantImages(group.images)]));
+    const keptBarcodes: { key: string; barcode: string }[] = [];
     const keptOverrides: { key: string; pricePaise: number }[] = [];
     const keptSkus: { key: string; sku: string }[] = [];
     const keptImages: { key: string; images: { mediaId: string; alt: string }[] }[] = [];
@@ -692,9 +726,11 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
       if (override !== undefined && override !== set.pricePaise) keptOverrides.push({ key, pricePaise: override });
       const sku = skuMap.get(key) ?? null;
       if (sku) keptSkus.push({ key, sku });
+      const barcode = barcodeMap.get(key) ?? null;
+      if (barcode) keptBarcodes.push({ key, barcode });
       const images = imageGroups.get(key) ?? [];
       if (images.length > 0) keptImages.push({ key, images });
-      variants.push({ name: label, sku, pricePaise, images });
+      variants.push({ name: label, sku, barcode, pricePaise, images });
     }
 
     stored.push({
@@ -702,6 +738,7 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
       options,
       ...(keptOverrides.length > 0 ? { overrides: keptOverrides } : {}),
       ...(keptSkus.length > 0 ? { skus: keptSkus } : {}),
+      ...(keptBarcodes.length > 0 ? { barcodes: keptBarcodes } : {}),
       ...(keptImages.length > 0 ? { images: keptImages } : {}),
     });
   }
@@ -721,6 +758,7 @@ function variantRows(
     id: randomUUID(),
     name: variant.name,
     sku: variant.sku,
+    barcode: variant.barcode,
     pricePaise: variant.pricePaise,
     quantity: quantities.get(variant.name.toLowerCase()) ?? 0,
     images: variant.images as Prisma.InputJsonValue,
