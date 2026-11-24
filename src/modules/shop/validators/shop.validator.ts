@@ -190,6 +190,9 @@ const shopOrderStatus = Joi.string()
 
 export const shopOrderQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).allow("").optional(),
+  channel: Joi.string().valid("online", "pos").optional(),
+  /** Orders placed on this day (IST), YYYY-MM-DD. */
+  date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
   status: Joi.string()
     .valid("pending", "paid", "processing", "shipped", "delivered", "failed", "cancelled", "returned")
     .optional(),
@@ -292,3 +295,52 @@ export const shopUpdateCouponSchema = Joi.object({
   maxUses: Joi.number().integer().min(1).allow(null).optional(),
   active: Joi.boolean().optional(),
 }).min(1);
+
+const posPhone = Joi.string().trim().max(32).pattern(/^[+\d][\d\s-]*$/).allow("").messages({
+  "string.pattern.base": "Enter a valid phone number",
+});
+
+export const shopPosSaleSchema = Joi.object({
+  items: Joi.array()
+    .items(
+      Joi.object({
+        variantId: Joi.string().guid().required(),
+        quantity: Joi.number().integer().min(1).max(10_000).required(),
+      }),
+    )
+    .min(1)
+    .max(200)
+    .required()
+    .messages({ "array.min": "Add at least one item." }),
+  discount: Joi.object({
+    type: Joi.string().valid("amount", "percent").required(),
+    value: Joi.number().min(0).when("type", {
+      is: "percent",
+      then: Joi.number().max(100),
+      otherwise: Joi.number().integer().max(100_000_000),
+    }).required(),
+  })
+    .allow(null)
+    .optional(),
+  customer: Joi.object({
+    customerId: Joi.string().guid().allow(null).optional(),
+    name: Joi.string().trim().max(120).allow("").optional(),
+    phone: posPhone.optional(),
+    email: Joi.string().trim().lowercase().email().max(255).allow("").optional(),
+  })
+    .allow(null)
+    .optional(),
+  payment: Joi.object({
+    method: Joi.string().valid("cash", "upi", "card", "razorpay_qr").required(),
+    cashReceivedPaise: Joi.number().integer().min(0).max(100_000_000).allow(null).optional(),
+    reference: Joi.string().trim().max(100).allow("").optional(),
+  }).required(),
+});
+
+export const shopPosEmailSchema = Joi.object({
+  to: Joi.string().trim().lowercase().email().max(255).allow("").optional(),
+});
+
+export const shopPosSummaryQuerySchema = Joi.object({
+  date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional().messages({ "string.pattern.base": "Use YYYY-MM-DD" }),
+});

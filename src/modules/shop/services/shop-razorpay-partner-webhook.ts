@@ -19,9 +19,12 @@ async function shopFor(event: PartnerWebhookEvent): Promise<string | null> {
   const payment = event.payload?.payment?.entity;
   const razorpayOrderId = payment?.order_id ?? event.payload?.order?.entity?.id ?? null;
   const razorpayPaymentId = event.payload?.refund?.entity?.payment_id ?? payment?.id ?? null;
+  // POS till QR payments carry no Razorpay order; they're found by the QR code instead.
+  const razorpayQrCodeId = event.payload?.qr_code?.entity?.id ?? null;
   const or = [
     ...(razorpayOrderId ? [{ razorpayOrderId }] : []),
     ...(razorpayPaymentId ? [{ razorpayPaymentId }] : []),
+    ...(razorpayQrCodeId ? [{ razorpayQrCodeId }] : []),
   ];
   if (or.length === 0) return null;
   const order = await prisma.shopOrder.findFirst({ where: { OR: or }, select: { websiteId: true } });

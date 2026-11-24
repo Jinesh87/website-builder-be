@@ -182,6 +182,7 @@ function toSummary(website: WebsiteWithSummary, billingEnabled: boolean, reminde
     shopFeatureEnabled: website.client?.shopFeatureEnabled ?? false,
     shopEnabled: website.shopEnabled ?? false,
     shopAllowGuestCheckout: website.shopAllowGuestCheckout ?? false,
+    shopPosEnabled: website.shopPosEnabled ?? false,
     shopCancelUntilStatus:
       website.shopCancelUntilStatus === "PAID"
         ? "paid"
@@ -847,6 +848,9 @@ export class WebsiteService {
     }
     if (input.shopAllowGuestCheckout !== undefined) {
       data.shopAllowGuestCheckout = input.shopAllowGuestCheckout;
+    }
+    if (input.shopPosEnabled !== undefined) {
+      data.shopPosEnabled = input.shopPosEnabled;
     }
     if (input.shopCancelUntilStatus !== undefined) {
       data.shopCancelUntilStatus =

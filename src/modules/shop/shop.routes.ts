@@ -7,6 +7,7 @@ import {
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { shopController } from "./controllers/shop.controller.js";
+import { shopPosController } from "./controllers/shop-pos.controller.js";
 import { shopRazorpayConnectController } from "./controllers/shop-razorpay-connect.controller.js";
 import {
   shopCategoryParamsSchema,
@@ -30,6 +31,9 @@ import {
   shopPaymentLogQuerySchema,
   shopOrderStatusSchema,
   shopPaymentSchema,
+  shopPosEmailSchema,
+  shopPosSaleSchema,
+  shopPosSummaryQuerySchema,
   shopRazorpayConnectSchema,
   shopProductParamsSchema,
   shopProductQuerySchema,
@@ -144,6 +148,40 @@ shopRouter.patch(
   validate(shopOrderStatusSchema),
   shopController.updateOrderStatus,
 );
+shopRouter.get(
+  "/orders/:orderId/invoice",
+  validate(shopOrderParamsSchema, "params"),
+  rateLimit({ name: "shop-store-invoice", max: 30, windowSeconds: 60 }),
+  shopPosController.downloadInvoice,
+);
+
+// In-store till (POS).
+const posOrderParams = validate(shopOrderParamsSchema, "params");
+shopRouter.get("/pos/catalog", websiteParams, shopPosController.catalog);
+shopRouter.get("/pos/summary", websiteParams, validate(shopPosSummaryQuerySchema, "query"), shopPosController.summary);
+shopRouter.post(
+  "/pos/sales",
+  websiteParams,
+  rateLimit({ name: "shop-pos-sale", max: 120, windowSeconds: 60 }),
+  validate(shopPosSaleSchema),
+  shopPosController.createSale,
+);
+shopRouter.get(
+  "/pos/sales/:orderId/qr",
+  posOrderParams,
+  rateLimit({ name: "shop-pos-qr-check", max: 60, windowSeconds: 60 }),
+  shopPosController.checkQr,
+);
+shopRouter.post("/pos/sales/:orderId/qr/cancel", posOrderParams, shopPosController.cancelQr);
+shopRouter.get("/pos/sales/:orderId/receipt", posOrderParams, shopPosController.receipt);
+shopRouter.post(
+  "/pos/sales/:orderId/email",
+  posOrderParams,
+  rateLimit({ name: "shop-pos-email", max: 20, windowSeconds: 60 }),
+  validate(shopPosEmailSchema),
+  shopPosController.emailInvoice,
+);
+
 shopRouter.get(
   "/payment-logs",
   websiteParams,

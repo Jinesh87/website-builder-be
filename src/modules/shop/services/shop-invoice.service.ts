@@ -1,6 +1,10 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import { env } from "../../../config/env.js";
+import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { prisma } from "../../../config/prisma.js";
+import type { Prisma } from "../../../generated/prisma/client.js";
+import { orderBuyer } from "../utils/shop-order-buyer.js";
+import { openShopForAdmin } from "./shop-admin-access.js";
 import {
   isShopInvoiceLayout,
   renderShopInvoiceHtml,
@@ -29,14 +33,31 @@ function addressLines(address: unknown): string[] {
   return [line1, line2, cityLine, country, phone ? `Phone ${phone}` : ""].filter(Boolean);
 }
 
+const POS_PAYMENT_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  UPI: "UPI",
+  CARD: "Card",
+  RAZORPAY_QR: "UPI (Razorpay QR)",
+};
+
+export type RenderedInvoice = { html: string; filename: string };
+
 export class ShopInvoiceService {
-  async renderCustomerInvoice(websiteId: string, customerId: string, orderId: string): Promise<{
-    html: string;
-    filename: string;
-  }> {
+  /** A shopper's own invoice (shop account pages and tracking links). */
+  renderCustomerInvoice(websiteId: string, customerId: string, orderId: string): Promise<RenderedInvoice> {
+    return this.render(websiteId, { id: orderId, websiteId, customerId });
+  }
+
+  /** Any order's invoice, for the shop owner (orders screen and POS). */
+  async renderStoreInvoice(websiteId: string, orderId: string, actor: AuthUser): Promise<RenderedInvoice> {
+    await openShopForAdmin(websiteId, actor);
+    return this.render(websiteId, { id: orderId, websiteId });
+  }
+
+  private async render(websiteId: string, where: Prisma.ShopOrderWhereInput): Promise<RenderedInvoice> {
     const [order, website, design] = await Promise.all([
       prisma.shopOrder.findFirst({
-        where: { id: orderId, websiteId, customerId },
+        where,
         include: {
           items: { orderBy: { productName: "asc" } },
           customer: { select: { fullName: true, email: true } },
@@ -99,6 +120,7 @@ export class ShopInvoiceService {
             ? "Refund failed"
             : null;
 
+    const buyer = orderBuyer(order);
     const html = renderShopInvoiceHtml({
       layout,
       logoUrl,
@@ -112,9 +134,9 @@ export class ShopInvoiceService {
       paidAt: formatDate(order.paidAt),
       statusLabel,
       refundLabel,
-      customerName: order.customer.fullName || "Customer",
-      customerEmail: order.customer.email,
-      shippingLines: addressLines(order.shippingAddress),
+      customerName: buyer.fullName || "Customer",
+      customerEmail: buyer.email ?? "",
+      shippingLines: order.channel === "POS" ? posLines(order, buyer.phone) : addressLines(order.shippingAddress),
       items: order.items.map((item) => ({
         productName: item.productName,
         variantName: item.variantName,
@@ -131,6 +153,12 @@ export class ShopInvoiceService {
 
     return { html, filename: `invoice-${order.number}.pdf` };
   }
+}
+
+/** POS invoices have no delivery address: show the walk-in phone and how the sale was paid instead. */
+function posLines(order: { posPaymentMethod: string | null }, phone: string | null): string[] {
+  const paidBy = order.posPaymentMethod ? POS_PAYMENT_LABEL[order.posPaymentMethod] : null;
+  return [phone ? `Phone ${phone}` : "", "In-store purchase", paidBy ? `Paid by ${paidBy}` : ""].filter(Boolean);
 }
 
 export const shopInvoiceService = new ShopInvoiceService();

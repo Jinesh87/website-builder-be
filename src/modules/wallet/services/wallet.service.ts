@@ -155,6 +155,7 @@ export type RazorpayWebhookEvent = {
     payment?: { entity?: RazorpayWebhookPayment };
     refund?: { entity?: RazorpayWebhookRefund };
     subscription?: { entity?: RazorpaySubscription };
+    qr_code?: { entity?: { id?: string } };
   };
 };
 

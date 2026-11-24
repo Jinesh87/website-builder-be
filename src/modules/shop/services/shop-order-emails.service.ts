@@ -5,7 +5,8 @@ import { env } from "../../../config/env.js";
 import { logger } from "../../../config/logger.js";
 import { prisma } from "../../../config/prisma.js";
 import { DomainStatus, MediaKind, ShopOrderStatus } from "../../../generated/prisma/client.js";
-import { emailService } from "../../email/services/email.service.js";
+import { emailService, type EmailAttachment } from "../../email/services/email.service.js";
+import { orderBuyer, WALK_IN_NAME } from "../utils/shop-order-buyer.js";
 import { scopeFor } from "../../websites/services/website.service.js";
 import { newOrderAccessToken, orderTrackUrl } from "../utils/shop-order-access.js";
 import {
@@ -94,6 +95,9 @@ function defaultDesign(websiteLogoId: string | null): ShopOrderEmailDesignView {
     websiteLogoUrl: mediaUrl(websiteLogoId),
   };
 }
+
+/** Sends a POS sale's email on purpose (POS sales get no automatic status emails). */
+type PosEmailOptions = { to: string; attachments?: EmailAttachment[] };
 
 export class ShopOrderEmailsService {
   private async openShop(websiteId: string, actor: AuthUser) {
@@ -321,55 +325,83 @@ export class ShopOrderEmailsService {
   /**
    * Sends the customer email for this status. Never throws — checkout/admin updates must not fail on mail.
    */
-  async notifyStatusChange(orderId: string, status: ShopOrderStatus): Promise<void> {
+  async notifyStatusChange(orderId: string, status: ShopOrderStatus, pos?: PosEmailOptions): Promise<void> {
     try {
-      const label = EMAIL_LABEL_FROM_STATUS[status];
-      if (!SHOP_ORDER_EMAIL_STATUSES.includes(label)) return;
+      await this.sendStatusEmail(orderId, status, pos);
+    } catch (error) {
+      logger.warn({ err: error, orderId, status }, "Shop order status email skipped");
+    }
+  }
 
-      const order = await prisma.shopOrder.findUnique({
-        where: { id: orderId },
-        include: {
-          customer: { select: { email: true, fullName: true } },
-          items: { orderBy: { productName: "asc" } },
-          website: {
-            select: {
-              name: true,
-              businessName: true,
-              subdomain: true,
-              client: { select: { businessName: true } },
-              domains: {
-                where: { status: DomainStatus.ACTIVE },
-                orderBy: { isPrimary: "desc" },
-                select: { hostname: true },
-                take: 1,
-              },
+  /**
+   * The POS "email invoice" action: the paid email with the invoice PDF attached. Unlike
+   * {@link notifyStatusChange} it throws, so the cashier sees when sending fails.
+   */
+  async sendPosInvoice(orderId: string, to: string, invoice: EmailAttachment): Promise<void> {
+    await this.sendStatusEmail(orderId, ShopOrderStatus.PAID, { to, attachments: [invoice] });
+  }
+
+  /**
+   * POS sales get no automatic status emails (the customer is at the counter); `pos` sends one on
+   * purpose to the given inbox. Returns quietly when there is nothing to send.
+   */
+  private async sendStatusEmail(orderId: string, status: ShopOrderStatus, pos?: PosEmailOptions): Promise<void> {
+    const label = EMAIL_LABEL_FROM_STATUS[status];
+    if (!SHOP_ORDER_EMAIL_STATUSES.includes(label)) return;
+
+    const order = await prisma.shopOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        customer: { select: { email: true, fullName: true } },
+        items: { orderBy: { productName: "asc" } },
+        website: {
+          select: {
+            name: true,
+            businessName: true,
+            subdomain: true,
+            client: { select: { businessName: true } },
+            domains: {
+              where: { status: DomainStatus.ACTIVE },
+              orderBy: { isPrimary: "desc" },
+              select: { hostname: true },
+              take: 1,
             },
           },
         },
-      });
-      if (!order?.customer.email) return;
+      },
+    });
+    if (!order) return;
+    const isPos = order.channel === "POS";
+    if (isPos && !pos) return;
+    const buyer = orderBuyer(order);
+    const to = pos?.to ?? buyer.email;
+    if (!to) return;
 
-      const stored = await prisma.shopOrderEmailTemplate.findUnique({
-        where: { websiteId_status: { websiteId: order.websiteId, status } },
-      });
-      if (stored && !stored.enabled) return;
+    const stored = await prisma.shopOrderEmailTemplate.findUnique({
+      where: { websiteId_status: { websiteId: order.websiteId, status } },
+    });
+    // A cashier's explicit "email invoice" still sends when the automatic paid email is turned off.
+    if (stored && !stored.enabled && !pos) return;
 
-      const defaults = DEFAULT_SHOP_ORDER_EMAILS[label];
-      const subject = stored?.subject ?? defaults.subject;
-      const heading = stored?.heading ?? defaults.heading;
-      let message = stored?.message ?? defaults.message;
-      const design = await this.resolveDesign(order.websiteId);
+    const defaults = DEFAULT_SHOP_ORDER_EMAILS[label];
+    const subject = stored?.subject ?? defaults.subject;
+    const heading = stored?.heading ?? defaults.heading;
+    let message = stored?.message ?? defaults.message;
+    const design = await this.resolveDesign(order.websiteId);
 
-      const shopName =
-        order.website.businessName?.trim() ||
-        order.website.client.businessName?.trim() ||
-        order.website.name.trim() ||
-        "Shop";
-      const itemsText = order.items
-        .map((item) => `${item.productName} (${item.variantName}) × ${item.quantity} — ${formatInr(item.lineTotalPaise)}`)
-        .join("\n");
-      const itemsHtml = escapeHtml(itemsText).replace(/\n/g, "<br/>");
+    const shopName =
+      order.website.businessName?.trim() ||
+      order.website.client.businessName?.trim() ||
+      order.website.name.trim() ||
+      "Shop";
+    const itemsText = order.items
+      .map((item) => `${item.productName} (${item.variantName}) × ${item.quantity} — ${formatInr(item.lineTotalPaise)}`)
+      .join("\n");
+    const itemsHtml = escapeHtml(itemsText).replace(/\n/g, "<br/>");
 
+    // POS walk-ins have no order pages to track; their invoice is attached instead.
+    let trackUrl = "";
+    if (!isPos) {
       let trackToken = order.publicAccessToken;
       if (!trackToken) {
         trackToken = newOrderAccessToken();
@@ -378,45 +410,46 @@ export class ShopOrderEmailsService {
       const liveBase = order.website.domains[0]?.hostname
         ? `https://${order.website.domains[0].hostname}`
         : `${env.API_PUBLIC_URL}/live/${order.website.subdomain}`;
-      const trackUrl = orderTrackUrl(liveBase, trackToken);
-      if (status === ShopOrderStatus.PAID && !message.includes("{{trackUrl}}")) {
-        message = `${message}\n\nTrack your order and download your invoice:\n{{trackUrl}}`;
-      }
-
-      const vars: Record<string, string> = {
-        customerName: order.customer.fullName || "there",
-        customerEmail: order.customer.email,
-        orderNumber: String(order.number),
-        orderTotal: formatInr(order.totalPaise),
-        orderDate: formatDate(order.createdAt),
-        status: label,
-        statusLabel: STATUS_DISPLAY[label],
-        shopName,
-        failureReason: order.failureReason?.trim() || "",
-        trackUrl,
-      };
-
-      const rendered = renderShopOrderEmail({
-        subject,
-        heading,
-        message,
-        vars,
-        itemsHtml,
-        itemsText,
-        layout: design.layout,
-        accentColor: design.accentColor,
-        logoUrl: design.logoUrl,
-      });
-
-      await emailService.sendRendered({
-        to: order.customer.email,
-        subject: rendered.subject,
-        html: rendered.html,
-        text: rendered.text,
-      });
-    } catch (error) {
-      logger.warn({ err: error, orderId, status }, "Shop order status email skipped");
+      trackUrl = orderTrackUrl(liveBase, trackToken);
+    } else if (pos?.attachments?.length) {
+      message = `${message}\n\nYour invoice is attached.`;
     }
+    if (!isPos && status === ShopOrderStatus.PAID && !message.includes("{{trackUrl}}")) {
+      message = `${message}\n\nTrack your order and download your invoice:\n{{trackUrl}}`;
+    }
+
+    const vars: Record<string, string> = {
+      customerName: buyer.walkIn && buyer.fullName === WALK_IN_NAME ? "there" : buyer.fullName || "there",
+      customerEmail: to,
+      orderNumber: String(order.number),
+      orderTotal: formatInr(order.totalPaise),
+      orderDate: formatDate(order.createdAt),
+      status: label,
+      statusLabel: STATUS_DISPLAY[label],
+      shopName,
+      failureReason: order.failureReason?.trim() || "",
+      trackUrl,
+    };
+
+    const rendered = renderShopOrderEmail({
+      subject,
+      heading,
+      message,
+      vars,
+      itemsHtml,
+      itemsText,
+      layout: design.layout,
+      accentColor: design.accentColor,
+      logoUrl: design.logoUrl,
+    });
+
+    await emailService.sendRendered({
+      to,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      attachments: pos?.attachments,
+    });
   }
 }
 

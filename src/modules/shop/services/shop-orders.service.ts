@@ -1,7 +1,8 @@
 import { AppError } from "../../../common/errors/AppError.js";
 import type { AuthUser } from "../../../common/middleware/authenticate.js";
 import { prisma } from "../../../config/prisma.js";
-import { ShopOrderStatus } from "../../../generated/prisma/client.js";
+import { ShopOrderChannel, ShopOrderStatus } from "../../../generated/prisma/client.js";
+import { istDayRange } from "../utils/shop-day.js";
 import { recordOrderStatusEvent } from "../utils/shop-order-timeline.js";
 import { openShopForAdmin } from "./shop-admin-access.js";
 import { purgeShopPages } from "./shop-cache.js";
@@ -23,6 +24,9 @@ export type { ShopOrderItemView, ShopOrderPage, ShopOrderStatusLabel, ShopOrderV
 
 export type ShopOrderQuery = {
   search?: string;
+  channel?: "online" | "pos";
+  /** YYYY-MM-DD: only orders placed that day (IST). */
+  date?: string;
   status?: ShopOrderStatusLabel;
   page?: number;
 };
@@ -37,6 +41,8 @@ export class ShopOrdersService {
     const where = {
       websiteId,
       ...(status ? { status } : {}),
+      ...(query.channel ? { channel: query.channel === "pos" ? ShopOrderChannel.POS : ShopOrderChannel.ONLINE } : {}),
+      ...(query.date ? { createdAt: { gte: istDayRange(query.date).start, lt: istDayRange(query.date).end } } : {}),
       ...(search
         ? {
             OR: [
@@ -94,6 +100,10 @@ export class ShopOrdersService {
       include: { items: true },
     });
     if (!existing) throw new AppError(404, "Order not found", "ORDER_NOT_FOUND");
+    // Till sales are handed over at the counter: the only change left is cancelling the sale.
+    if (existing.channel === ShopOrderChannel.POS && nextStatus !== ShopOrderStatus.CANCELLED) {
+      throw new AppError(400, "A POS sale can only be cancelled.", "POS_STATUS_LOCKED");
+    }
 
     const shouldDeduct =
       !existing.stockDeductedAt &&

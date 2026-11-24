@@ -26,6 +26,9 @@ import {
   type RenderedEmail,
 } from "../templates/email.templates.js";
 
+/** A file sent with an email, e.g. an invoice PDF. */
+export type EmailAttachment = { filename: string; content: Buffer };
+
 const CONFIG_ID = "default";
 
 export type EmailConfigView = {
@@ -365,18 +368,24 @@ export class EmailService {
   }
 
   /** Send a fully rendered email (used for editable shop order templates). */
-  async sendRendered(params: { to: string; subject: string; html: string; text: string }) {
-    await this.send(params.to, () => ({
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-    }));
+  async sendRendered(params: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    attachments?: EmailAttachment[];
+  }) {
+    await this.send(
+      params.to,
+      () => ({ subject: params.subject, html: params.html, text: params.text }),
+      { attachments: params.attachments },
+    );
   }
 
   private async send(
     to: string,
     render: (brand: string) => RenderedEmail,
-    options: { ignoreDisabled?: boolean; replyTo?: string } = {},
+    options: { ignoreDisabled?: boolean; replyTo?: string; attachments?: EmailAttachment[] } = {},
   ): Promise<void> {
     const config = await prisma.messagingConfig.findUnique({ where: { id: CONFIG_ID } });
     let apiKey: string | null = null;
@@ -413,6 +422,7 @@ export class EmailService {
       subject: email.subject,
       html: email.html,
       text: email.text,
+      ...(options.attachments?.length ? { attachments: options.attachments } : {}),
     });
 
     if (error) {

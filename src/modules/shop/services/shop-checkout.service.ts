@@ -14,7 +14,7 @@ import { PAYMENT_CURRENCY, type RazorpayWebhookEvent } from "../../wallet/servic
 import { razorpayErrorMessage, recordPaymentLog, refundReasonLabel } from "../utils/shop-payment-log.js";
 import { verifyCheckoutPayment } from "./shop-payment-verify.js";
 import { purgeShopPages } from "./shop-cache.js";
-import { effectiveGst, gstUnitPaise, payableUnitPaise } from "../utils/shop-gst.js";
+import { nextOrderNumber, priceOrderLine } from "../utils/shop-order-pricing.js";
 import type {
   ShopCancelOrderInput,
   ShopCheckoutStartInput,
@@ -42,8 +42,6 @@ function siteUrl(subdomain: string, customDomain: string | null): string {
   if (customDomain) return `https://${customDomain}`;
   return `${env.API_PUBLIC_URL}/live/${subdomain}`;
 }
-
-const FIRST_ORDER_NUMBER = 1001;
 
 export type ShopCheckoutSession = {
   orderId: string;
@@ -232,7 +230,11 @@ export async function restoreStockOnce(
  * Deducts stock for each line once using an atomic DB check (`quantity >= need`).
  * Throws INSUFFICIENT_STOCK / VARIANT_NOT_FOUND when a line cannot be taken — caller may refund.
  */
-async function deductStockOnce(tx: Prisma.TransactionClient, orderId: string): Promise<boolean> {
+export async function deductStockOnce(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  userId: string | null = null,
+): Promise<boolean> {
   const order = await tx.shopOrder.findUnique({
     where: { id: orderId },
     include: { items: true },
@@ -272,8 +274,8 @@ async function deductStockOnce(tx: Prisma.TransactionClient, orderId: string): P
         variantName: variant.name,
         delta: -item.quantity,
         quantityAfter: after?.quantity ?? 0,
-        note: `Order #${order.number}`,
-        userId: null,
+        note: order.channel === "POS" ? `POS sale #${order.number}` : `Order #${order.number}`,
+        userId,
       },
     });
   }
@@ -453,19 +455,8 @@ export class ShopCheckoutService {
       }
     }
 
-    const linePricing = (line: (typeof cart)[number]) => {
-      const gst = effectiveGst(line.product, line.product.website);
-      const unitPayable = payableUnitPaise(line.variant.pricePaise, gst);
-      const unitGst = gstUnitPaise(line.variant.pricePaise, gst);
-      const unitTaxable = Math.max(0, unitPayable - unitGst);
-      return {
-        gst,
-        unitPayable,
-        lineTotal: unitPayable * line.quantity,
-        taxablePaise: unitTaxable * line.quantity,
-        gstPaise: unitGst * line.quantity,
-      };
-    };
+    const linePricing = (line: (typeof cart)[number]) =>
+      priceOrderLine(line.product, line.product.website, line.variant.pricePaise, line.quantity);
     const listAmountPaise = cart.reduce((sum, line) => sum + linePricing(line).lineTotal, 0);
     if (listAmountPaise < 100) {
       throw new AppError(400, "Order total must be at least ₹1.", "AMOUNT_TOO_LOW");
@@ -501,12 +492,7 @@ export class ShopCheckoutService {
         data: { status: ShopOrderStatus.CANCELLED, failureReason: "Replaced by a new checkout" },
       });
 
-      const latest = await tx.shopOrder.findFirst({
-        where: { websiteId },
-        orderBy: { number: "desc" },
-        select: { number: true },
-      });
-      const number = (latest?.number ?? FIRST_ORDER_NUMBER - 1) + 1;
+      const number = await nextOrderNumber(tx, websiteId);
 
       return tx.shopOrder.create({
         data: {
@@ -819,7 +805,7 @@ export class ShopCheckoutService {
           note: "Payment received",
         });
 
-        if (order.couponId && order.listAmountPaise != null && order.discountPaise != null) {
+        if (order.couponId && order.customerId && order.listAmountPaise != null && order.discountPaise != null) {
           const { shopCouponService } = await import("./shop-coupon.service.js");
           await shopCouponService.redeemInTransaction(tx, {
             couponId: order.couponId,
@@ -833,7 +819,7 @@ export class ShopCheckoutService {
         }
 
         const variantIds = order.items.map((item) => item.variantId).filter((id): id is string => Boolean(id));
-        if (variantIds.length > 0) {
+        if (variantIds.length > 0 && order.customerId) {
           await tx.shopCartItem.deleteMany({
             where: { websiteId: order.websiteId, customerId: order.customerId, variantId: { in: variantIds } },
           });
@@ -1262,6 +1248,12 @@ export class ShopCheckoutService {
   async applyWebhook(websiteId: string, event: RazorpayWebhookEvent): Promise<boolean> {
     if (event.event?.startsWith("refund.")) {
       return this.applyRefundWebhook(websiteId, event);
+    }
+    if (event.event === "qr_code.credited") {
+      const qrId = event.payload?.qr_code?.entity?.id;
+      if (!qrId) return false;
+      const { shopPosService } = await import("./shop-pos.service.js");
+      return shopPosService.applyQrCredited(websiteId, qrId, event.payload?.payment?.entity?.id);
     }
 
     const payment = event.payload?.payment?.entity;

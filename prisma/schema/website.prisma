@@ -14,6 +14,8 @@ model Website {
   shopEnabled     Boolean               @default(false)
   /// When true, shoppers can cart and checkout without creating an account.
   shopAllowGuestCheckout Boolean        @default(false)
+  /// When true, the shop owner can sell in store from the POS till (Shop → POS).
+  shopPosEnabled  Boolean               @default(false)
   /// Latest fulfilment status at which shoppers may cancel. Null = customer cancel off.
   /// Compared against PAID / PROCESSING / SHIPPED (and earlier statuses).
   shopCancelUntilStatus ShopOrderStatus?

@@ -555,7 +555,7 @@ export class ShopGuestService {
         },
       },
     });
-    if (!pending) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    if (!pending?.customerId) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
 
     const order = await shopCheckoutService.confirmCheckout(websiteId, pending.customerId, input);
     await prisma.shopCartItem.deleteMany({ where: { websiteId, guestSessionId } });
@@ -577,7 +577,7 @@ export class ShopGuestService {
       where: { websiteId, publicAccessToken: token },
       select: { id: true, customerId: true, publicAccessToken: true },
     });
-    if (!order?.publicAccessToken) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    if (!order?.publicAccessToken || !order.customerId) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
     const detail = await shopCheckoutService.getCustomerOrder(websiteId, order.customerId, order.id);
     const website = await prisma.website.findUnique({
       where: { id: websiteId },
@@ -613,8 +613,9 @@ export class ShopGuestService {
       where: { websiteId, publicAccessToken: token },
       select: { id: true, customerId: true },
     });
-    if (!order) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
-    return order;
+    // POS walk-in sales have no shop account, so they aren't reachable from the shop's order pages.
+    if (!order?.customerId) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    return { id: order.id, customerId: order.customerId };
   }
 
   async renderTrackedInvoice(websiteId: string, token: string) {
@@ -622,7 +623,7 @@ export class ShopGuestService {
       where: { websiteId, publicAccessToken: token },
       select: { id: true, customerId: true },
     });
-    if (!order) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
+    if (!order?.customerId) throw new AppError(404, "Order not found.", "ORDER_NOT_FOUND");
     return shopInvoiceService.renderCustomerInvoice(websiteId, order.customerId, order.id);
   }
 

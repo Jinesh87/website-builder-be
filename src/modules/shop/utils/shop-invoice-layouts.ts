@@ -254,7 +254,7 @@ export function renderShopInvoiceHtml(input: ShopInvoiceRenderInput): string {
     ...companyContact,
     ...(gstin ? [`GSTIN ${gstin}`] : []),
   ];
-  const billLines = [input.customerName, input.customerEmail, ...input.shippingLines];
+  const billLines = [input.customerName, input.customerEmail, ...input.shippingLines].filter(Boolean);
   const title = `Invoice ${input.invoiceNumber}`;
   const statusBits = [
     `Status: ${input.statusLabel}`,

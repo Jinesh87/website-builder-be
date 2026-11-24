@@ -1,3 +1,4 @@
+import { orderBuyer } from "../utils/shop-order-buyer.js";
 import { AppError } from "../../../common/errors/AppError.js";
 import { prisma } from "../../../config/prisma.js";
 import { Prisma, ShopOrderStatus } from "../../../generated/prisma/client.js";
@@ -171,8 +172,8 @@ export class ShopInventoryService {
         refundStatus: refundStatusLabel(order.refundStatus),
         totalPaise: order.totalPaise,
         returnReason: order.returnReason,
-        customerName: order.customer.fullName,
-        customerEmail: order.customer.email,
+        customerName: orderBuyer(order).fullName,
+        customerEmail: orderBuyer(order).email ?? "",
         returnedAt: (order.events[0]?.createdAt ?? order.updatedAt).toISOString(),
         createdAt: order.createdAt.toISOString(),
         items: order.items.map((item) => ({

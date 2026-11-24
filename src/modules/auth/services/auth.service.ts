@@ -48,9 +48,19 @@ import {
   VERIFICATION_CODE_TTL_SECONDS,
 } from "../utils/verification-code.js";
 
-type UserWithClient = User & { client: { id: string; businessName: string; shopFeatureEnabled: boolean } | null };
+type UserWithClient = User & {
+  client: { id: string; businessName: string; shopFeatureEnabled: boolean; websites: { id: string }[] } | null;
+};
 
-const clientSelect = { select: { id: true, businessName: true, shopFeatureEnabled: true } } as const;
+/** `websites` holds at most one shop with the POS till on, so the session knows whether to show POS. */
+const clientSelect = {
+  select: {
+    id: true,
+    businessName: true,
+    shopFeatureEnabled: true,
+    websites: { where: { shopEnabled: true, shopPosEnabled: true }, select: { id: true }, take: 1 },
+  },
+} as const;
 
 /** Compared against when the email is unknown so response time doesn't reveal which accounts exist. */
 const dummyPasswordHash = hashPassword(randomUUID());
@@ -72,7 +82,14 @@ function toPublicUser(user: UserWithClient): PublicUser {
     role: user.role,
     status: user.status,
     emailVerified: user.emailVerifiedAt !== null,
-    client: user.client,
+    client: user.client
+      ? {
+          id: user.client.id,
+          businessName: user.client.businessName,
+          shopFeatureEnabled: user.client.shopFeatureEnabled,
+          posEnabled: user.client.shopFeatureEnabled && user.client.websites.length > 0,
+        }
+      : null,
     createdAt: user.createdAt.toISOString(),
   };
 }

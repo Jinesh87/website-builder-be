@@ -11,7 +11,8 @@ export type PublicUser = {
   status: UserStatus;
   emailVerified: boolean;
   /** shopFeatureEnabled: the Super Admin turned the shop on for this client (shows the Shop menu). */
-  client: { id: string; businessName: string; shopFeatureEnabled: boolean } | null;
+  /** posEnabled: at least one of the client's shops has the POS till on (shows POS in the Shop menu). */
+  client: { id: string; businessName: string; shopFeatureEnabled: boolean; posEnabled: boolean } | null;
   createdAt: string;
 };
 

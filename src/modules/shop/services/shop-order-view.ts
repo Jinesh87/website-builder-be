@@ -1,5 +1,12 @@
-import { Prisma, ShopOrderStatus, type ShopRefundStatus } from "../../../generated/prisma/client.js";
+import {
+  Prisma,
+  ShopOrderStatus,
+  type ShopOrderChannel,
+  type ShopPosPaymentMethod,
+  type ShopRefundStatus,
+} from "../../../generated/prisma/client.js";
 import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
+import { orderBuyer, type OrderBuyer } from "../utils/shop-order-buyer.js";
 import { toTimelineEvent, type ShopOrderTimelineEvent } from "../utils/shop-order-timeline.js";
 import { refundStatusLabel } from "./shop-checkout.service.js";
 
@@ -43,13 +50,17 @@ export type ShopOrderView = {
   couponCode: string | null;
   listAmountPaise: number | null;
   discountPaise: number | null;
-  customer: {
-    id: string;
-    fullName: string;
-    email: string;
-    phone: string | null;
-    isGuest: boolean;
-  };
+  /** Shop account, or the POS walk-in (id null, `walkIn` true). */
+  customer: OrderBuyer;
+  /** "online" shop checkout or "pos" till sale. */
+  channel: "online" | "pos";
+  pos: {
+    paymentMethod: "cash" | "upi" | "card" | "razorpay_qr" | null;
+    cashReceivedPaise: number | null;
+    /** Cash handed back; null unless paid in cash. */
+    changePaise: number | null;
+    paymentReference: string | null;
+  } | null;
   items: ShopOrderItemView[];
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
@@ -149,7 +160,12 @@ export function toView(order: {
   shippingAddress?: Prisma.JsonValue | null;
   createdAt: Date;
   updatedAt: Date;
-  customer: { id: string; fullName: string; email: string; phone: string | null; isGuest: boolean };
+  customer: { id: string; fullName: string; email: string; phone: string | null; isGuest: boolean } | null;
+  posCustomer?: Prisma.JsonValue | null;
+  channel?: ShopOrderChannel;
+  posPaymentMethod?: ShopPosPaymentMethod | null;
+  posCashReceivedPaise?: number | null;
+  posPaymentReference?: string | null;
   items: {
     id: string;
     productName: string;
@@ -177,13 +193,9 @@ export function toView(order: {
     couponCode: order.couponCode ?? null,
     listAmountPaise: order.listAmountPaise ?? null,
     discountPaise: order.discountPaise ?? null,
-    customer: {
-      id: order.customer.id,
-      fullName: order.customer.fullName,
-      email: order.customer.email,
-      phone: order.customer.phone,
-      isGuest: order.customer.isGuest,
-    },
+    customer: orderBuyer(order),
+    channel: order.channel === "POS" ? "pos" : "online",
+    pos: order.channel === "POS" ? posView(order) : null,
     items: order.items.map((item) => ({
       id: item.id,
       productName: item.productName,
@@ -205,5 +217,20 @@ export function toView(order: {
     timeline: (order.events ?? []).map(toTimelineEvent),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
+  };
+}
+
+function posView(order: {
+  totalPaise: number;
+  posPaymentMethod?: ShopPosPaymentMethod | null;
+  posCashReceivedPaise?: number | null;
+  posPaymentReference?: string | null;
+}): NonNullable<ShopOrderView["pos"]> {
+  const cash = order.posPaymentMethod === "CASH" ? (order.posCashReceivedPaise ?? null) : null;
+  return {
+    paymentMethod: order.posPaymentMethod ? (order.posPaymentMethod.toLowerCase() as "cash") : null,
+    cashReceivedPaise: cash,
+    changePaise: cash != null ? Math.max(0, cash - order.totalPaise) : null,
+    paymentReference: order.posPaymentReference ?? null,
   };
 }

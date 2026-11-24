@@ -142,6 +142,7 @@ export const updateWebsiteSchema = Joi.object({
   seoToolsEnabled: Joi.boolean().optional(),
   shopEnabled: Joi.boolean().optional(),
   shopAllowGuestCheckout: Joi.boolean().optional(),
+  shopPosEnabled: Joi.boolean().optional(),
   shopCancelUntilStatus: Joi.string().valid("paid", "processing", "shipped").allow(null).optional(),
   shopReturnDays: Joi.number().integer().min(1).max(365).allow(null).optional().messages({
     "number.min": "Return window must be at least 1 day",

@@ -287,12 +287,40 @@ enum ShopRefundStatus {
   FAILED
 }
 
+/// Where an order was placed: the online shop, or the in-store till (POS).
+enum ShopOrderChannel {
+  ONLINE
+  POS
+}
+
+/// How a POS sale was paid. CASH/UPI/CARD are recorded by the cashier; RAZORPAY_QR is confirmed by Razorpay.
+enum ShopPosPaymentMethod {
+  CASH
+  UPI
+  CARD
+  RAZORPAY_QR
+}
+
 /// A shopper's purchase on one website. Line items keep product names after catalogue edits.
 model ShopOrder {
   id                String           @id @default(uuid()) @db.Uuid
   websiteId         String           @db.Uuid
   clientId          String           @db.Uuid
-  customerId        String           @db.Uuid
+  /// Shop account that placed the order. Null for POS walk-in sales (see posCustomer).
+  customerId        String?          @db.Uuid
+  channel           ShopOrderChannel @default(ONLINE)
+  /// POS only: how the sale was paid.
+  posPaymentMethod  ShopPosPaymentMethod?
+  /// POS cash sales: cash handed over (change = this − totalPaise).
+  posCashReceivedPaise Int?
+  /// POS UPI/card sales: optional reference the cashier typed (UPI ref, card slip number).
+  posPaymentReference String?        @db.VarChar(100)
+  /// POS walk-in details typed at the till: `{ name, phone, email }` (all optional).
+  posCustomer       Json?
+  /// Platform user who rang up the POS sale.
+  posCashierId      String?          @db.Uuid
+  /// Razorpay UPI QR shown at the till for a RAZORPAY_QR sale.
+  razorpayQrCodeId  String?          @unique @db.VarChar(64)
   /// Browser session that placed a guest checkout order, so the guest's account page can list it.
   guestSessionId    String?          @db.Uuid
   /// Per-website sequence shown as Order #1001.
@@ -328,7 +356,7 @@ model ShopOrder {
   updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 
   website  Website                @relation(fields: [websiteId, clientId], references: [id, clientId], onDelete: Cascade)
-  customer ShopCustomer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer ShopCustomer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
   coupon   ShopCoupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
   items    ShopOrderItem[]
   events   ShopOrderStatusEvent[]
@@ -337,6 +365,7 @@ model ShopOrder {
   @@unique([websiteId, number])
   @@index([websiteId, createdAt])
   @@index([websiteId, status])
+  @@index([websiteId, channel, createdAt])
   @@index([customerId, createdAt])
   @@index([websiteId, guestSessionId])
   @@index([razorpayPaymentId])

@@ -18,3 +18,16 @@ export async function openShopForAdmin(websiteId: string, actor: AuthUser) {
   }
   return website;
 }
+
+/** Like {@link openShopForAdmin}, and the shop owner has turned the POS till on in shop settings. */
+export async function openPosForAdmin(websiteId: string, actor: AuthUser) {
+  const website = await openShopForAdmin(websiteId, actor);
+  const { shopPosEnabled } = await prisma.website.findUniqueOrThrow({
+    where: { id: websiteId },
+    select: { shopPosEnabled: true },
+  });
+  if (!shopPosEnabled) {
+    throw new AppError(403, "Turn on POS in the shop settings to sell in store.", "POS_OFF");
+  }
+  return website;
+}

@@ -73,6 +73,16 @@ export type RazorpaySubscription = {
   paid_count: number;
 };
 
+/** Authenticated Razorpay API call; errors become AppErrors with a readable message. */
+export async function razorpayRequest<T>(
+  keys: RazorpayAuth,
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  return call<T>(keys, method, path, body);
+}
+
 async function call<T>(keys: RazorpayAuth, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   let response: Response;
   try {

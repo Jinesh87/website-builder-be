@@ -130,6 +130,15 @@ function sharedValueImages(optionSets: ShopOptionSetView[], variantName: string)
   return [];
 }
 
+/** A variant's own photos, else the photos shared by its option value (e.g. every black size). */
+export function variantPhotos(
+  variant: { name: string; images: Prisma.JsonValue },
+  optionSets: ShopOptionSetView[],
+): ShopImageView[] {
+  const own = readImages(variant.images);
+  return own.length > 0 ? own : sharedValueImages(optionSets, variant.name);
+}
+
 function toPublicProduct(
   product: ProductRow,
   shop: { shopReturnDays: number | null; shopGstPercent: number; shopPriceIncludesGst: boolean },
@@ -137,8 +146,7 @@ function toPublicProduct(
   const optionSets = readOptionSets(product.optionSets);
   const gst = effectiveGst(product, shop);
   const variants: PublicShopVariant[] = product.variants.map((variant) => {
-    const own = readImages(variant.images);
-    const images = own.length > 0 ? own : sharedValueImages(optionSets, variant.name);
+    const images = variantPhotos(variant, optionSets);
     return {
     id: variant.id,
     name: variant.name,
@@ -162,7 +170,7 @@ function toPublicProduct(
   };
 }
 
-function readImages(value: Prisma.JsonValue): ShopImageView[] {
+export function readImages(value: Prisma.JsonValue): ShopImageView[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];

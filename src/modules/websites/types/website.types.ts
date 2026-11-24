@@ -35,6 +35,8 @@ export type WebsiteSummary = {
   /** Client has turned the shop on for this website. */
   shopEnabled: boolean;
   shopAllowGuestCheckout: boolean;
+  /** In-store POS till turned on for this shop. */
+  shopPosEnabled: boolean;
   /** Inclusive status ceiling for shopper cancels. Null = customers cannot cancel. */
   shopCancelUntilStatus: "paid" | "processing" | "shipped" | null;
   /** Default return window in days. Null = returns off for the shop. */
@@ -131,6 +133,7 @@ export type UpdateWebsiteInput = WebsiteInfoInput & {
   seoToolsEnabled?: boolean;
   shopEnabled?: boolean;
   shopAllowGuestCheckout?: boolean;
+  shopPosEnabled?: boolean;
   /** Pass null to turn customer order cancellation off. */
   shopCancelUntilStatus?: "paid" | "processing" | "shipped" | null;
   /** Pass null to turn returns off for the shop. */
