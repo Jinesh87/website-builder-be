@@ -8,6 +8,7 @@ import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { validate } from "../../common/middleware/validate.js";
 import { shopController } from "./controllers/shop.controller.js";
 import { shopPosController } from "./controllers/shop-pos.controller.js";
+import { shopSalesController } from "./controllers/shop-sales.controller.js";
 import { shopRazorpayConnectController } from "./controllers/shop-razorpay-connect.controller.js";
 import {
   shopCategoryParamsSchema,
@@ -154,6 +155,9 @@ shopRouter.get(
   rateLimit({ name: "shop-store-invoice", max: 30, windowSeconds: 60 }),
   shopPosController.downloadInvoice,
 );
+
+// Sales summary across the online store and the till.
+shopRouter.get("/sales/summary", websiteParams, validate(shopPosSummaryQuerySchema, "query"), shopSalesController.summary);
 
 // In-store till (POS).
 const posOrderParams = validate(shopOrderParamsSchema, "params");
