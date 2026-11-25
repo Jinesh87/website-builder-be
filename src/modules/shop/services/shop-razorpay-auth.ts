@@ -21,6 +21,8 @@ export const CLEARED_OAUTH = {
   oauthMode: null,
   oauthExpiresAt: null,
   oauthConnectedAt: null,
+  qrCodesEnabled: null,
+  qrCheckedAt: null,
 } satisfies Prisma.ShopPaymentConfigUpdateInput;
 
 const authSelect = {
@@ -31,6 +33,7 @@ const authSelect = {
   oauthRefreshTokenCipher: true,
   oauthPublicToken: true,
   oauthExpiresAt: true,
+  oauthMode: true,
 } as const satisfies Prisma.ShopPaymentConfigSelect;
 
 type AuthRow = Prisma.ShopPaymentConfigGetPayload<{ select: typeof authSelect }>;
@@ -42,7 +45,8 @@ async function refreshRow(row: AuthRow): Promise<AuthRow | null> {
   const pending = refreshing.get(row.websiteId);
   if (pending) return pending;
   const work = (async () => {
-    const credentials = await razorpayPartnerSettingsService.getCredentials();
+    // Tokens are refreshed with the client that issued them, whatever mode the platform is in now.
+    const credentials = await razorpayPartnerSettingsService.getCredentials(row.oauthMode === "test" ? "test" : "live");
     const refreshToken = row.oauthRefreshTokenCipher ? decryptSecret(row.oauthRefreshTokenCipher) : null;
     if (!credentials || !refreshToken) return row;
     try {
@@ -80,6 +84,7 @@ export async function shopRazorpayAuth(websiteId: string): Promise<RazorpayAuth 
   let row = await prisma.shopPaymentConfig.findUnique({ where: { websiteId }, select: authSelect });
   if (!row) return null;
 
+  // A connection keeps working in the mode it was made in, even after the platform switches Test/Live.
   if (row.oauthAccessTokenCipher) {
     if (row.oauthExpiresAt && row.oauthExpiresAt.getTime() - Date.now() < REFRESH_ON_USE_MS) {
       row = (await refreshRow(row)) ?? row;

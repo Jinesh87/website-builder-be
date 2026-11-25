@@ -12,11 +12,17 @@ import type { RazorpayWebhookEvent } from "../../wallet/services/wallet.service.
 import { logWebhookEvent, recordPaymentLog } from "../utils/shop-payment-log.js";
 import { shopCheckoutService } from "./shop-checkout.service.js";
 
+import { shopRazorpayAuth } from "./shop-razorpay-auth.js";
+import { checkQrCodes, checkQrCodesInBackground } from "./shop-razorpay-qr-status.js";
+
 export type ShopRazorpayConnectionView = {
   accountId: string | null;
   mode: "test" | "live";
   connectedAt: string | null;
 };
+
+/** Whether the till can take Razorpay QR payments: "unknown" until Razorpay has been asked. */
+export type ShopQrCodesStatus = "enabled" | "disabled" | "unknown";
 
 export type ShopPaymentConfigView = {
   /** The shop can take payments: connected through Razorpay, or its own API keys are saved. */
@@ -29,6 +35,9 @@ export type ShopPaymentConfigView = {
   razorpayKeyId: string | null;
   razorpayKeySecretMasked: string | null;
   webhookConfigured: boolean;
+  /** Razorpay QR Codes for the till; only meaningful once `configured`. */
+  qrCodes: ShopQrCodesStatus;
+  qrCheckedAt: string | null;
   /** Platform address to paste into the client's Razorpay webhook settings. */
   webhookUrl: string;
   /** Public site address to give Razorpay when they verify the business website. */
@@ -104,7 +113,8 @@ export class ShopPaymentService {
         { message: "Key secret is required", path: ["razorpayKeySecret"] },
       ]);
     }
-    if (keyId !== existing?.razorpayKeyId || newSecret) {
+    const keysChanged = keyId !== existing?.razorpayKeyId || Boolean(newSecret);
+    if (keysChanged) {
       try {
         await checkRazorpayKeys({ keyId, keySecret });
       } catch (error) {
@@ -126,11 +136,23 @@ export class ShopPaymentService {
       },
       update: {
         razorpayKeyId: keyId,
+        ...(keysChanged ? { qrCodesEnabled: null, qrCheckedAt: null } : {}),
         ...(newSecret ? { razorpayKeySecretCipher: encryptSecret(newSecret) } : {}),
         ...(newWebhookSecret ? { razorpayWebhookSecretCipher: encryptSecret(newWebhookSecret) } : {}),
       },
     });
+    if (keysChanged) checkQrCodesInBackground(websiteId);
     return this.toView({ ...website, shopPayment: saved }, await razorpayPartnerSettingsService.isConfigured());
+  }
+
+  /** Asks Razorpay again whether QR codes work for this shop, e.g. after the owner turned them on. */
+  async recheckQrCodes(websiteId: string, actor: AuthUser): Promise<ShopPaymentConfigView> {
+    await this.openWebsite(websiteId, actor);
+    const enabled = await checkQrCodes(websiteId);
+    if (enabled === null && (await shopRazorpayAuth(websiteId))) {
+      throw new AppError(502, "Couldn't reach Razorpay to check QR codes. Please try again.", "PAYMENT_GATEWAY_UNAVAILABLE");
+    }
+    return this.getConfig(websiteId, actor);
   }
 
   async revealSecrets(
@@ -196,6 +218,8 @@ export class ShopPaymentService {
       oauthAccessTokenCipher: string | null;
       oauthMode: string | null;
       oauthConnectedAt: Date | null;
+      qrCodesEnabled: boolean | null;
+      qrCheckedAt: Date | null;
       updatedAt: Date;
     } | null;
   }, connectAvailable: boolean): ShopPaymentConfigView {
@@ -218,6 +242,8 @@ export class ShopPaymentService {
       razorpayKeySecretMasked: keySecret ? mask(keySecret) : null,
       // A connected account's events arrive on the platform's partner webhook.
       webhookConfigured: Boolean(connection || webhookSecret),
+      qrCodes: config?.qrCodesEnabled == null ? "unknown" : config.qrCodesEnabled ? "enabled" : "disabled",
+      qrCheckedAt: config?.qrCheckedAt?.toISOString() ?? null,
       webhookUrl: webhookUrl(website.id),
       siteUrl: siteUrl(website.subdomain, website.domains[0]?.hostname ?? null),
       updatedAt: config?.updatedAt.toISOString() ?? null,

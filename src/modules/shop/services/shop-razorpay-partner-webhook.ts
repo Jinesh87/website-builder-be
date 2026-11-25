@@ -42,9 +42,10 @@ async function shopFor(event: PartnerWebhookEvent): Promise<string | null> {
  * Unknown events are acknowledged so Razorpay doesn't keep retrying them.
  */
 export async function handleShopPartnerWebhook(rawBody: Buffer, signature: string | undefined): Promise<void> {
-  const secret = await razorpayPartnerSettingsService.getWebhookSecret();
-  if (!signature || !secret || !isValidWebhookSignature(secret, rawBody, signature)) {
-    logger.warn({ hasSecret: Boolean(secret) }, "Razorpay partner webhook rejected: bad signature");
+  // Either client's secret: shops connected before a Test/Live switch still send events.
+  const secrets = await razorpayPartnerSettingsService.getWebhookSecrets();
+  if (!signature || !secrets.some((secret) => isValidWebhookSignature(secret, rawBody, signature))) {
+    logger.warn({ secrets: secrets.length }, "Razorpay partner webhook rejected: bad signature");
     throw new AppError(400, "Invalid Razorpay signature", "WEBHOOK_SIGNATURE_INVALID");
   }
   let event: PartnerWebhookEvent;

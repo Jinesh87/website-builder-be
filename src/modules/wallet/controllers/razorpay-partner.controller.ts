@@ -18,7 +18,8 @@ export const razorpayPartnerController = {
   revealSecrets: async (req: Request, res: Response, next: NextFunction) => {
     try {
       logger.warn({ userId: req.user?.id }, "Razorpay partner app secrets revealed");
-      res.json({ secrets: await razorpayPartnerSettingsService.revealSecrets() });
+      const mode = req.query.mode === "test" ? "test" : "live";
+      res.json({ secrets: await razorpayPartnerSettingsService.revealSecrets(mode) });
     } catch (error) {
       next(error);
     }

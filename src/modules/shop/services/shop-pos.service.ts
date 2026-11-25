@@ -35,6 +35,7 @@ import { deductStockOnce, shopCheckoutService } from "./shop-checkout.service.js
 import { ORDER_VIEW_INCLUDE, toView } from "./shop-order-view.js";
 import { readImages, readOptionSets, variantPhotos } from "./shop.service.js";
 import { shopRazorpayAuth } from "./shop-razorpay-auth.js";
+import { isQrNotEnabledError, recordQrCodesStatus } from "./shop-razorpay-qr-status.js";
 
 const METHOD_FROM_LABEL: Record<PosPaymentMethodLabel, ShopPosPaymentMethod> = {
   cash: ShopPosPaymentMethod.CASH,
@@ -116,7 +117,7 @@ export class ShopPosService {
       }),
       prisma.shopPaymentConfig.findUnique({
         where: { websiteId },
-        select: { razorpayKeyId: true, oauthAccessTokenCipher: true },
+        select: { razorpayKeyId: true, oauthAccessTokenCipher: true, qrCodesEnabled: true },
       }),
     ]);
 
@@ -163,7 +164,11 @@ export class ShopPosService {
     return {
       products: catalog,
       categories: [...categories].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
-      razorpayQrAvailable: Boolean(paymentConfig?.razorpayKeyId || paymentConfig?.oauthAccessTokenCipher),
+      razorpayQr: !(paymentConfig?.razorpayKeyId || paymentConfig?.oauthAccessTokenCipher)
+        ? "not_connected"
+        : paymentConfig.qrCodesEnabled === false
+          ? "not_enabled"
+          : "ready",
     };
   }
 
@@ -496,6 +501,7 @@ export class ShopPosService {
         amountPaise: order.totalPaise,
         message: `POS QR not created: ${razorpayErrorMessage(error)}`,
       });
+      if (isQrNotEnabledError(error)) void recordQrCodesStatus(websiteId, false);
       await fail("Could not create Razorpay QR");
       throw error;
     }
@@ -508,6 +514,7 @@ export class ShopPosService {
       razorpayRef: qr.id,
       message: `POS sale #${order.number}: QR shown.`,
     });
+    void recordQrCodesStatus(websiteId, true);
     await prisma.shopOrder.update({ where: { id: order.id }, data: { razorpayQrCodeId: qr.id } });
 
     return {

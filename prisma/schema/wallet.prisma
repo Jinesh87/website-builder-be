@@ -177,11 +177,16 @@ enum AutopayStatus {
 /// Razorpay accounts with OAuth. Secrets are AES-256-GCM encrypted with APP_ENCRYPTION_KEY.
 model RazorpayPartnerApp {
   id                  String   @id @default("default") @db.VarChar(50)
-  clientId            String?  @db.VarChar(100)
-  clientSecretCipher  String?  @db.Text
-  webhookSecretCipher String?  @db.Text
-  /// "test" (development client) or "live" (production client).
-  mode                String   @default("live") @db.VarChar(10)
+  /// The development client, used while the platform is in Test mode.
+  testClientId            String?  @db.VarChar(100)
+  testClientSecretCipher  String?  @db.Text
+  testWebhookSecretCipher String?  @db.Text
+  /// The production client, used while the platform is in Live mode.
+  liveClientId            String?  @db.VarChar(100)
+  liveClientSecretCipher  String?  @db.Text
+  liveWebhookSecretCipher String?  @db.Text
+  /// Platform-wide switch: "test" or "live". Shops connect, and stay usable, only in this mode.
+  mode                    String   @default("live") @db.VarChar(10)
   createdAt           DateTime @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 

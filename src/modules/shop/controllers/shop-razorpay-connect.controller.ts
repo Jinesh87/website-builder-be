@@ -25,6 +25,15 @@ export const shopRazorpayConnectController = {
     }
   },
 
+  /** Checks again whether Razorpay QR codes work for the shop, e.g. after the owner turned them on. */
+  checkQrCodes: async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      res.json({ config: await shopPaymentService.recheckQrCodes(req.params.id, req.user!) });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   /** Razorpay redirects the shop owner's browser here; we send them back to the app. */
   callback: async (req: Request, res: Response, next: NextFunction) => {
     try {

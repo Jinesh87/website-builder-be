@@ -282,6 +282,12 @@ shopRouter.post(
   shopRazorpayConnectController.start,
 );
 shopRouter.delete("/payments/razorpay/connect", websiteParams, shopRazorpayConnectController.disconnect);
+shopRouter.post(
+  "/payments/razorpay/qr-check",
+  websiteParams,
+  rateLimit({ name: "shop-razorpay-qr-check", max: 30, windowSeconds: 60 * 60 }),
+  shopRazorpayConnectController.checkQrCodes,
+);
 
 /** Public. Mounted before express.json() so the Razorpay signature covers the raw body. */
 export const shopRazorpayWebhookRouter = Router();

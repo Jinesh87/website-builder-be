@@ -1,3 +1,5 @@
+import { AppError } from "../../../common/errors/AppError.js";
+import { isQrNotEnabledError } from "./shop-razorpay-qr-status.js";
 import { razorpayRequest, type RazorpayAuth, type RazorpayPayment } from "../../wallet/services/razorpay.client.js";
 
 /** A Razorpay UPI QR code (https://razorpay.com/docs/api/qr-codes/). */
@@ -18,7 +20,7 @@ export function createUpiQr(
   auth: RazorpayAuth,
   input: { amountPaise: number; name: string; description: string; closeBy: Date; notes: Record<string, string> },
 ): Promise<RazorpayQrCode> {
-  return razorpayRequest(auth, "POST", "/payments/qr_codes", {
+  return razorpayRequest<RazorpayQrCode>(auth, "POST", "/payments/qr_codes", {
     type: "upi_qr",
     name: input.name.slice(0, 100),
     usage: "single_use",
@@ -27,6 +29,16 @@ export function createUpiQr(
     description: input.description.slice(0, 100),
     close_by: Math.floor(input.closeBy.getTime() / 1000),
     notes: input.notes,
+  }).catch((error: unknown) => {
+    // Razorpay answers "URL not found" when the QR Codes product isn't enabled on the account.
+    if (isQrNotEnabledError(error)) {
+      throw new AppError(
+        400,
+        "QR codes aren't turned on for this Razorpay account. Ask Razorpay support to enable QR Codes, or take this payment by cash, UPI or card.",
+        "RAZORPAY_QR_NOT_ENABLED",
+      );
+    }
+    throw error;
   });
 }
 

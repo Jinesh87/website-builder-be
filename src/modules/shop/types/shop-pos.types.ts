@@ -31,8 +31,11 @@ export type PosCatalogProduct = {
 export type PosCatalog = {
   products: PosCatalogProduct[];
   categories: { id: string; name: string }[];
-  /** Whether the shop can show a Razorpay QR (Razorpay connected). */
-  razorpayQrAvailable: boolean;
+  /**
+   * Razorpay QR payments at the till: "ready" (or not checked yet, so worth trying), "not_connected"
+   * (no Razorpay set up), or "not_enabled" (Razorpay's QR Codes is off for the account).
+   */
+  razorpayQr: "ready" | "not_connected" | "not_enabled";
 };
 
 export type PosSaleInput = {

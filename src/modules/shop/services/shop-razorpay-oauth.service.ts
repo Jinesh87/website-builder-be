@@ -14,6 +14,7 @@ import {
   RAZORPAY_OAUTH_REDIRECT_URI,
   razorpayPartnerSettingsService,
 } from "../../wallet/services/razorpay-partner-settings.service.js";
+import { checkQrCodesInBackground } from "./shop-razorpay-qr-status.js";
 import { CLEARED_OAUTH } from "./shop-razorpay-auth.js";
 
 /** How long the shop owner has to finish on Razorpay's page. */
@@ -108,6 +109,9 @@ export class ShopRazorpayOAuthService {
         razorpayKeyId: null,
         razorpayKeySecretCipher: null,
         razorpayWebhookSecretCipher: null,
+        // A different account may have QR codes set up differently; checked again just below.
+        qrCodesEnabled: null,
+        qrCheckedAt: null,
       };
       await prisma.shopPaymentConfig.upsert({
         where: { websiteId: website.id },
@@ -115,6 +119,7 @@ export class ShopRazorpayOAuthService {
         update: data,
       });
       logger.info({ websiteId: website.id, userId: state.userId, accountId: tokens.accountId }, "Shop Razorpay account connected");
+      checkQrCodesInBackground(website.id);
       return withResult(state.returnTo, "connected");
     } catch (error) {
       logger.error({ err: error, websiteId: website.id }, "Shop Razorpay connection failed");
@@ -128,10 +133,10 @@ export class ShopRazorpayOAuthService {
     await this.openShop(websiteId, actor);
     const config = await prisma.shopPaymentConfig.findUnique({
       where: { websiteId },
-      select: { oauthAccessTokenCipher: true, oauthRefreshTokenCipher: true },
+      select: { oauthAccessTokenCipher: true, oauthRefreshTokenCipher: true, oauthMode: true },
     });
     if (!config?.oauthAccessTokenCipher) return;
-    const credentials = await razorpayPartnerSettingsService.getCredentials();
+    const credentials = await razorpayPartnerSettingsService.getCredentials(config.oauthMode === "test" ? "test" : "live");
     const refreshToken = config.oauthRefreshTokenCipher ? decryptSecret(config.oauthRefreshTokenCipher) : null;
     const accessToken = decryptSecret(config.oauthAccessTokenCipher);
     if (credentials) {
