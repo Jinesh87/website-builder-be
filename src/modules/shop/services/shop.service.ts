@@ -64,6 +64,7 @@ function toVariant(variant: ProductRow["variants"][number]): ShopVariantView {
     sku: variant.sku,
     barcode: variant.barcode,
     pricePaise: variant.pricePaise,
+    costPaise: variant.costPaise,
     sortOrder: variant.sortOrder,
     quantity: variant.quantity,
     images: readImages(variant.images),
@@ -188,8 +189,10 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
     const set = entry as {
       pricePaise?: unknown;
+      costPaise?: unknown;
       options?: unknown;
       overrides?: unknown;
+      costOverrides?: unknown;
       skus?: unknown;
       barcodes?: unknown;
       images?: unknown;
@@ -218,6 +221,14 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
           const row = override as { key?: unknown; pricePaise?: unknown };
           if (typeof row.key !== "string" || typeof row.pricePaise !== "number") return [];
           return [{ key: row.key, pricePaise: row.pricePaise }];
+        })
+      : [];
+    const costOverrides = Array.isArray(set.costOverrides)
+      ? set.costOverrides.flatMap((override) => {
+          if (!override || typeof override !== "object" || Array.isArray(override)) return [];
+          const row = override as { key?: unknown; costPaise?: unknown };
+          if (typeof row.key !== "string" || typeof row.costPaise !== "number") return [];
+          return [{ key: row.key, costPaise: row.costPaise }];
         })
       : [];
     const skus = Array.isArray(set.skus)
@@ -251,8 +262,10 @@ export function readOptionSets(value: Prisma.JsonValue): ShopOptionSetView[] {
       : [];
     return [{
       pricePaise: set.pricePaise,
+      costPaise: typeof set.costPaise === "number" ? set.costPaise : null,
       options,
       ...(overrides.length ? { overrides } : {}),
+      ...(costOverrides.length ? { costOverrides } : {}),
       ...(skus.length ? { skus } : {}),
       ...(barcodes.length ? { barcodes } : {}),
       ...(images.length ? { images } : {}),
@@ -626,6 +639,7 @@ type ExpandedVariant = {
   sku: string | null;
   barcode: string | null;
   pricePaise: number;
+  costPaise: number;
   images: { mediaId: string; alt: string }[];
 };
 
@@ -697,6 +711,7 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
 
     const combos = options.length === 0 ? [[]] : cartesian(options.map((option) => option.values));
     const overrides = new Map((set.overrides ?? []).map((override) => [override.key, override.pricePaise]));
+    const costOverrides = new Map((set.costOverrides ?? []).map((override) => [override.key, override.costPaise]));
     const skuMap = new Map(
       (set.skus ?? [])
         .map((row) => [row.key, row.sku.trim()] as const)
@@ -710,6 +725,7 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
     const imageGroups = new Map((set.images ?? []).map((group) => [group.key, variantImages(group.images)]));
     const keptBarcodes: { key: string; barcode: string }[] = [];
     const keptOverrides: { key: string; pricePaise: number }[] = [];
+    const keptCostOverrides: { key: string; costPaise: number }[] = [];
     const keptSkus: { key: string; sku: string }[] = [];
     const keptImages: { key: string; images: { mediaId: string; alt: string }[] }[] = [];
 
@@ -724,19 +740,24 @@ export function expandOptionSets(sets: ShopOptionSetInput[]): { stored: ShopOpti
       const override = overrides.get(key);
       const pricePaise = override ?? set.pricePaise;
       if (override !== undefined && override !== set.pricePaise) keptOverrides.push({ key, pricePaise: override });
+      const costOverride = costOverrides.get(key);
+      const costPaise = costOverride ?? set.costPaise;
+      if (costOverride !== undefined && costOverride !== set.costPaise) keptCostOverrides.push({ key, costPaise: costOverride });
       const sku = skuMap.get(key) ?? null;
       if (sku) keptSkus.push({ key, sku });
       const barcode = barcodeMap.get(key) ?? null;
       if (barcode) keptBarcodes.push({ key, barcode });
       const images = imageGroups.get(key) ?? [];
       if (images.length > 0) keptImages.push({ key, images });
-      variants.push({ name: label, sku, barcode, pricePaise, images });
+      variants.push({ name: label, sku, barcode, pricePaise, costPaise, images });
     }
 
     stored.push({
       pricePaise: set.pricePaise,
+      costPaise: set.costPaise,
       options,
       ...(keptOverrides.length > 0 ? { overrides: keptOverrides } : {}),
+      ...(keptCostOverrides.length > 0 ? { costOverrides: keptCostOverrides } : {}),
       ...(keptSkus.length > 0 ? { skus: keptSkus } : {}),
       ...(keptBarcodes.length > 0 ? { barcodes: keptBarcodes } : {}),
       ...(keptImages.length > 0 ? { images: keptImages } : {}),
@@ -760,6 +781,7 @@ function variantRows(
     sku: variant.sku,
     barcode: variant.barcode,
     pricePaise: variant.pricePaise,
+    costPaise: variant.costPaise,
     quantity: quantities.get(variant.name.toLowerCase()) ?? 0,
     images: variant.images as Prisma.InputJsonValue,
     sortOrder: index,

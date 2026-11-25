@@ -14,6 +14,13 @@ const pricePaise = Joi.number().integer().min(0).max(1_000_000_000).required().m
   "number.max": "Price is too high",
 });
 
+const costPaise = Joi.number().integer().min(0).max(1_000_000_000).required().messages({
+  "any.required": "Enter a base price",
+  "number.base": "Enter a base price",
+  "number.min": "Base price can't be negative",
+  "number.max": "Base price is too high",
+});
+
 const imageSchema = Joi.object({
   mediaId: Joi.string().guid().required(),
   alt: Joi.string().trim().max(300).allow("").optional(),
@@ -48,11 +55,16 @@ const optionSchema = Joi.object({
 
 const optionSetSchema = Joi.object({
   pricePaise,
+  costPaise,
   options: Joi.array().items(optionSchema).max(4).required().messages({
     "array.max": "A combination can have at most 4 options",
   }),
   overrides: Joi.array()
     .items(Joi.object({ key: Joi.string().trim().min(1).max(500).required(), pricePaise }))
+    .max(100)
+    .optional(),
+  costOverrides: Joi.array()
+    .items(Joi.object({ key: Joi.string().trim().min(1).max(500).required(), costPaise }))
     .max(100)
     .optional(),
   skus: Joi.array()

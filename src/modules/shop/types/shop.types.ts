@@ -10,8 +10,12 @@ export type ShopOptionInput = {
 /** One matrix of options that share a price. Overrides change a single combination. */
 export type ShopOptionSetInput = {
   pricePaise: number;
+  /** Base (cost) price per unit for the group; never shown to customers. */
+  costPaise: number;
   options: ShopOptionInput[];
   overrides?: { key: string; pricePaise: number }[];
+  /** Base price per combination key, when it differs from the group's. */
+  costOverrides?: { key: string; costPaise: number }[];
   /** Optional SKU per combination key (same key as price overrides). */
   skus?: { key: string; sku: string }[];
   /** Optional printed barcode per combination key, scanned at the POS till. */
@@ -28,8 +32,11 @@ export type ShopOptionView = {
 
 export type ShopOptionSetView = {
   pricePaise: number;
+  /** Null on products saved before base prices existed. */
+  costPaise: number | null;
   options: ShopOptionView[];
   overrides?: { key: string; pricePaise: number }[];
+  costOverrides?: { key: string; costPaise: number }[];
   skus?: { key: string; sku: string }[];
   barcodes?: { key: string; barcode: string }[];
   images?: { key: string; images: ShopImageView[] }[];
@@ -107,6 +114,8 @@ export type ShopVariantView = {
   sku: string | null;
   barcode: string | null;
   pricePaise: number;
+  /** Base (cost) price; null on products saved before base prices existed. */
+  costPaise: number | null;
   sortOrder: number;
   quantity: number;
   images: ShopImageView[];

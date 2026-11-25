@@ -67,6 +67,8 @@ model ProductVariant {
   /// The item's printed barcode (EAN/UPC/Code 128), scanned at the POS till. Unique within a shop.
   barcode    String? @db.VarChar(64)
   pricePaise Int
+  /// Base (cost) price per unit: what the shop pays for it. Never shown to customers. Null on older products.
+  costPaise  Int?
   sortOrder  Int     @default(0)
   /// Photos for this variant, in display order. Each item is `{ mediaId, alt }`.
   images     Json    @default("[]")
@@ -474,6 +476,8 @@ model ShopOrderItem {
   taxablePaise   Int
   /// GST amount for the line, in paise.
   gstPaise       Int
+  /// The variant's base (cost) price per unit when the order was placed; null if none was set.
+  unitCostPaise  Int?
 
   order   ShopOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)

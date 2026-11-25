@@ -427,7 +427,7 @@ export class ShopCheckoutService {
             website: { select: { shopGstPercent: true, shopPriceIncludesGst: true } },
           },
         },
-        variant: { select: { id: true, name: true, pricePaise: true, quantity: true } },
+        variant: { select: { id: true, name: true, pricePaise: true, costPaise: true, quantity: true } },
       },
       orderBy: { updatedAt: "desc" },
     });
@@ -528,6 +528,7 @@ export class ShopCheckoutService {
                 priceIncludesGst: pricing.gst.priceIncludesGst,
                 taxablePaise: pricing.taxablePaise,
                 gstPaise: pricing.gstPaise,
+                unitCostPaise: line.variant.costPaise,
               };
             }),
           },

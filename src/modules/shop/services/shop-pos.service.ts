@@ -61,6 +61,8 @@ type PricedLine = {
   variantName: string;
   quantity: number;
   onHand: number;
+  /** Base (cost) price per unit, snapshotted onto the order item. */
+  unitCostPaise: number | null;
   pricing: ReturnType<typeof priceOrderLine>;
 };
 
@@ -222,6 +224,7 @@ export class ShopPosService {
           priceIncludesGst: line.pricing.gst.priceIncludesGst,
           taxablePaise: line.pricing.taxablePaise,
           gstPaise: line.pricing.gstPaise,
+          unitCostPaise: line.unitCostPaise,
         })),
       },
     } satisfies Omit<Prisma.ShopOrderUncheckedCreateInput, "number">;
@@ -337,6 +340,7 @@ export class ShopPosService {
         variantName: variant.name,
         quantity,
         onHand: variant.quantity,
+        unitCostPaise: variant.costPaise,
         pricing: priceOrderLine(variant.product, variant.product.website, variant.pricePaise, quantity),
       });
     }

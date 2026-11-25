@@ -21,6 +21,10 @@ function emptyTotals(): SalesChannelTotals {
     discountPaise: 0,
     averagePaise: 0,
     itemsSold: 0,
+    netSalesPaise: 0,
+    costPaise: 0,
+    profitPaise: 0,
+    uncostedItems: 0,
     cancelledCount: 0,
     returnedCount: 0,
     returnedPaise: 0,
@@ -29,6 +33,37 @@ function emptyTotals(): SalesChannelTotals {
 
 function withAverage(totals: SalesChannelTotals): SalesChannelTotals {
   return { ...totals, averagePaise: totals.ordersCount > 0 ? Math.round(totals.revenuePaise / totals.ordersCount) : 0 };
+}
+
+type CostedOrder = {
+  totalPaise: number;
+  items: {
+    quantity: number;
+    lineTotalPaise: number;
+    taxablePaise: number;
+    unitCostPaise: number | null;
+    variant: { costPaise: number | null } | null;
+  }[];
+};
+
+/**
+ * Adds an order's net sales, cost and profit. An order-level discount is shared across its lines
+ * in proportion to their totals. Orders placed before base prices existed use the variant's current one.
+ */
+function addProfit(totals: SalesChannelTotals, order: CostedOrder): void {
+  const listTotal = order.items.reduce((sum, item) => sum + item.lineTotalPaise, 0);
+  const share = listTotal > 0 ? order.totalPaise / listTotal : 0;
+  for (const item of order.items) {
+    const net = Math.round(item.taxablePaise * share);
+    totals.netSalesPaise += net;
+    const unitCost = item.unitCostPaise ?? item.variant?.costPaise ?? null;
+    if (unitCost === null) {
+      totals.uncostedItems += item.quantity;
+      continue;
+    }
+    totals.costPaise += unitCost * item.quantity;
+    totals.profitPaise += net - unitCost * item.quantity;
+  }
 }
 
 export class ShopSalesReportsService {
@@ -47,7 +82,15 @@ export class ShopSalesReportsService {
         paidAt: true,
         posPaymentMethod: true,
         refundStatus: true,
-        items: { select: { quantity: true } },
+        items: {
+          select: {
+            quantity: true,
+            lineTotalPaise: true,
+            taxablePaise: true,
+            unitCostPaise: true,
+            variant: { select: { costPaise: true } },
+          },
+        },
       },
     });
 
@@ -83,6 +126,7 @@ export class ShopSalesReportsService {
       totals.revenuePaise += order.totalPaise;
       totals.discountPaise += order.discountPaise ?? 0;
       totals.itemsSold += order.items.reduce((sum, item) => sum + item.quantity, 0);
+      addProfit(totals, order);
 
       const method: "online" | PosPaymentMethodLabel | null = isPos
         ? order.posPaymentMethod
