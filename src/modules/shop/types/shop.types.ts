@@ -78,6 +78,8 @@ export type ShopCategoryInput = {
 export type ShopProductQuery = {
   search?: string;
   categoryId?: string;
+  /** Comma-separated product ids: only these products (e.g. the editor's chosen featured products). */
+  ids?: string;
   page?: number;
   pageSize?: number;
 };

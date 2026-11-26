@@ -118,8 +118,14 @@ export class ShopController {
 
   listInventory = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
-      const search = typeof req.query.search === "string" ? req.query.search : undefined;
-      res.json({ items: await shopInventoryService.list(req.params.id, search, req.user!) });
+      const { search, page, pageSize } = req.query as { search?: string; page?: string; pageSize?: string };
+      res.json(
+        await shopInventoryService.list(
+          req.params.id,
+          { search, page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined },
+          req.user!,
+        ),
+      );
     } catch (error) {
       next(error);
     }

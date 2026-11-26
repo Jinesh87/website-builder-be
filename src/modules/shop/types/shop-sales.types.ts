@@ -36,3 +36,33 @@ export type SalesSummary = {
   /** Refunds Razorpay has processed for orders in this period. */
   refunds: { count: number; totalPaise: number };
 };
+
+export type SalesReportOrder = {
+  number: number;
+  date: string;
+  channel: string;
+  status: string;
+  payment: string;
+  customer: string;
+  email: string | null;
+  phone: string | null;
+  items: number;
+  coupon: string | null;
+  discountPaise: number;
+  totalPaise: number;
+  refund: string;
+};
+
+/** Everything a sales download shows, whatever its format. */
+export type SalesReport = {
+  websiteName: string;
+  from: string;
+  to: string;
+  figures: { label: string; money: boolean; online: number; pos: number; total: number }[];
+  payments: { label: string; count: number; totalPaise: number }[];
+  refunds: { count: number; totalPaise: number };
+  fulfilment: { toFulfil: number; shipped: number; delivered: number };
+  orders: SalesReportOrder[];
+  /** True when the period had more orders than the download lists. */
+  truncated: boolean;
+};

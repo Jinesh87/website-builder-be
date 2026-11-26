@@ -36,6 +36,9 @@ export type PosCatalog = {
    * (no Razorpay set up), or "not_enabled" (Razorpay's QR Codes is off for the account).
    */
   razorpayQr: "ready" | "not_connected" | "not_enabled";
+  /** Which page of products this is (1-based), and whether another follows. */
+  page: number;
+  hasMore: boolean;
 };
 
 export type PosSaleInput = {

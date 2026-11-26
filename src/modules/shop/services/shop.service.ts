@@ -28,18 +28,19 @@ import type {
 } from "../types/shop.types.js";
 import { assertBarcodesFree } from "../utils/shop-barcodes.js";
 
-const MAX_CATEGORIES = 100;
-const MAX_PRODUCTS = 500;
+/** Most categories and products one shop may have. */
+export const MAX_CATEGORIES = 500;
+export const MAX_PRODUCTS = 5000;
 const PRODUCT_PAGE_SIZES = [10, 20, 50] as const;
 const MAX_VARIANTS = 100;
 const MAX_IMAGES = 8;
 
-const productInclude = {
+export const productInclude = {
   category: { select: { name: true } },
   variants: { orderBy: { sortOrder: "asc" as const } },
 } as const satisfies Prisma.ProductInclude;
 
-type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+export type ProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 
 function slugify(name: string): string {
   const slug = name
@@ -142,7 +143,7 @@ export function variantPhotos(
   return own.length > 0 ? own : sharedValueImages(optionSets, variant.name);
 }
 
-function toPublicProduct(
+export function toPublicProduct(
   product: ProductRow,
   shop: { shopReturnDays: number | null; shopGstPercent: number; shopPriceIncludesGst: boolean },
 ): PublicShopProduct {
@@ -395,6 +396,7 @@ export class ShopService {
     const where: Prisma.ProductWhereInput = {
       websiteId,
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+      ...(query.ids ? { id: { in: query.ids.split(",") } } : {}),
       ...(search
         ? {
             OR: [
@@ -557,33 +559,6 @@ export class ShopService {
       await tx.product.delete({ where: { id: productId } });
     });
     purgeShopPages(websiteId);
-  }
-
-  /** Catalogue for published product sections. Empty when the shop is off. */
-  async publicCatalog(websiteId: string): Promise<PublicShopProduct[]> {
-    const website = await prisma.website.findUnique({
-      where: { id: websiteId },
-      select: {
-        shopEnabled: true,
-        shopReturnDays: true,
-        shopGstPercent: true,
-        shopPriceIncludesGst: true,
-        client: { select: { shopFeatureEnabled: true } },
-      },
-    });
-    if (!website?.shopEnabled || !website.client.shopFeatureEnabled) return [];
-    const products = await prisma.product.findMany({
-      where: { websiteId, listed: true },
-      include: productInclude,
-      orderBy: { name: "asc" },
-      take: MAX_PRODUCTS,
-    });
-    const shop = {
-      shopReturnDays: website.shopReturnDays,
-      shopGstPercent: website.shopGstPercent ?? 0,
-      shopPriceIncludesGst: website.shopPriceIncludesGst !== false,
-    };
-    return products.map((product) => toPublicProduct(product, shop));
   }
 
   private async resolveImages(clientId: string, images: ShopImageInput[]): Promise<{ mediaId: string; alt: string }[]> {

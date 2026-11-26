@@ -10,7 +10,10 @@ import { readOptionSets } from "./shop.service.js";
 import type { ShopRefundStatusLabel } from "../types/shop-auth.types.js";
 
 const PAGE_SIZE = 40;
-const MAX_ROWS = 2000;
+/** Stock list page size when none is asked for (the validator allows 5, 10, 25, 50 or 100). */
+const DEFAULT_LIST_PAGE_SIZE = 50;
+
+export type InventoryQuery = { search?: string; page?: number; pageSize?: number };
 
 export type InventoryOption = { name: string; value: string };
 
@@ -67,6 +70,13 @@ export type InventoryMovementView = {
   createdAt: string;
 };
 
+export type InventoryPage = {
+  items: InventoryRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
 export type InventoryLogPage = {
   movements: InventoryMovementView[];
   page: number;
@@ -75,7 +85,8 @@ export type InventoryLogPage = {
 };
 
 export class ShopInventoryService {
-  private async openShop(websiteId: string, actor: AuthUser): Promise<void> {
+  /** Checks the actor may change this website's stock (shop allowed and turned on). */
+  async openShop(websiteId: string, actor: AuthUser): Promise<void> {
     const website = await prisma.website.findFirst({
       where: { id: websiteId, ...scopeFor(actor) },
       select: { id: true, shopEnabled: true, client: { select: { shopFeatureEnabled: true } } },
@@ -89,24 +100,35 @@ export class ShopInventoryService {
     }
   }
 
-  async list(websiteId: string, search: string | undefined, actor: AuthUser): Promise<InventoryRow[]> {
+  /** One page of variants, A–Z by product, matching `search` in product, variant, category, SKU or barcode. */
+  async list(websiteId: string, query: InventoryQuery, actor: AuthUser): Promise<InventoryPage> {
     await this.openShop(websiteId, actor);
-    const needle = search?.trim();
+    const needle = query.search?.trim();
+    const pageSize = query.pageSize ?? DEFAULT_LIST_PAGE_SIZE;
+    const contains = (value: string) => ({ contains: value, mode: "insensitive" as const });
+    const where: Prisma.ProductVariantWhereInput = {
+      product: { websiteId },
+      ...(needle
+        ? {
+            OR: [
+              { name: contains(needle) },
+              { sku: contains(needle) },
+              { barcode: contains(needle) },
+              { product: { name: contains(needle) } },
+              { product: { category: { name: contains(needle) } } },
+            ],
+          }
+        : {}),
+    };
+    const total = await prisma.productVariant.count({ where });
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(1, query.page ?? 1), pages);
     const variants = await prisma.productVariant.findMany({
-      where: {
-        product: { websiteId },
-        ...(needle
-          ? {
-              OR: [
-                { name: { contains: needle, mode: "insensitive" } },
-                { product: { name: { contains: needle, mode: "insensitive" } } },
-              ],
-            }
-          : {}),
-      },
+      where,
       include: { product: { select: { id: true, name: true, optionSets: true, category: { select: { name: true } } } } },
-      orderBy: [{ product: { name: "asc" } }, { sortOrder: "asc" }],
-      take: MAX_ROWS,
+      orderBy: [{ product: { name: "asc" } }, { productId: "asc" }, { sortOrder: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
     const productIds = [...new Set(variants.map((variant) => variant.product.id))];
     const returnedByProduct = new Map<string, number>();
@@ -129,7 +151,12 @@ export class ShopInventoryService {
         returnedByProduct.set(productId, orderIds.size);
       }
     }
-    return variants.map((variant) => toRow(variant, returnedByProduct.get(variant.product.id) ?? 0));
+    return {
+      items: variants.map((variant) => toRow(variant, returnedByProduct.get(variant.product.id) ?? 0)),
+      page,
+      pageSize,
+      total,
+    };
   }
 
   async listProductReturns(websiteId: string, productId: string, actor: AuthUser): Promise<ProductReturnedOrdersView> {
