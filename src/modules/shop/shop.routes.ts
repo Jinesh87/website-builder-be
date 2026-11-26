@@ -5,7 +5,9 @@ import {
   authorize,
 } from "../../common/middleware/authenticate.js";
 import { rateLimit } from "../../common/middleware/rate-limit.js";
+import { receiveFile } from "../../common/middleware/receive-file.js";
 import { validate } from "../../common/middleware/validate.js";
+import { shopProductImportController } from "./controllers/shop-product-import.controller.js";
 import { shopController } from "./controllers/shop.controller.js";
 import { shopPosController } from "./controllers/shop-pos.controller.js";
 import { shopSalesController } from "./controllers/shop-sales.controller.js";
@@ -84,6 +86,14 @@ shopRouter.post(
   validate(shopProductSchema),
   shopController.createProduct,
 );
+// Bulk import from a CSV or Excel sheet: preview first, then apply the same file.
+const receiveProductSheet = receiveFile({
+  maxBytes: 5 * 1024 * 1024,
+  tooLarge: (mb) => ({ message: `The import file must be under ${mb} MB.`, code: "IMPORT_TOO_LARGE" }),
+});
+const importLimit = rateLimit({ name: "shop-product-import", max: 30, windowSeconds: 60 });
+shopRouter.post("/products/import/preview", websiteParams, importLimit, receiveProductSheet, shopProductImportController.preview);
+shopRouter.post("/products/import", websiteParams, importLimit, receiveProductSheet, shopProductImportController.apply);
 shopRouter.patch(
   "/products/:productId",
   validate(shopProductParamsSchema, "params"),
@@ -158,6 +168,14 @@ shopRouter.get(
 
 // Sales summary across the online store and the till.
 shopRouter.get("/sales/summary", websiteParams, validate(shopPosSummaryQuerySchema, "query"), shopSalesController.summary);
+shopRouter.get("/sales/export.csv", websiteParams, validate(shopPosSummaryQuerySchema, "query"), shopSalesController.exportCsv);
+shopRouter.get(
+  "/sales/export.pdf",
+  websiteParams,
+  validate(shopPosSummaryQuerySchema, "query"),
+  rateLimit({ name: "shop-sales-pdf", max: 20, windowSeconds: 60 }),
+  shopSalesController.exportPdf,
+);
 
 // In-store till (POS).
 const posOrderParams = validate(shopOrderParamsSchema, "params");

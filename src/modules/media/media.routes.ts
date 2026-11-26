@@ -1,10 +1,8 @@
-import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
-import multer from "multer";
 import { UserRole } from "../../common/constants/roles.js";
-import { AppError } from "../../common/errors/AppError.js";
 import { authenticate, authorize } from "../../common/middleware/authenticate.js";
 import { rateLimit } from "../../common/middleware/rate-limit.js";
+import { receiveFile } from "../../common/middleware/receive-file.js";
 import { validate } from "../../common/middleware/validate.js";
 import { mediaController } from "./controllers/media.controller.js";
 import { MAX_UPLOAD_BYTES } from "./services/media.service.js";
@@ -20,30 +18,10 @@ import {
   uploadMediaSchema,
 } from "./validators/media.validator.js";
 
-const singleFile = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10, fieldSize: 4 * 1024 },
-  defParamCharset: "utf8",
-}).single("file");
-
-/** Runs multer and turns its errors into API errors. */
-function receiveFile(req: Request, res: Response, next: NextFunction) {
-  singleFile(req, res, (error: unknown) => {
-    if (!error) {
-      next();
-      return;
-    }
-    if (error instanceof multer.MulterError) {
-      next(
-        error.code === "LIMIT_FILE_SIZE"
-          ? new AppError(413, `This file is too large. The limit is ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB.`, "FILE_TOO_LARGE")
-          : new AppError(400, "Upload one file in the “file” field", "INVALID_UPLOAD"),
-      );
-      return;
-    }
-    next(error);
-  });
-}
+const receiveUpload = receiveFile({
+  maxBytes: MAX_UPLOAD_BYTES,
+  tooLarge: (mb) => ({ message: `This file is too large. The limit is ${mb} MB.`, code: "FILE_TOO_LARGE" }),
+});
 
 const mediaRouter = Router();
 const byId = validate(mediaIdParamsSchema, "params");
@@ -59,14 +37,14 @@ mediaRouter.get("/", validate(listMediaQuerySchema, "query"), mediaController.li
 mediaRouter.post(
   "/",
   rateLimit({ name: "media-upload", max: 200, windowSeconds: 60 * 60 }),
-  receiveFile,
+  receiveUpload,
   validate(uploadMediaSchema),
   mediaController.upload,
 );
 mediaRouter.post(
   "/variations",
   rateLimit({ name: "media-variations", max: 30, windowSeconds: 60 * 60 }),
-  receiveFile,
+  receiveUpload,
   validate(generateVariationsSchema),
   mediaController.generateVariations,
 );

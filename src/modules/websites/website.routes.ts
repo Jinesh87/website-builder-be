@@ -1,14 +1,12 @@
 import express from "express";
-import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
-import multer from "multer";
 import { UserRole } from "../../common/constants/roles.js";
-import { AppError } from "../../common/errors/AppError.js";
 import {
   authenticate,
   authorize,
 } from "../../common/middleware/authenticate.js";
 import { rateLimit } from "../../common/middleware/rate-limit.js";
+import { receiveFile } from "../../common/middleware/receive-file.js";
 import { validate } from "../../common/middleware/validate.js";
 import { websiteController } from "./controllers/website.controller.js";
 import {
@@ -37,29 +35,12 @@ import { rebuildImportedHtmlSchema } from "./validators/imported-html-code.valid
 
 const IMPORT_MAX_BYTES = 50 * 1024 * 1024;
 
-const importFile = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: IMPORT_MAX_BYTES, files: 1, fields: 20, fieldSize: 8 * 1024 },
-  defParamCharset: "utf8",
-}).single("file");
-
-function receiveImportFile(req: Request, res: Response, next: NextFunction) {
-  importFile(req, res, (error: unknown) => {
-    if (!error) {
-      next();
-      return;
-    }
-    if (error instanceof multer.MulterError) {
-      next(
-        error.code === "LIMIT_FILE_SIZE"
-          ? new AppError(413, `Import file must be under ${IMPORT_MAX_BYTES / (1024 * 1024)} MB.`, "IMPORT_TOO_LARGE")
-          : new AppError(400, "Upload one file in the “file” field", "INVALID_UPLOAD"),
-      );
-      return;
-    }
-    next(error);
-  });
-}
+const receiveImportFile = receiveFile({
+  maxBytes: IMPORT_MAX_BYTES,
+  fields: 20,
+  fieldSize: 8 * 1024,
+  tooLarge: (mb) => ({ message: `Import file must be under ${mb} MB.`, code: "IMPORT_TOO_LARGE" }),
+});
 
 /** Shared by Super Admin and clients; the service limits clients to their own websites and templates. */
 const websitesRouter = Router();

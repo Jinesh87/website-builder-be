@@ -30,6 +30,7 @@ import type {
   UpdateHostingSettingsInput,
   UpdatePackageInput,
 } from "../types/hosting.types.js";
+import { csvCell } from "../../../common/utils/csv.js";
 import { addDays, CYCLE_LABELS, formatBillingDate } from "./hosting-period.js";
 import { normalizeReminderDays } from "./hosting-reminders.js";
 import {
@@ -105,14 +106,6 @@ function paymentWhere(query: Omit<PaymentListQuery, "page" | "pageSize">): Prism
         }
       : {}),
   };
-}
-
-/** Quotes a CSV cell, and defuses values a spreadsheet would run as a formula. */
-function csvCell(value: string | number | null): string {
-  if (value === null) return "";
-  let text = String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function toPriceChangeView(
