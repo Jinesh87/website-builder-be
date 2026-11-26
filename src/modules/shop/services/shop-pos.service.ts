@@ -12,7 +12,6 @@ import {
 import type { RazorpayAuth } from "../../wallet/services/razorpay.client.js";
 import { PAYMENT_CURRENCY } from "../../wallet/services/wallet.service.js";
 import type {
-  PosCatalog,
   PosPaymentMethodLabel,
   PosQrState,
   PosSaleInput,
@@ -33,7 +32,6 @@ import { openPosForAdmin, openShopForAdmin } from "./shop-admin-access.js";
 import { purgeShopPages } from "./shop-cache.js";
 import { deductStockOnce, shopCheckoutService } from "./shop-checkout.service.js";
 import { ORDER_VIEW_INCLUDE, toView } from "./shop-order-view.js";
-import { readImages, readOptionSets, variantPhotos } from "./shop.service.js";
 import { shopRazorpayAuth } from "./shop-razorpay-auth.js";
 import { isQrNotEnabledError, recordQrCodesStatus } from "./shop-razorpay-qr-status.js";
 
@@ -53,7 +51,6 @@ const METHOD_NAME: Record<ShopPosPaymentMethod, string> = {
 
 /** Razorpay won't take less than ₹1. */
 const MIN_RAZORPAY_PAISE = 100;
-const MAX_CATALOG_PRODUCTS = 1000;
 
 type PricedLine = {
   productId: string;
@@ -98,80 +95,6 @@ function qrStateOf(order: Pick<ShopOrder, "status" | "paidAt" | "failureReason">
 }
 
 export class ShopPosService {
-  /** Everything the till can sell, with live availability (stock minus online checkout holds). */
-  async catalog(websiteId: string, actor: AuthUser): Promise<PosCatalog> {
-    await openPosForAdmin(websiteId, actor);
-    const [products, website, paymentConfig] = await Promise.all([
-      prisma.product.findMany({
-        where: { websiteId },
-        orderBy: { name: "asc" },
-        take: MAX_CATALOG_PRODUCTS,
-        include: {
-          category: { select: { id: true, name: true } },
-          variants: { orderBy: { sortOrder: "asc" } },
-        },
-      }),
-      prisma.website.findUnique({
-        where: { id: websiteId },
-        select: { shopGstPercent: true, shopPriceIncludesGst: true },
-      }),
-      prisma.shopPaymentConfig.findUnique({
-        where: { websiteId },
-        select: { razorpayKeyId: true, oauthAccessTokenCipher: true, qrCodesEnabled: true },
-      }),
-    ]);
-
-    const variantIds = products.flatMap((product) => product.variants.map((variant) => variant.id));
-    const reserved = new Map(
-      await Promise.all(variantIds.map(async (id) => [id, await getReservedQty(websiteId, id)] as const)),
-    );
-
-    const categories = new Map<string, string>();
-    const catalog = products
-      .filter((product) => product.variants.length > 0)
-      .map((product) => {
-        if (product.category) categories.set(product.category.id, product.category.name);
-        const optionSets = readOptionSets(product.optionSets);
-        const variants = product.variants.map((variant) => {
-          const pricing = priceOrderLine(product, website ?? {}, variant.pricePaise, 1);
-          return {
-            id: variant.id,
-            name: variant.name,
-            sku: variant.sku,
-            barcode: variant.barcode,
-            imageUrl: variantPhotos(variant, optionSets)[0]?.url ?? null,
-            unitPaise: pricing.unitPayable,
-            gstPercent: pricing.gst.gstPercent,
-            available: Math.max(0, variant.quantity - (reserved.get(variant.id) ?? 0)),
-          };
-        });
-        // Product photo first; otherwise a variant's, preferring one that's in stock.
-        const variantPhoto =
-          variants.find((variant) => variant.imageUrl && variant.available > 0)?.imageUrl ??
-          variants.find((variant) => variant.imageUrl)?.imageUrl ??
-          null;
-        return {
-          id: product.id,
-          name: product.name,
-          categoryId: product.category?.id ?? null,
-          categoryName: product.category?.name ?? null,
-          imageUrl: readImages(product.images)[0]?.url ?? variantPhoto,
-          listed: product.listed,
-          variants,
-        };
-      });
-
-    return {
-      products: catalog,
-      categories: [...categories].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
-      razorpayQr: !(paymentConfig?.razorpayKeyId || paymentConfig?.oauthAccessTokenCipher)
-        ? "not_connected"
-        : paymentConfig.qrCodesEnabled === false
-          ? "not_enabled"
-          : "ready",
-    };
-  }
-
   /**
    * Rings up a sale. Cash/UPI/card sales are recorded as paid and handed over, with stock taken now.
    * Razorpay QR sales hold the stock and wait for the payment ({@link checkQr}).

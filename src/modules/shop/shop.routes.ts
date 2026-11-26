@@ -36,6 +36,9 @@ import {
   shopPaymentSchema,
   shopPosEmailSchema,
   shopPosSaleSchema,
+  shopPosCatalogQuerySchema,
+  shopPosCodeParamsSchema,
+  shopPosStockQuerySchema,
   shopPosSummaryQuerySchema,
   shopRazorpayConnectSchema,
   shopProductParamsSchema,
@@ -179,7 +182,9 @@ shopRouter.get(
 
 // In-store till (POS).
 const posOrderParams = validate(shopOrderParamsSchema, "params");
-shopRouter.get("/pos/catalog", websiteParams, shopPosController.catalog);
+shopRouter.get("/pos/catalog", websiteParams, validate(shopPosCatalogQuerySchema, "query"), shopPosController.catalog);
+shopRouter.get("/pos/code/:code", validate(shopPosCodeParamsSchema, "params"), shopPosController.byCode);
+shopRouter.get("/pos/stock", websiteParams, validate(shopPosStockQuerySchema, "query"), shopPosController.stock);
 shopRouter.get("/pos/summary", websiteParams, validate(shopPosSummaryQuerySchema, "query"), shopPosController.summary);
 shopRouter.post(
   "/pos/sales",

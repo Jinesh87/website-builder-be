@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { htmlToPdf } from "../utils/html-to-pdf.js";
 import { shopInvoiceService } from "../services/shop-invoice.service.js";
 import { shopPosReportsService } from "../services/shop-pos-reports.service.js";
+import { shopPosCatalogService } from "../services/shop-pos-catalog.service.js";
 import { shopPosService } from "../services/shop-pos.service.js";
 import type { PosSaleInput } from "../types/shop-pos.types.js";
 
@@ -12,7 +13,29 @@ type OrderParams = WebsiteParams & { orderId: string };
 export class ShopPosController {
   catalog = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
     try {
-      res.json(await shopPosService.catalog(req.params.id, req.user!));
+      const { page, search, categoryId } = req.query as { page?: string; search?: string; categoryId?: string };
+      res.json(
+        await shopPosCatalogService.page(req.params.id, { page: page ? Number(page) : undefined, search, categoryId }, req.user!),
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** The product a scanned barcode or typed SKU belongs to. */
+  byCode = async (req: Request<WebsiteParams & { code: string }>, res: Response, next: NextFunction) => {
+    try {
+      res.json(await shopPosCatalogService.byCode(req.params.id, req.params.code, req.user!));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Sellable units now for the cart's variants (`?variants=id,id`). */
+  stock = async (req: Request<WebsiteParams>, res: Response, next: NextFunction) => {
+    try {
+      const ids = String(req.query.variants ?? "").split(",").filter(Boolean);
+      res.json({ available: await shopPosCatalogService.stock(req.params.id, ids, req.user!) });
     } catch (error) {
       next(error);
     }

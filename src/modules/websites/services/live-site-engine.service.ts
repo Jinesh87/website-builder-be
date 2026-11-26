@@ -5,7 +5,7 @@ import { siteRendererClient, type RenderedSitePage } from "./site-renderer.clien
 import { siteCacheService, type CachedPagePayload } from "./site-cache.service.js";
 import { DomainStatus, WebsiteStatus } from "../../../common/constants/website.js";
 import { resolveCustomDomainAccess } from "../../hosting/services/custom-domain-access.js";
-import { shopService, pagePublicCatalog } from "../../shop/services/shop.service.js";
+import { shopPublicCatalogService } from "../../shop/services/shop-public-catalog.service.js";
 import type { PublicShopList, PublicShopListQuery, PublicShopProduct } from "../../shop/types/shop.types.js";
 import { cancelUntilLabel } from "../../shop/utils/shop-order-cancel.js";
 import type { PublishSnapshot } from "../types/website.types.js";
@@ -601,14 +601,24 @@ Sitemap: ${domain}/sitemap.xml
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
     const targetPage = resolved.page;
-    const products = shopOpen ? await shopService.publicCatalog(website.id) : [];
-    const activeProduct = resolved.productSlug ? products.find((product) => product.slug === resolved.productSlug) : undefined;
+    // Only what this page shows is loaded: one product for a product page, one page of cards for a
+    // shop list (plus hand-picked ones), the first product for a detail section with no product in
+    // the address, and nothing at all for pages without product sections.
+    const shopSettings = shopOpen ? await shopPublicCatalogService.settings(website.id) : null;
+    const activeProduct =
+      shopSettings && resolved.productSlug
+        ? ((await shopPublicCatalogService.bySlug(website.id, resolved.productSlug, shopSettings)) ?? undefined)
+        : undefined;
     if (resolved.productSlug && !activeProduct) {
       const notFoundHtml = this.renderNotFoundHtml(identifier, website.name);
       return { html: notFoundHtml, statusCode: 404, contentType: "text/html; charset=utf-8", cachedAt: Date.now() };
     }
     const isList = !resolved.productSlug && targetPage.sections.some((section) => section.type === "products");
-    const paged = isList ? pagePublicCatalog(products, listQuery) : null;
+    const paged = isList && shopSettings ? await shopPublicCatalogService.listPage(website.id, listQuery, shopSettings) : null;
+    const detailFallback =
+      !resolved.productSlug && !paged && shopSettings && targetPage.sections.some((section) => section.type === "product_detail")
+        ? await shopPublicCatalogService.first(website.id, shopSettings)
+        : null;
     const pickedIds = new Set(
       targetPage.sections.flatMap((section) => {
         if (section.type !== "products") return [];
@@ -618,7 +628,8 @@ Sitemap: ${domain}/sitemap.xml
           : [];
       }),
     );
-    const picked = paged && pickedIds.size > 0 ? products.filter((product) => pickedIds.has(product.id)) : [];
+    const picked =
+      paged && shopSettings && pickedIds.size > 0 ? await shopPublicCatalogService.byIds(website.id, [...pickedIds], shopSettings) : [];
     const authPage = pages.find((page) => page.sections.some((section) => section.type === "auth"));
     const accountPage = pages.find((page) => page.sections.some((section) => section.type === "account"));
     const cancelUntilStatus = cancelUntilLabel(website.shopCancelUntilStatus);
@@ -640,7 +651,7 @@ Sitemap: ${domain}/sitemap.xml
           allowGuestCheckout: Boolean(website.shopAllowGuestCheckout),
           cancelUntilStatus,
           returnGuidelines,
-          products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : products,
+          products: resolved.productSlug ? [activeProduct!] : paged ? paged.products : detailFallback ? [detailFallback] : [],
           ...(resolved.productSlug ? { productSlug: resolved.productSlug, coupons: productCoupons } : {}),
           ...(paged ? { list: paged.list } : {}),
           ...(picked.length > 0 ? { picked } : {}),

@@ -133,6 +133,10 @@ export const shopProductSchema = Joi.object({
 export const shopProductQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).allow("").optional(),
   categoryId: Joi.string().guid().optional(),
+  ids: Joi.string()
+    .pattern(/^[0-9a-f-]{36}(,[0-9a-f-]{36}){0,49}$/i)
+    .optional()
+    .messages({ "string.pattern.base": "Send up to 50 product ids, comma separated" }),
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().valid(10, 20, 50).default(20),
 });
@@ -173,6 +177,8 @@ export const shopWebhookParamsSchema = Joi.object({
 
 export const shopInventoryQuerySchema = Joi.object({
   search: Joi.string().trim().max(120).allow("").optional(),
+  page: Joi.number().integer().min(1).default(1),
+  pageSize: Joi.number().integer().valid(5, 10, 25, 50, 100).default(50),
 });
 
 export const shopInventoryLogQuerySchema = Joi.object({
@@ -367,6 +373,25 @@ export const shopPosSaleSchema = Joi.object({
 
 export const shopPosEmailSchema = Joi.object({
   to: Joi.string().trim().lowercase().email().max(255).allow("").optional(),
+});
+
+export const shopPosCatalogQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).max(10_000).default(1),
+  search: Joi.string().trim().max(120).allow("").optional(),
+  categoryId: Joi.string().guid().allow("").optional(),
+});
+
+export const shopPosCodeParamsSchema = Joi.object({
+  id: Joi.string().guid().required(),
+  code: Joi.string().trim().min(1).max(64).required(),
+});
+
+export const shopPosStockQuerySchema = Joi.object({
+  variants: Joi.string()
+    .pattern(/^[0-9a-f-]{36}(,[0-9a-f-]{36}){0,199}$/i)
+    .allow("")
+    .default("")
+    .messages({ "string.pattern.base": "Send up to 200 variant ids, comma separated" }),
 });
 
 export const shopPosSummaryQuerySchema = Joi.object({

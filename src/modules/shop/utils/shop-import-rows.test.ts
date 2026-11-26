@@ -79,8 +79,31 @@ describe("buildOptionSets", () => {
   it("rejects duplicate variants and mismatched option names", () => {
     const dup = rowsOf(`${HEADER}\nTee,,Size,S,,,499,200,,,,,\nTee,,Size,s,,,499,200,,,,,`).rows;
     assert.match((buildOptionSets(dup) as { error: string }).error, /same variant/);
-    const mixed = rowsOf(`${HEADER}\nTee,,Size,S,,,499,200,,,,,\nTee,,Colour,Red,,,499,200,,,,,`).rows;
-    assert.match((buildOptionSets(mixed) as { error: string }).error, /same option names/);
+  });
+
+  it("matches options by name: swapped columns and spellings like Color/Colour or Sizes/Size", () => {
+    const { rows } = rowsOf(
+      `${HEADER}\nTee,,Size,S,Colour,Red,499,200,TS-S-R,,4,,\nTee,,color,Red,SIZES,M,499,200,TS-M-R,,5,,\nTee,,Size,S,Colours,Blue,499,200,,,,,\nTee,,Colour,Blue,Size,M,499,200,,,,,`,
+    );
+    const built = buildOptionSets(rows);
+    assert.ok("sets" in built, "error" in built ? built.error : "");
+    assert.equal(built.sets.length, 1);
+    assert.deepEqual(built.sets[0].options.map((o) => [o.name, o.values]), [["Size", ["S", "M"]], ["Colour", ["Red", "Blue"]]]);
+    // Rows come back in the first row's order and spelling, so stock lines up with the variant names.
+    assert.deepEqual(built.rows[1].options, [{ name: "Size", value: "M" }, { name: "Colour", value: "Red" }]);
+    assert.equal(built.rows[1].stock, 5);
+  });
+
+  it("explains a missing option, an extra option and a different option", () => {
+    const error = (csv: string) => {
+      const built = buildOptionSets(rowsOf(`${HEADER}\n${csv}`).rows);
+      assert.ok("error" in built);
+      return built.error;
+    };
+    assert.match(error("Tee,,Size,S,Colour,Red,499,200,,,,,\nTee,,Size,L,,,499,200,,,,,"), /Row 3 has no “Colour”/);
+    assert.match(error("Tee,,Size,S,,,499,200,,,,,\nTee,,Size,M,Colour,Red,499,200,,,,,"), /Row 3 has “Colour”, which row 2 doesn't have/);
+    assert.match(error("Tee,,Size,M,,,499,200,,,,,\nTee,,Material,Cotton,,,499,200,,,,,"), /Row 3 has “Material” where row 2 has “Size”/);
+    assert.match(error("Tee,,Color,Red,Colour,Blue,499,200,,,,,"), /same option/);
   });
 
   it("makes a simple product from one row without options", () => {

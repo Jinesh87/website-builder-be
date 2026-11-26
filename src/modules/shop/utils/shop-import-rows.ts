@@ -237,17 +237,66 @@ function matrixSet(rows: ImportRow[], optionNames: string[]): ShopOptionSetInput
 }
 
 /**
- * Turns the rows of one new product into the option sets the product form saves. Rows that cover every
- * combination (S/M × Red/Blue) become one set; otherwise rows are split by their first option's value.
+ * Option name as compared between rows: case, spaces and symbols ignored, "color" read as "colour",
+ * and a plural "s" dropped, so "Colour", "color" and "Colours" are the same option.
  */
-export function buildOptionSets(rows: ImportRow[]): { sets: ShopOptionSetInput[] } | { error: string } {
-  const optionNames = rows[0].options.map((option) => option.name);
-  const signature = optionNames.map((name) => name.toLowerCase()).join("|");
+export function optionNameKey(name: string): string {
+  let key = name.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/color/g, "colour");
+  if (key.length > 3 && key.endsWith("s") && !key.endsWith("ss")) key = key.slice(0, -1);
+  return key;
+}
+
+/**
+ * Lines every row of a product up with the first row's options: matched by name (see optionNameKey),
+ * put in the first row's column order and spelled the first row's way. Rows that leave out one of the
+ * product's options, or use one the first row doesn't have, can't be lined up and are reported.
+ */
+function alignOptions(rows: ImportRow[]): { rows: ImportRow[] } | { error: string } {
+  const first = rows[0];
+  const names = first.options.map((option) => option.name);
+  const keys = first.options.map((option) => optionNameKey(option.name));
+  const label = (list: string[]) => list.map((name) => `“${name}”`).join(" and ");
+
+  const aligned: ImportRow[] = [];
   for (const row of rows) {
-    if (row.options.map((option) => option.name.toLowerCase()).join("|") !== signature) {
-      return { error: `Every row of a product must use the same option names in the same order (row ${row.line} differs).` };
+    const byKey = new Map<string, { name: string; value: string }>();
+    for (const option of row.options) {
+      const key = optionNameKey(option.name);
+      if (byKey.has(key)) {
+        return { error: `Row ${row.line} has ${label([byKey.get(key)!.name, option.name])}, which are the same option. Keep only one.` };
+      }
+      byKey.set(key, option);
     }
+    const missing = names.filter((_, index) => !byKey.has(keys[index]));
+    const extra = row.options.filter((option) => !keys.includes(optionNameKey(option.name))).map((option) => option.name);
+    if (extra.length > 0 && missing.length > 0) {
+      return {
+        error: `Row ${row.line} has ${label(extra)} where row ${first.line} has ${label(missing)}. Use the same options on every row of a product, or give them different product names.`,
+      };
+    }
+    if (missing.length > 0) {
+      return { error: `Row ${row.line} has no ${label(missing)}. Fill it in so every variant of this product has the same options.` };
+    }
+    if (extra.length > 0) {
+      return {
+        error: `Row ${row.line} has ${label(extra)}, which row ${first.line} doesn't have. Add it to every row of this product, or remove it.`,
+      };
+    }
+    aligned.push({ ...row, options: keys.map((key, index) => ({ name: names[index], value: byKey.get(key)!.value })) });
   }
+  return { rows: aligned };
+}
+
+/**
+ * Turns the rows of one new product into the option sets the product form saves, and returns the rows
+ * with their options lined up (see alignOptions). Rows that cover every combination (S/M × Red/Blue)
+ * become one set; otherwise rows are split by their first option's value.
+ */
+export function buildOptionSets(input: ImportRow[]): { sets: ShopOptionSetInput[]; rows: ImportRow[] } | { error: string } {
+  const alignedResult = alignOptions(input);
+  if ("error" in alignedResult) return alignedResult;
+  const rows = alignedResult.rows;
+  const optionNames = rows[0].options.map((option) => option.name);
   if (optionNames.length === 0 && rows.length > 1) {
     return { error: "This product is listed on more than one row without options. Add option columns (such as Size) or use different product names." };
   }
@@ -261,7 +310,7 @@ export function buildOptionSets(rows: ImportRow[]): { sets: ShopOptionSetInput[]
   }
 
   const whole = matrixSet(rows, optionNames);
-  if (whole) return { sets: [whole] };
+  if (whole) return { sets: [whole], rows };
 
   const byFirst = new Map<string, ImportRow[]>();
   for (const row of rows) {
@@ -281,5 +330,5 @@ export function buildOptionSets(rows: ImportRow[]): { sets: ShopOptionSetInput[]
   if (sets.length > 8) {
     return { error: "These variants need more than 8 price groups. Add the missing combinations so they form a grid, or split the product." };
   }
-  return { sets };
+  return { sets, rows };
 }

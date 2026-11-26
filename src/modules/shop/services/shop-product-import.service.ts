@@ -6,12 +6,10 @@ import { buildOptionSets, parseImportRows, type ImportIssue, type ImportRow } fr
 import { readSheet } from "../utils/shop-import-sheet.js";
 import { openShopForAdmin } from "./shop-admin-access.js";
 import { purgeShopPages } from "./shop-cache.js";
-import { expandOptionSets, readImages, readOptionSets, shopService, variantKey } from "./shop.service.js";
+import { expandOptionSets, MAX_CATEGORIES, MAX_PRODUCTS, readImages, readOptionSets, shopService, variantKey } from "./shop.service.js";
 
 /** Most data rows one upload may hold. */
 export const IMPORT_MAX_ROWS = 5000;
-const MAX_PRODUCTS = 500;
-const MAX_CATEGORIES = 100;
 const STOCK_NOTE = "Bulk import";
 
 type ExistingVariant = {
@@ -63,6 +61,27 @@ function setEntry<T extends { key: string }>(list: T[] | undefined, key: string,
   return entry ? [...rest, entry] : rest;
 }
 
+/**
+ * The one category a product's rows give, or a problem when its rows name different categories
+ * (compared ignoring capitals). Blank Category cells don't count.
+ */
+function productCategory(name: string, rows: ImportRow[]): { category: string | null } | { issue: ImportIssue } {
+  let first: ImportRow | null = null;
+  for (const row of rows) {
+    if (!row.category) continue;
+    if (!first) first = row;
+    else if (row.category.toLowerCase() !== first.category!.toLowerCase()) {
+      return {
+        issue: {
+          line: row.line,
+          message: `${name}: row ${row.line} has category “${row.category}” but row ${first.line} has “${first.category}”. Use one category per product.`,
+        },
+      };
+    }
+  }
+  return { category: first?.category ?? null };
+}
+
 export class ShopProductImportService {
   /** Reads the file and works out what would change, without saving anything. */
   async preview(websiteId: string, file: Express.Multer.File | undefined, actor: AuthUser): Promise<ImportSummary> {
@@ -79,17 +98,26 @@ export class ShopProductImportService {
     let created = 0;
     let updated = 0;
     const categoryIds = new Map(categories);
+    const failedCategories = new Set<string>();
     for (const name of summary.newCategories) {
       try {
         const created = await shopService.createCategory(websiteId, { name }, actor);
         categoryIds.set(name.toLowerCase(), created.id);
       } catch (error) {
+        failedCategories.add(name.toLowerCase());
         failures.push({ line: null, message: `Category “${name}”: ${error instanceof Error ? error.message : "couldn't be created"}` });
       }
     }
     const categoryId = (name: string | null) => (name ? (categoryIds.get(name.toLowerCase()) ?? null) : undefined);
+    /** Products whose category couldn't be created are left out rather than saved without one. */
+    const categoryFailed = (name: string | null, product: string, line: number) => {
+      if (!name || !failedCategories.has(name.toLowerCase())) return false;
+      failures.push({ line, message: `${product}: not imported because its category “${name}” couldn't be created.` });
+      return true;
+    };
 
     for (const plan of creates) {
+      if (categoryFailed(plan.category, plan.name, plan.rows[0].line)) continue;
       try {
         const product = await shopService.createProduct(websiteId, { ...plan.input, categoryId: categoryId(plan.category) ?? null }, actor);
         const stockByLabel = new Map(
@@ -107,6 +135,7 @@ export class ShopProductImportService {
     }
 
     for (const plan of updates) {
+      if (categoryFailed(plan.category, plan.name, plan.rows[0].row.line)) continue;
       try {
         await this.applyUpdate(websiteId, plan, categoryId(plan.category), actor);
         updated += 1;
@@ -201,7 +230,13 @@ export class ShopProductImportService {
       const key = row.name.trim().toLowerCase();
       newGroups.set(key, [...(newGroups.get(key) ?? []), row]);
     }
-    for (const plan of updates.values()) plan.category = firstValue(plan.rows.map((r) => r.row), (row) => row.category);
+    for (const [productId, plan] of updates) {
+      const result = productCategory(plan.name, plan.rows.map((r) => r.row));
+      if ("issue" in result) {
+        issues.push(result.issue);
+        updates.delete(productId);
+      } else plan.category = result.category;
+    }
 
     const creates: CreatePlan[] = [];
     for (const [key, group] of newGroups) {
@@ -224,6 +259,11 @@ export class ShopProductImportService {
         issues.push({ line: barcodeClash.line, message: `Barcode ${barcodeClash.barcode} is already used by ${productNames.get(owner.productId)} (${owner.name})` });
         continue;
       }
+      const groupCategory = productCategory(group[0].name, group);
+      if ("issue" in groupCategory) {
+        issues.push(groupCategory.issue);
+        continue;
+      }
       const built = buildOptionSets(group);
       if ("error" in built) {
         issues.push({ line: at, message: `${group[0].name}: ${built.error}` });
@@ -237,8 +277,8 @@ export class ShopProductImportService {
       }
       creates.push({
         name: group[0].name,
-        rows: group,
-        category: firstValue(group, (row) => row.category),
+        rows: built.rows,
+        category: groupCategory.category,
         input: {
           name: group[0].name,
           description: firstValue(group, (row) => row.description) ?? undefined,
