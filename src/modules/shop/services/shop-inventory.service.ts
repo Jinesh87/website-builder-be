@@ -85,7 +85,8 @@ export type InventoryLogPage = {
 };
 
 export class ShopInventoryService {
-  private async openShop(websiteId: string, actor: AuthUser): Promise<void> {
+  /** Checks the actor may change this website's stock (shop allowed and turned on). */
+  async openShop(websiteId: string, actor: AuthUser): Promise<void> {
     const website = await prisma.website.findFirst({
       where: { id: websiteId, ...scopeFor(actor) },
       select: { id: true, shopEnabled: true, client: { select: { shopFeatureEnabled: true } } },

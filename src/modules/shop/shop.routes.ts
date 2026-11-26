@@ -11,6 +11,7 @@ import { shopProductImportController } from "./controllers/shop-product-import.c
 import { shopController } from "./controllers/shop.controller.js";
 import { shopPosController } from "./controllers/shop-pos.controller.js";
 import { shopSalesController } from "./controllers/shop-sales.controller.js";
+import { shopStockSheetController } from "./controllers/shop-stock-sheet.controller.js";
 import { shopRazorpayConnectController } from "./controllers/shop-razorpay-connect.controller.js";
 import {
   shopCategoryParamsSchema,
@@ -127,6 +128,11 @@ shopRouter.get(
   validate(shopInventoryLogQuerySchema, "query"),
   shopController.inventoryLog,
 );
+// Stock list: download every variant's stock as Excel, edit New stock, upload to preview then apply.
+const stockListLimit = rateLimit({ name: "shop-stock-list", max: 30, windowSeconds: 60 });
+shopRouter.get("/inventory/stock-list.xlsx", websiteParams, stockListLimit, shopStockSheetController.download);
+shopRouter.post("/inventory/stock-list/preview", websiteParams, stockListLimit, receiveProductSheet, shopStockSheetController.preview);
+shopRouter.post("/inventory/stock-list", websiteParams, stockListLimit, receiveProductSheet, shopStockSheetController.apply);
 shopRouter.get(
   "/inventory/returns/:productId",
   validate(shopInventoryReturnsParamsSchema, "params"),
