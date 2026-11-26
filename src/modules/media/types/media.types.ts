@@ -17,6 +17,8 @@ export type MediaFileView = {
   url: string;
   createdAt: Date;
   updatedAt: Date;
+  /** Whether any page, site, template or saved section uses it; only when the list asks for it. */
+  inUse?: boolean;
 };
 
 export type MediaFolderView = {
@@ -51,6 +53,10 @@ export type MediaListQuery = {
   kind?: MediaKind | typeof MEDIA_FONT_FILTER;
   excludeFonts?: boolean;
   search?: string;
+  /** Mark each file with `inUse` (one client's library only). */
+  withUsage?: boolean;
+  /** Only files that are used somewhere, or only ones that aren't. */
+  usage?: "used" | "unused";
   page: number;
   pageSize: number;
 };
@@ -99,3 +105,25 @@ export type UpdateMediaInput = {
 export type FolderListQuery = { clientId?: string };
 export type CreateFolderInput = { name: string; clientId?: string };
 export type UpdateFolderInput = { name: string };
+
+export type MediaClientQuery = { id?: string; search?: string; page?: number };
+
+/** A client as the Super Admin media page lists it. */
+export type MediaClientSummary = {
+  id: string;
+  name: string;
+  /** The platform's own Template Studio workspace. */
+  internal: boolean;
+  files: number;
+  usedBytes: number;
+  limitBytes: number;
+};
+
+export type MediaClientList = { clients: MediaClientSummary[]; page: number; pageSize: number; total: number };
+
+/** Result of deleting several files at once; files still in use are kept. */
+export type MediaBulkDeleteResult = {
+  deleted: number;
+  freedBytes: number;
+  kept: { id: string; fileName: string }[];
+};

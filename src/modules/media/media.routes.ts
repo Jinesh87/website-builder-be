@@ -4,13 +4,17 @@ import { authenticate, authorize } from "../../common/middleware/authenticate.js
 import { rateLimit } from "../../common/middleware/rate-limit.js";
 import { receiveFile } from "../../common/middleware/receive-file.js";
 import { validate } from "../../common/middleware/validate.js";
+import { mediaBulkController } from "./controllers/media-bulk.controller.js";
+import { mediaClientsController } from "./controllers/media-clients.controller.js";
 import { mediaController } from "./controllers/media.controller.js";
 import { MAX_UPLOAD_BYTES } from "./services/media.service.js";
 import {
+  bulkDeleteMediaSchema,
   createFolderSchema,
   folderIdParamsSchema,
   generateVariationsSchema,
   listFoldersQuerySchema,
+  listMediaClientsQuerySchema,
   listMediaQuerySchema,
   mediaIdParamsSchema,
   updateFolderSchema,
@@ -34,6 +38,13 @@ mediaRouter.get("/files/:id", byId, mediaController.serve);
 mediaRouter.use(authenticate, authorize(UserRole.SUPER_ADMIN, UserRole.CLIENT, UserRole.PARTNER));
 
 mediaRouter.get("/", validate(listMediaQuerySchema, "query"), mediaController.list);
+// Super Admin: each client's file count and storage, to open one client's library at a time.
+mediaRouter.get(
+  "/clients",
+  authorize(UserRole.SUPER_ADMIN),
+  validate(listMediaClientsQuerySchema, "query"),
+  mediaClientsController.list,
+);
 mediaRouter.post(
   "/",
   rateLimit({ name: "media-upload", max: 200, windowSeconds: 60 * 60 }),
@@ -47,6 +58,13 @@ mediaRouter.post(
   receiveUpload,
   validate(generateVariationsSchema),
   mediaController.generateVariations,
+);
+// Delete several files at once; files still in use are kept and listed back.
+mediaRouter.post(
+  "/bulk-delete",
+  rateLimit({ name: "media-bulk-delete", max: 20, windowSeconds: 60 }),
+  validate(bulkDeleteMediaSchema),
+  mediaBulkController.remove,
 );
 mediaRouter.patch("/:id", byId, validate(updateMediaSchema), mediaController.update);
 mediaRouter.get("/:id/usage", byId, mediaController.usage);
