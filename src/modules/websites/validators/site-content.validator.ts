@@ -617,6 +617,8 @@ export const sectionSettingsSchema = Joi.object({
       .optional()
       .description("Start color of gradient text: the hero's highlightText, or its whole heading when nothing is highlighted."),
     gradientTo: color.optional().description("End color of gradient text."),
+    card: color.optional().description("Background of cards inside the section."),
+    cardText: color.optional().description("Text color on those cards."),
   }).optional(),
   font: Joi.string()
     .valid(...FONT_KEYS)
@@ -1674,7 +1676,7 @@ const SECTION_DATA: Record<SectionType, Joi.ObjectSchema> = {
   custom: customDataSchema,
   imported_html: importedHtmlDataSchema,
   blog: Joi.object({
-    variant: Joi.string().valid("default", "vintage-journal").optional(),
+    variant: Joi.string().valid("default", "vintage-journal", "inset-cards").optional(),
     eyebrow: optionalText(120),
     title: text(160).required(),
     italicTitle: optionalText(100),
