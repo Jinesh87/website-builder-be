@@ -26,6 +26,7 @@ import type {
   UploadMediaInput,
 } from "../types/media.types.js";
 import { MEDIA_FONT_FILTER } from "../types/media.types.js";
+import { usedMediaIdsForClient } from "./media-usage.js";
 import { aiSettingsService } from "../../admin-settings/services/ai-settings.service.js";
 import { detectFile, detectFont, detectIcon, type DetectedFile } from "./file-signature.js";
 import { optimizeMp4FastStart } from "./mp4-faststart.service.js";
@@ -111,7 +112,7 @@ function mediaKindWhere(query: Pick<MediaListQuery, "kind" | "excludeFonts">): P
 }
 
 /** The single place that decides which media an actor may see or change. */
-function scopeFor(actor: AuthUser): { clientId?: string } {
+export function scopeFor(actor: AuthUser): { clientId?: string } {
   return isAdmin(actor) ? {} : { clientId: ownClientId(actor) };
 }
 
@@ -187,7 +188,8 @@ async function clientStorageLimitBytes(clientId: string): Promise<number> {
   return (maxMb > 0 ? maxMb : DEFAULT_CLIENT_STORAGE_MB) * MB;
 }
 
-async function storageUsage(clientId: string): Promise<StorageUsage> {
+/** Storage a client's media uses, and its quota. */
+export async function storageUsage(clientId: string): Promise<StorageUsage> {
   const [{ _sum }, limitBytes] = await Promise.all([
     prisma.mediaFile.aggregate({ where: { clientId }, _sum: { sizeBytes: true } }),
     clientStorageLimitBytes(clientId),
@@ -199,8 +201,11 @@ export class MediaService {
   async list(query: MediaListQuery, actor: AuthUser): Promise<MediaListResult> {
     const clientId = isAdmin(actor) ? query.clientId : ownClientId(actor);
     const search = query.search?.trim();
+    // Whether each file is used anywhere is worked out only for one client's library, when asked.
+    const used = clientId && (query.withUsage || query.usage) ? await usedMediaIdsForClient(clientId) : null;
     const where: Prisma.MediaFileWhereInput = {
       ...(clientId ? { clientId } : {}),
+      ...(used && query.usage ? { id: query.usage === "unused" ? { notIn: [...used] } : { in: [...used] } } : {}),
       ...(query.websiteId ? { websiteId: query.websiteId } : {}),
       ...(query.folderId ? { folderId: query.folderId === "none" ? null : query.folderId } : {}),
       ...mediaKindWhere(query),
@@ -226,7 +231,13 @@ export class MediaService {
       clientId ? storageUsage(clientId) : Promise.resolve(null),
     ]);
 
-    return { files: files.map(toView), total, page: query.page, pageSize: query.pageSize, usage };
+    return {
+      files: files.map((file) => (used ? { ...toView(file), inUse: used.has(file.id) } : toView(file))),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      usage,
+    };
   }
 
   async upload(file: UploadedFile, input: UploadMediaInput, actor: AuthUser): Promise<MediaFileView> {

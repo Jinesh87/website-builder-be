@@ -23,6 +23,8 @@ export const listMediaQuerySchema = Joi.object({
     .optional(),
   /** Leaves fonts out of an unfiltered list; the library shows them in their own section. */
   excludeFonts: Joi.boolean().optional(),
+  withUsage: Joi.boolean().optional(),
+  usage: Joi.string().valid("used", "unused").optional(),
   search: Joi.string().trim().max(120).allow("").optional(),
   page: Joi.number().integer().min(1).max(10_000).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(24),
@@ -63,4 +65,17 @@ export const createFolderSchema = Joi.object({
 
 export const updateFolderSchema = Joi.object({
   name: folderName.required(),
+});
+
+export const listMediaClientsQuerySchema = Joi.object({
+  /** One client by id (to show its name). */
+  id: Joi.string().guid().optional(),
+  search: Joi.string().trim().max(120).allow("").optional(),
+  page: Joi.number().integer().min(1).max(10_000).default(1),
+});
+
+export const MAX_BULK_DELETE = 100;
+
+export const bulkDeleteMediaSchema = Joi.object({
+  ids: Joi.array().items(Joi.string().guid()).min(1).max(MAX_BULK_DELETE).unique().required(),
 });
